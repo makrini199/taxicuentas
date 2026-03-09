@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TaxiCuentas" />
+  <meta name="theme-color" content="#0d0f14" />
+  <title>TaxiCuentas Pro</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Noto+Naskh+Arabic:wght@700;900&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0d0f14; overflow-x: hidden; }
+    body { font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type=number] { -moz-appearance: textfield; }
+    input[type=date]::-webkit-calendar-picker-indicator,
+    input[type=month]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+    .inp:focus { border-color: #f0c040 !important; outline: none; }
+    .saveBtn:active { opacity: 0.85; }
+    .nb:active { opacity: 0.7; }
+    tr:hover td { background: #1e2230; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #23273a; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+    const fmt = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
+    const todayStr = () => new Date().toISOString().split("T")[0];
+    const monthKey = (d) => d.slice(0, 7);
+    const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
+    const calcDay = (d) => { const facturacion = d.taximetro + d.uber + d.cabify + d.fnt9; const conductor50 = facturacion * 0.5; const cobradoEmpresa = d.uber + d.cabify + d.fncob + d.visa; const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
+    const EMPTY = { taximetro: 0, uber: 0, cabify: 0, fnt9: 0, fncob: 0, visa: 0 };
+    const today = todayStr();
+    const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+    const C = { bg: "#0d0f14", surf: "#161920", border: "#23273a", acc: "#f0c040", accDim: "#9a7820", green: "#2ecc8f", red: "#f06a6a", blue: "#5b9cf6", t1: "#edf0fa", t2: "#7a7f9a", t3: "#3a3f55" };
+    function TaxiCuentas() {
+      const [days, setDays] = useState(() => loadStorage("tc_days", {}));
+      const [view, setView] = useState("diario");
+      const [editDate, setEditDate] = useState(today);
+      const [form, setForm] = useState(() => { const s = loadStorage("tc_days", {}); return s[today] ? { ...s[today] } : { ...EMPTY }; });
+      const [saved, setSaved] = useState(false);
+      const [fuelEntries, setFuelEntries] = useState(() => loadStorage("tc_fuel", []));
+      const [fuelForm, setFuelForm] = useState({ date: today, importe: "" });
+      const [fuelSaved, setFuelSaved] = useState(false);
+      useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
+      useEffect(() => { try { localStorage.setItem("tc_fuel", JSON.stringify(fuelEntries)); } catch {} }, [fuelEntries]);
+      const saveDay = () => { const parsed = {}; for (const k of Object.keys(EMPTY)) parsed[k] = parseFloat(form[k]) || 0; setDays((prev) => ({ ...prev, [editDate]: parsed })); setSaved(true); setTimeout(() => setSaved(false), 2000); };
+      const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
+      const dayStats = useMemo(() => { const raw = {}; for (const k of Object.keys(EMPTY)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw); }, [form]);
+      const saveFuel = () => { const importe = parseFloat(fuelForm.importe) || 0; if (!importe) return; setFuelEntries((prev) => [...prev, { id: Date.now(), date: fuelForm.date, importe }]); setFuelForm((f) => ({ ...f, importe: "" })); setFuelSaved(true); setTimeout(() => setFuelSaved(false), 2000); };
+      const fuelByMonth = useMemo(() => { const byMonth = {}; fuelEntries.forEach((e) => { const m = monthKey(e.date); if (!byMonth[m]) byMonth[m] = 0; byMonth[m] += e.importe; }); return byMonth; }, [fuelEntries]);
+      const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
+      const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); let acumFact = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d); acumFact += s.facturacion; return { date, s, acumFact }; }); const conductorMes = acumFact * 0.5; const totalCobradoEmpresa = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const diferenciaMes = conductorMes - totalCobradoEmpresa; const efectivoMes = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const bono = acumFact >= 6000 ? 150 : 0; const combustibleMes = fuelByMonth[ym] || 0; return { ym, rows, totalFact: acumFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes }; }), [months, days, fuelByMonth]);
+      const FIELDS = [{ key: "taximetro", label: "Taxímetro" }, { key: "uber", label: "Uber" }, { key: "cabify", label: "Cabify" }, { key: "fnt9", label: "FN T9" }, { key: "fncob", label: "FN COB" }, { key: "visa", label: "Visa" }];
+      const inp = { width: "100%", background: "#0a0c10", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
+      return (
+        <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: 80 }}>
+          <div style={{ background: C.surf, borderBottom: `2px solid ${C.acc}28`, padding: "18px 20px 14px", position: "sticky", top: 0, zIndex: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+              <div style={{ width: 42, height: 42, background: C.acc, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ fontSize: 16, fontWeight: 900, color: "#0d0f14", fontFamily: "'Noto Naskh Arabic', serif", lineHeight: 1 }}>تاكسي</span>
+              </div>
+              <div><div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -0.5 }}>TaxiCuentas Pro</div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
+            </div>
+          </div>
+          <div style={{ padding: 16 }}>
+            {view === "diario" && <>
+              <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
+              {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>✅ Día guardado</div>}
+              <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {FIELDS.map(({ key, label }) => (<div key={key}><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>{label}</label><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} /></div>))}
+                </div>
+              </div>
+              <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div><div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Total facturación día</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Tax + Uber + Cabify + FN T9</div></div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: C.acc }}>{fmt(dayStats.facturacion)}</div>
+              </div>
+              <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
+                {[{ label: "50% conductor (sobre fact. base)", val: dayStats.conductor50, color: C.acc, bold: true }, { label: "Cobrado por empresa (Uber + Cabify + FN COB + Visa)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontSize: bold ? 16 : 14, fontWeight: bold ? 800 : 600, color }}>{fmt(val)}</span>
+                  </div>
+                ))}
+              </div>
+              {(() => { const neg = dayStats.diferencia <= 0; return (
+                <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 4 }}>{neg ? "Empresa cobró más → paga diferencia" : "Conductor cobró más efectivo → descuenta"}</div></div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(dayStats.diferencia))}</div>
+                </div>
+              ); })()}
+              <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>Guardar día</button>
+            </>}
+            {view === "combustible" && <>
+              <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 14 }}>Combustible</div>
+              {fuelSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>✅ Guardado</div>}
+              <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo repostaje</div>
+                <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Mes</label>
+                <input type="month" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={fuelForm.date.slice(0, 7)} onChange={(e) => setFuelForm((f) => ({ ...f, date: e.target.value + "-01" }))} />
+                <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Importe total (€)</label>
+                <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inp, marginBottom: 14 }} value={fuelForm.importe} onChange={(e) => setFuelForm((f) => ({ ...f, importe: e.target.value }))} />
+                <button className="saveBtn" onClick={saveFuel} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>Guardar</button>
+              </div>
+              {(() => { const meses = [...new Set(fuelEntries.map((e) => monthKey(e.date)))].sort().reverse(); if (meses.length === 0) return <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin repostajes registrados.</div>; return meses.map((m) => (<div key={m} style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Combustible</div><div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginTop: 2 }}>{monthLabel(m)}</div></div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div style={{ fontSize: 20, fontWeight: 900, color: C.red }}>−{fmt(fuelByMonth[m])}</div><button onClick={() => setFuelEntries((prev) => prev.filter((e) => monthKey(e.date) !== m))} style={{ background: `${C.red}18`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "4px 9px", color: C.red, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✕</button></div></div>)); })()}
+            </>}
+            {view === "mensual" && <>
+              {monthData.length === 0 && <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>}
+              {monthData.map(({ ym, rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes }) => (
+                <div key={ym}>
+                  <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{monthLabel(ym)}</div>
+                    <div style={{ fontSize: 32, fontWeight: 900, color: C.acc, marginTop: 4 }}>{fmt(totalFact)}</div>
+                    <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor (50%): <strong style={{ color: C.t1 }}>{fmt(conductorMes)}</strong></div>
+                  </div>
+                  <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Liquidación mensual</div>
+                    {[{ label: "50% conductor s/ facturación base", val: conductorMes, color: C.acc, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(bono > 0 ? [{ label: "🎁 Bono productividad +6.000€", val: bono, color: C.green }] : [])].map(({ label, val, color, bold, neg }, i, arr) => (
+                      <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                        <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color }}>{neg ? "−" : ""}{fmt(val)}</span>
+                      </div>
+                    ))}
+                    {bono > 0 ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>✅ ¡Superados los 6.000€! Bono de 150€ desbloqueado</div>
+                    : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Faltan {fmt(6000 - totalFact)} para el bono de 150€</div>}
+                  </div>
+                  {(() => { const neg = diferenciaMes <= 0; return (
+                    <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Balance mensual acumulado</div></div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(diferenciaMes))}</div>
+                    </div>
+                  ); })()}
+                  <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead><tr>{["Fecha", "Fact.", "Acum.", "50% día", "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
+                      <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{date.slice(5)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.acc, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></tr>); })}</tbody>
+                    </table>
+                    <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
+                  </div>
+                </div>
+              ))}
+            </>}
+          </div>
+          <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20 }}>
+            {[["diario", "📋", "Diario"], ["combustible", "⛽", "Combustible"], ["mensual", "📊", "Mensual"]].map(([v, ic, lb]) => (
+              <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: view === v ? C.acc : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit" }}>
+                <span style={{ fontSize: 22 }}>{ic}</span>{lb}
+              </button>
+            ))}
+          </nav>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<TaxiCuentas />);
+  </script>
+</body>
+</html>
