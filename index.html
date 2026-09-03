@@ -8,7 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="TaxiCuentas" />
   <meta name="theme-color" content="#0d0f14" />
   <title>TaxiCuentas Pro</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&family=Noto+Naskh+Arabic:wght@700;900&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23f0c040'/%3E%3Cpath fill='%230d0f14' d='M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z'/%3E%3C/svg%3E" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -43,6 +44,12 @@
     const today = todayStr();
     const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
     const C = { bg: "#0d0f14", surf: "#161920", border: "#23273a", acc: "#f0c040", accDim: "#9a7820", green: "#2ecc8f", red: "#f06a6a", blue: "#5b9cf6", t1: "#edf0fa", t2: "#7a7f9a", t3: "#3a3f55" };
+    const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 3px 14px rgba(0,0,0,0.3)" };
+    const TaxiLogo = ({ size = 26 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="#0d0f14">
+        <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
+      </svg>
+    );
     function TaxiCuentas() {
       const [days, setDays] = useState(() => loadStorage("tc_days", {}));
       const [view, setView] = useState("diario");
@@ -65,29 +72,29 @@
       const inp = { width: "100%", background: "#0a0c10", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
       return (
         <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: 80 }}>
-          <div style={{ background: C.surf, borderBottom: `2px solid ${C.acc}28`, padding: "18px 20px 14px", position: "sticky", top: 0, zIndex: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-              <div style={{ width: 42, height: 42, background: C.acc, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span style={{ fontSize: 16, fontWeight: 900, color: "#0d0f14", fontFamily: "'Noto Naskh Arabic', serif", lineHeight: 1 }}>تاكسي</span>
+          <div style={{ background: `linear-gradient(180deg, ${C.surf}, #12141c)`, borderBottom: `2px solid ${C.acc}28`, padding: "18px 20px 14px", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 4px 18px rgba(0,0,0,0.4)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 46, height: 46, background: `linear-gradient(135deg, ${C.acc}, ${C.accDim})`, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 14px ${C.acc}45` }}>
+                <TaxiLogo size={26} />
               </div>
-              <div><div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -0.5 }}>TaxiCuentas Pro</div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
+              <div><div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5 }}>TaxiCuentas <span style={{ color: C.acc }}>Pro</span></div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
             </div>
           </div>
           <div style={{ padding: 16 }}>
             {view === "diario" && <>
               <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
               {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>✅ Día guardado</div>}
-              <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   {FIELDS.map(({ key, label }) => (<div key={key}><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>{label}</label><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} /></div>))}
                 </div>
               </div>
-              <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
                 <div><div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Total facturación día</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Tax + Uber + Cabify + FN T9</div></div>
                 <div style={{ fontSize: 28, fontWeight: 900, color: C.acc }}>{fmt(dayStats.facturacion)}</div>
               </div>
-              <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
                 {[{ label: "50% conductor (sobre fact. base)", val: dayStats.conductor50, color: C.acc, bold: true }, { label: "Cobrado por empresa (Uber + Cabify + FN COB + Visa)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
@@ -101,31 +108,31 @@
                   <div style={{ fontSize: 26, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(dayStats.diferencia))}</div>
                 </div>
               ); })()}
-              <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>Guardar día</button>
+              <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar día</button>
             </>}
             {view === "combustible" && <>
               <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 14 }}>Combustible</div>
               {fuelSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>✅ Guardado</div>}
-              <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo repostaje</div>
                 <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Mes</label>
                 <input type="month" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={fuelForm.date.slice(0, 7)} onChange={(e) => setFuelForm((f) => ({ ...f, date: e.target.value + "-01" }))} />
                 <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Importe total (€)</label>
                 <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inp, marginBottom: 14 }} value={fuelForm.importe} onChange={(e) => setFuelForm((f) => ({ ...f, importe: e.target.value }))} />
-                <button className="saveBtn" onClick={saveFuel} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>Guardar</button>
+                <button className="saveBtn" onClick={saveFuel} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar</button>
               </div>
-              {(() => { const meses = [...new Set(fuelEntries.map((e) => monthKey(e.date)))].sort().reverse(); if (meses.length === 0) return <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin repostajes registrados.</div>; return meses.map((m) => (<div key={m} style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Combustible</div><div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginTop: 2 }}>{monthLabel(m)}</div></div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div style={{ fontSize: 20, fontWeight: 900, color: C.red }}>−{fmt(fuelByMonth[m])}</div><button onClick={() => setFuelEntries((prev) => prev.filter((e) => monthKey(e.date) !== m))} style={{ background: `${C.red}18`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "4px 9px", color: C.red, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✕</button></div></div>)); })()}
+              {(() => { const meses = [...new Set(fuelEntries.map((e) => monthKey(e.date)))].sort().reverse(); if (meses.length === 0) return <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin repostajes registrados.</div>; return meses.map((m) => (<div key={m} style={{ ...card, padding: 16, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Combustible</div><div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginTop: 2 }}>{monthLabel(m)}</div></div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div style={{ fontSize: 20, fontWeight: 900, color: C.red }}>−{fmt(fuelByMonth[m])}</div><button onClick={() => setFuelEntries((prev) => prev.filter((e) => monthKey(e.date) !== m))} style={{ background: `${C.red}18`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "4px 9px", color: C.red, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✕</button></div></div>)); })()}
             </>}
             {view === "mensual" && <>
               {monthData.length === 0 && <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>}
               {monthData.map(({ ym, rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes }) => (
                 <div key={ym}>
-                  <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12 }}>
+                  <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
                     <div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{monthLabel(ym)}</div>
                     <div style={{ fontSize: 32, fontWeight: 900, color: C.acc, marginTop: 4 }}>{fmt(totalFact)}</div>
                     <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor (50%): <strong style={{ color: C.t1 }}>{fmt(conductorMes)}</strong></div>
                   </div>
-                  <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                  <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                     <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Liquidación mensual</div>
                     {[{ label: "50% conductor s/ facturación base", val: conductorMes, color: C.acc, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(bono > 0 ? [{ label: "🎁 Bono productividad +6.000€", val: bono, color: C.green }] : [])].map(({ label, val, color, bold, neg }, i, arr) => (
                       <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
@@ -141,7 +148,7 @@
                       <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(diferenciaMes))}</div>
                     </div>
                   ); })()}
-                  <div style={{ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+                  <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
                     <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                       <thead><tr>{["Fecha", "Fact.", "Acum.", "50% día", "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
@@ -153,9 +160,9 @@
               ))}
             </>}
           </div>
-          <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20 }}>
+          <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -4px 18px rgba(0,0,0,0.35)" }}>
             {[["diario", "📋", "Diario"], ["combustible", "⛽", "Combustible"], ["mensual", "📊", "Mensual"]].map(([v, ic, lb]) => (
-              <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: view === v ? C.acc : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit" }}>
+              <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.acc : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
                 <span style={{ fontSize: 22 }}>{ic}</span>{lb}
               </button>
             ))}
