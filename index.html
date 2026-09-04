@@ -43,9 +43,36 @@
     const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
     const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
     const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
-    const TaxiLogo = ({ size = 26 }) => (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="#0d0f14">
+    const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ flexShrink: 0, display: "block" }}>
         <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
+      </svg>
+    );
+    const Sq = ({ bg, size = 28, radius = 8, children }) => (
+      <span style={{ width: size, height: size, borderRadius: radius, background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{children}</span>
+    );
+    const UberMark = () => (
+      <Sq bg="#000000" radius={7}><span style={{ color: "#fff", fontSize: 10, fontWeight: 600, letterSpacing: -0.2 }}>Uber</span></Sq>
+    );
+    const CabifyMark = () => (
+      <Sq bg="#6C3EF4" radius={9}>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 21.5s6.6-6.3 6.6-10.8a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.5 12 21.5z" />
+          <path d="M12 15.3c-.2 0-3.2-2.2-3.2-4 0-1.1.9-1.9 1.8-1.9.6 0 1.1.3 1.4.7.3-.4.8-.7 1.4-.7.9 0 1.8.8 1.8 1.9 0 1.8-3 4-3.2 4z" fill="#fff" stroke="none" />
+        </svg>
+      </Sq>
+    );
+    const FreeNowMark = ({ size = 28 }) => (
+      <svg width={size} height={size} viewBox="0 0 100 100" style={{ flexShrink: 0, display: "block" }}>
+        <rect width="100" height="100" rx="22" fill="#E4002B" />
+        <text x="50" y="35" textAnchor="middle" fill="#fff" fontSize="16" fontWeight="700" fontFamily="'DM Sans', sans-serif">FREENOW</text>
+        <path d="M25 45h18l7 19 7-19h18L57 88H43z" fill="#fff" />
+      </svg>
+    );
+    const VisaMark = ({ w = 48 }) => (
+      <svg width={w} height={w * 0.34} viewBox="0 0 100 34" style={{ flexShrink: 0, display: "block" }}>
+        <path d="M56 4h42l-6 8H50z" fill="#F7B600" />
+        <text x="50" y="31" textAnchor="middle" fill="#1A1F71" fontSize="27" fontWeight="800" fontStyle="italic" fontFamily="'DM Sans', sans-serif">VISA</text>
       </svg>
     );
     function TaxiCuentas() {
@@ -66,7 +93,15 @@
       const fuelByMonth = useMemo(() => { const byMonth = {}; fuelEntries.forEach((e) => { const m = monthKey(e.date); if (!byMonth[m]) byMonth[m] = 0; byMonth[m] += e.importe; }); return byMonth; }, [fuelEntries]);
       const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
       const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); let acumFact = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d); acumFact += s.facturacion; return { date, s, acumFact }; }); const conductorMes = acumFact * 0.5; const totalCobradoEmpresa = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const diferenciaMes = conductorMes - totalCobradoEmpresa; const efectivoMes = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const bono = acumFact >= 6000 ? 150 : 0; const combustibleMes = fuelByMonth[ym] || 0; return { ym, rows, totalFact: acumFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes }; }), [months, days, fuelByMonth]);
-      const FIELDS = [{ key: "taximetro", label: "Taxímetro" }, { key: "uber", label: "Uber" }, { key: "cabify", label: "Cabify" }, { key: "fnt9", label: "FN T9" }, { key: "fncob", label: "FN COB" }, { key: "visa", label: "Visa" }];
+      const brandName = { fontSize: 14, fontWeight: 700, color: C.t1 };
+      const FIELDS = [
+        { key: "taximetro", name: "Taxi", head: <><TaxiLogo size={26} color={C.acc} /><span style={{ ...brandName, fontSize: 15, fontWeight: 900, color: "#c08a06", letterSpacing: 0.5 }}>TAXI</span></> },
+        { key: "uber", name: "Uber", head: <><UberMark /><span style={brandName}>Uber</span></> },
+        { key: "cabify", name: "Cabify", head: <><CabifyMark /><span style={brandName}>Cabify</span></> },
+        { key: "fnt9", name: "FreeNow T9", head: <><FreeNowMark /><span style={brandName}>T9</span></> },
+        { key: "fncob", name: "FreeNow cobrado", head: <><FreeNowMark /><span style={{ background: "#0f62d6", color: "#fff", fontSize: 10, fontWeight: 800, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 7 }}>COBRADO</span></> },
+        { key: "visa", name: "Visa", head: <><VisaMark /><span style={brandName}>Visa</span></> },
+      ];
       const inp = { width: "100%", background: "#f6f7fb", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
       return (
         <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: 80 }}>
@@ -85,7 +120,7 @@
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {FIELDS.map(({ key, label }) => (<div key={key}><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>{label}</label><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} /></div>))}
+                  {FIELDS.map(({ key, name, head }) => (<div key={key}><div style={{ display: "flex", alignItems: "center", gap: 8, height: 30, marginBottom: 7 }}>{head}</div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={name} style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} /></div>))}
                 </div>
               </div>
               <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
