@@ -38,7 +38,7 @@
     const todayStr = () => new Date().toISOString().split("T")[0];
     const monthKey = (d) => d.slice(0, 7);
     const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
-    const calcDay = (d) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * 0.5; const cobradoEmpresa = n(d.uber) + n(d.cabify) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
+    const calcDay = (d) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * 0.5; const cobradoEmpresa = n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
     const EMPTY = { taximetro: 0, uber: 0, cabify: 0, bolt: 0, fnt9: 0, fncob: 0, visa: 0 };
     const today = todayStr();
     const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
@@ -137,7 +137,7 @@
               </div>
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
-                {[{ label: "50% conductor (sobre fact. base)", val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (Uber + Cabify + FN COB + Visa)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
+                {[{ label: "50% conductor (sobre fact. base)", val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (Uber + Cabify + Bolt + FN COB + Visa)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
                     <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontSize: bold ? 16 : 14, fontWeight: bold ? 800 : 600, color }}>{fmt(val)}</span>
                   </div>
