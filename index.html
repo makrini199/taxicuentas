@@ -99,8 +99,8 @@
         { key: "uber", name: "Uber", head: <><UberMark /><span style={brandName}>Uber</span></> },
         { key: "cabify", name: "Cabify", head: <><CabifyMark /><span style={brandName}>Cabify</span></> },
         { key: "fnt9", name: "FreeNow T9", head: <><FreeNowMark /><span style={brandName}>T9</span></> },
-        { key: "fncob", name: "FreeNow cobrado", head: <><FreeNowMark /><span style={{ background: "#0f62d6", color: "#fff", fontSize: 10, fontWeight: 800, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 7 }}>COBRADO</span></> },
-        { key: "visa", name: "Visa", head: <><VisaMark /><span style={brandName}>Visa</span></> },
+        { key: "fncob", name: "FreeNow cobrado", gap: 5, head: <><FreeNowMark /><span style={{ background: C.green, color: "#fff", fontSize: 10, fontWeight: 800, letterSpacing: 0.3, padding: "4px 9px", borderRadius: 7 }}>COBRADO</span></> },
+        { key: "visa", name: "Visa", head: <VisaMark w={56} /> },
       ];
       const inp = { width: "100%", background: "#f6f7fb", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
       return (
@@ -120,7 +120,7 @@
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {FIELDS.map(({ key, name, head }) => (<div key={key}><div style={{ display: "flex", alignItems: "center", gap: 8, height: 30, marginBottom: 7 }}>{head}</div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={name} style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} /></div>))}
+                  {FIELDS.map(({ key, name, head, gap }) => (<div key={key}><div style={{ display: "flex", alignItems: "center", gap: gap ?? 8, height: 30, marginBottom: 7 }}>{head}</div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={name} style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} /></div>))}
                 </div>
               </div>
               <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
