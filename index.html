@@ -38,6 +38,7 @@
     const todayStr = () => new Date().toISOString().split("T")[0];
     const monthKey = (d) => d.slice(0, 7);
     const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
+    const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
     const calcDay = (d) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * 0.5; const cobradoEmpresa = n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
     const EMPTY = { taximetro: 0, uber: 0, cabify: 0, bolt: 0, fnt9: 0, fncob: 0, visa: 0 };
     const today = todayStr();
@@ -95,6 +96,7 @@
       const [fuelEntries, setFuelEntries] = useState(() => loadStorage("tc_fuel", []));
       const [fuelForm, setFuelForm] = useState({ date: today, importe: "" });
       const [fuelSaved, setFuelSaved] = useState(false);
+      const [selectedMonth, setSelectedMonth] = useState(monthKey(today));
       useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
       useEffect(() => { try { localStorage.setItem("tc_fuel", JSON.stringify(fuelEntries)); } catch {} }, [fuelEntries]);
       const saveDay = () => { const parsed = {}; for (const k of Object.keys(EMPTY)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
@@ -104,6 +106,9 @@
       const fuelByMonth = useMemo(() => { const byMonth = {}; fuelEntries.forEach((e) => { const m = monthKey(e.date); if (!byMonth[m]) byMonth[m] = 0; byMonth[m] += e.importe; }); return byMonth; }, [fuelEntries]);
       const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
       const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); let acumFact = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d); acumFact += s.facturacion; return { date, s, acumFact }; }); const conductorMes = acumFact * 0.5; const totalCobradoEmpresa = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const diferenciaMes = conductorMes - totalCobradoEmpresa; const efectivoMes = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const bono = acumFact >= 6000 ? 150 : 0; const combustibleMes = fuelByMonth[ym] || 0; return { ym, rows, totalFact: acumFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes }; }), [months, days, fuelByMonth]);
+      useEffect(() => { if (months.length && !months.includes(selectedMonth)) setSelectedMonth(months[0]); }, [months]);
+      const selectedData = monthData.find((m) => m.ym === selectedMonth);
+      const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
       const brandName = { fontSize: 14, fontWeight: 700, color: C.t1 };
       const FIELDS = [
         { key: "taximetro", name: "Taxi", head: <><TaxiLogo size={26} color={C.acc} /><span style={{ ...brandName, fontSize: 15, fontWeight: 900, color: "#c08a06", letterSpacing: 0.5 }}>TAXI</span></> },
@@ -168,39 +173,58 @@
             </>}
             {view === "mensual" && <>
               {monthData.length === 0 && <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>}
-              {monthData.map(({ ym, rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes }) => (
-                <div key={ym}>
-                  <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
-                    <div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{monthLabel(ym)}</div>
-                    <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim, marginTop: 4 }}>{fmt(totalFact)}</div>
-                    <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor (50%): <strong style={{ color: C.t1 }}>{fmt(conductorMes)}</strong></div>
-                  </div>
-                  <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Liquidación mensual</div>
-                    {[{ label: "50% conductor s/ facturación base", val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(bono > 0 ? [{ label: "🎁 Bono productividad +6.000€", val: bono, color: C.green }] : [])].map(({ label, val, color, bold, neg }, i, arr) => (
-                      <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                        <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color }}>{neg ? "−" : ""}{fmt(val)}</span>
+              {monthData.length > 0 && <>
+                <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Facturación mensual</div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 118, overflowX: "auto", paddingBottom: 4 }}>
+                    {[...monthData].reverse().map((m) => (
+                      <div key={m.ym} onClick={() => setSelectedMonth(m.ym)} style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 38, flexShrink: 0 }}>
+                        <div style={{ fontSize: 9, color: C.t3, fontWeight: 700, whiteSpace: "nowrap" }}>{Math.round(m.totalFact)}€</div>
+                        <div style={{ width: 22, height: Math.max(4, (m.totalFact / maxFact) * 84), borderRadius: 5, background: m.ym === selectedMonth ? `linear-gradient(180deg,${C.acc},${C.accDim})` : C.border, transition: "background 0.15s" }} />
+                        <div style={{ fontSize: 10, color: m.ym === selectedMonth ? C.accDim : C.t3, fontWeight: m.ym === selectedMonth ? 800 : 500, textTransform: "capitalize" }}>{monthShort(m.ym)}</div>
                       </div>
                     ))}
-                    {bono > 0 ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>✅ ¡Superados los 6.000€! Bono de 150€ desbloqueado</div>
-                    : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Faltan {fmt(6000 - totalFact)} para el bono de 150€</div>}
-                  </div>
-                  {(() => { const neg = diferenciaMes <= 0; return (
-                    <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                      <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Balance mensual acumulado</div></div>
-                      <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(diferenciaMes))}</div>
-                    </div>
-                  ); })()}
-                  <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
-                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead><tr>{["Fecha", "Fact.", "Acum.", "50% día", "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
-                      <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{date.slice(5)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></tr>); })}</tbody>
-                    </table>
-                    <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
                   </div>
                 </div>
-              ))}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: C.t1, textTransform: "capitalize" }}>{monthLabel(selectedMonth)}</div>
+                  <select className="inp" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={{ ...inp, width: "auto", padding: "8px 10px", fontSize: 13 }}>
+                    {months.map((m) => (<option key={m} value={m}>{monthLabel(m)}</option>))}
+                  </select>
+                </div>
+                {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes } = selectedData; return (
+                  <div>
+                    <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(totalFact)}</div>
+                      <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor (50%): <strong style={{ color: C.t1 }}>{fmt(conductorMes)}</strong></div>
+                    </div>
+                    <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Liquidación mensual</div>
+                      {[{ label: "50% conductor s/ facturación base", val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(bono > 0 ? [{ label: "🎁 Bono productividad +6.000€", val: bono, color: C.green }] : [])].map(({ label, val, color, bold, neg }, i, arr) => (
+                        <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                          <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color }}>{neg ? "−" : ""}{fmt(val)}</span>
+                        </div>
+                      ))}
+                      {bono > 0 ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>✅ ¡Superados los 6.000€! Bono de 150€ desbloqueado</div>
+                      : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Faltan {fmt(6000 - totalFact)} para el bono de 150€</div>}
+                    </div>
+                    {(() => { const neg = diferenciaMes <= 0; return (
+                      <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                        <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Balance mensual acumulado</div></div>
+                        <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(diferenciaMes))}</div>
+                      </div>
+                    ); })()}
+                    <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+                      <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead><tr>{["Fecha", "Fact.", "Acum.", "50% día", "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
+                        <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{date.slice(5)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></tr>); })}</tbody>
+                      </table>
+                      <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
+                    </div>
+                  </div>
+                ); })()}
+              </>}
             </>}
           </div>
           <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)" }}>
