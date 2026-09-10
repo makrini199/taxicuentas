@@ -39,13 +39,13 @@
     const monthKey = (d) => d.slice(0, 7);
     const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
     const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
-    const calcDay = (d) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * 0.5; const cobradoEmpresa = n(d.uberCob) + n(d.cabifyCob) + n(d.boltCob) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
-    const EMPTY = { taximetro: 0, uber: 0, uberCob: 0, cabify: 0, cabifyCob: 0, bolt: 0, boltCob: 0, fnt9: 0, fncob: 0, visa: 0 };
-    const COB_PAIRS = [["uber", "uberCob"], ["cabify", "cabifyCob"], ["bolt", "boltCob"]];
+    const calcDay = (d) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * 0.5; const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
+    const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
+    const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
     const today = todayStr();
     const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
     const hasData = (d) => Object.keys(EMPTY).some((k) => (Number(d[k]) || 0) !== 0);
-    const migrateDay = (d) => { const out = { ...d }; for (const [fact, cob] of COB_PAIRS) if (out[cob] === undefined) out[cob] = Number(out[fact]) || 0; return out; };
+    const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob] of EFEC_TRIOS) { if (out[efec] === undefined) { const total = Number(out[fact]) || 0; const cobrado = out[oldCob] === undefined ? total : Number(out[oldCob]) || 0; out[efec] = Math.max(0, total - cobrado); } delete out[oldCob]; } return out; };
     const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
     const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
     const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
@@ -114,13 +114,13 @@
       const brandName = { fontSize: 14, fontWeight: 700, color: C.t1 };
       const FIELDS = [
         { key: "taximetro", name: "Taxi", full: true, head: <><TaxiLogo size={26} color={C.acc} /><span style={{ ...brandName, fontSize: 15, fontWeight: 900, color: "#c08a06", letterSpacing: 0.5 }}>TAXI</span></> },
-        { key: "uber", cobKey: "uberCob", name: "Uber", head: <><UberMark /><span style={brandName}>Uber</span></> },
-        { key: "cabify", cobKey: "cabifyCob", name: "Cabify", head: <><CabifyMark /><span style={brandName}>Cabify</span></> },
-        { key: "bolt", cobKey: "boltCob", name: "Bolt", head: <><BoltMark /><span style={brandName}>Bolt</span></> },
-        { key: "fnt9", cobKey: "fncob", name: "FreeNow T9", head: <><FreeNowMark /><span style={brandName}>T9</span></> },
+        { key: "uber", cobKey: "uberEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Uber", head: <><UberMark /><span style={brandName}>Uber</span></> },
+        { key: "cabify", cobKey: "cabifyEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Cabify", head: <><CabifyMark /><span style={brandName}>Cabify</span></> },
+        { key: "bolt", cobKey: "boltEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Bolt", head: <><BoltMark /><span style={brandName}>Bolt</span></> },
+        { key: "fnt9", cobKey: "fncob", cobLabel: "COBRADO", cobColor: C.green, name: "FreeNow T9", head: <><FreeNowMark /><span style={brandName}>T9</span></> },
         { key: "visa", name: "Visa", full: true, head: <VisaMark w={56} /> },
       ];
-      const cobTag = { background: C.green, color: "#fff", fontSize: 9, fontWeight: 800, letterSpacing: 0.3, padding: "3px 7px", borderRadius: 6, display: "inline-block", margin: "7px 0 5px" };
+      const cobTag = (bg) => ({ background: bg, color: "#fff", fontSize: 9, fontWeight: 800, letterSpacing: 0.3, padding: "3px 7px", borderRadius: 6, display: "inline-block", margin: "7px 0 5px" });
       const inp = { width: "100%", background: "#f6f7fb", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
       return (
         <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: 80 }}>
@@ -137,7 +137,7 @@
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {FIELDS.map(({ key, cobKey, name, head, gap, full }) => (<div key={key} style={full ? { gridColumn: "span 2" } : undefined}><div style={{ display: "flex", alignItems: "center", gap: gap ?? 8, height: 30, marginBottom: 7 }}>{head}</div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={name} style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} />{cobKey && <><div><span style={cobTag}>COBRADO</span></div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={`${name} cobrado`} style={inp} value={form[cobKey] || ""} onChange={(e) => setForm((f) => ({ ...f, [cobKey]: e.target.value }))} /></>}</div>))}
+                  {FIELDS.map(({ key, cobKey, cobLabel, cobColor, name, head, gap, full }) => (<div key={key} style={full ? { gridColumn: "span 2" } : undefined}><div style={{ display: "flex", alignItems: "center", gap: gap ?? 8, height: 30, marginBottom: 7 }}>{head}</div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={name} style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} />{cobKey && <><div><span style={cobTag(cobColor)}>{cobLabel}</span></div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={`${name} ${cobLabel.toLowerCase()}`} style={inp} value={form[cobKey] || ""} onChange={(e) => setForm((f) => ({ ...f, [cobKey]: e.target.value }))} /></>}</div>))}
                 </div>
               </div>
               <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
