@@ -35,11 +35,20 @@
   <script type="text/babel">
     const { useState, useMemo, useEffect } = React;
     const fmt = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
-    const todayStr = () => new Date().toISOString().split("T")[0];
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const todayStr = () => ymd(new Date());
+    const shiftDays = (s, n) => { const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y, m - 1, d + n)); };
+    const weekStart = (s) => { const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y, m - 1, d - ((new Date(y, m - 1, d).getDay() + 6) % 7))); };
+    const monthStart = (s) => s.slice(0, 8) + "01";
+    const dayMonth = (s) => s.slice(8) + "/" + s.slice(5, 7);
+    const WD = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+    const weekday = (s) => { const [y, m, d] = s.split("-").map(Number); return WD[(new Date(y, m - 1, d).getDay() + 6) % 7]; };
+    const daysBetween = (lo, hi) => { const out = []; for (let d = lo; d <= hi && out.length < 62; d = shiftDays(d, 1)) out.push(d); return out; };
     const monthKey = (d) => d.slice(0, 7);
     const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
     const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
     const calcDay = (d) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * 0.5; const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
+    const summarize = (entries) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * 0.5; const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
     const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
     const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
     const today = todayStr();
@@ -89,6 +98,39 @@
         <text x="50" y="31" textAnchor="middle" fill="#1A1F71" fontSize="27" fontWeight="800" fontStyle="italic" fontFamily="'DM Sans', sans-serif">VISA</text>
       </svg>
     );
+    const Hero = ({ total, conductor }) => (
+      <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
+        <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
+        <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor (50%): <strong style={{ color: C.t1 }}>{fmt(conductor)}</strong></div>
+      </div>
+    );
+    const StatCard = ({ title, items, children }) => (
+      <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>{title}</div>
+        {items.map(({ label, val, color, bold, neg }, i, arr) => (
+          <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+            <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color }}>{neg ? "−" : ""}{fmt(val)}</span>
+          </div>
+        ))}
+        {children}
+      </div>
+    );
+    const Balance = ({ value, sub }) => { const neg = value <= 0; return (
+      <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
+        <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(value))}</div>
+      </div>
+    ); };
+    const DayTable = ({ rows }) => (
+      <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+        <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead><tr>{["Fecha", "Fact.", "Acum.", "50% día", "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
+          <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{dayMonth(date)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></tr>); })}</tbody>
+        </table>
+        <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
+      </div>
+    );
     function TaxiCuentas() {
       const [days, setDays] = useState(loadDays);
       const [view, setView] = useState("diario");
@@ -99,6 +141,8 @@
       const [fuelForm, setFuelForm] = useState({ date: today, importe: "" });
       const [fuelSaved, setFuelSaved] = useState(false);
       const [selectedMonth, setSelectedMonth] = useState(monthKey(today));
+      const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
+      const [rangeTo, setRangeTo] = useState(today);
       useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
       useEffect(() => { try { localStorage.setItem("tc_fuel", JSON.stringify(fuelEntries)); } catch {} }, [fuelEntries]);
       const saveDay = () => { const parsed = {}; for (const k of Object.keys(EMPTY)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
@@ -107,9 +151,10 @@
       const saveFuel = () => { const importe = parseFloat(fuelForm.importe) || 0; if (!importe) return; setFuelEntries((prev) => [...prev, { id: Date.now(), date: fuelForm.date, importe }]); setFuelForm((f) => ({ ...f, importe: "" })); setFuelSaved(true); setTimeout(() => setFuelSaved(false), 2000); };
       const fuelByMonth = useMemo(() => { const byMonth = {}; fuelEntries.forEach((e) => { const m = monthKey(e.date); if (!byMonth[m]) byMonth[m] = 0; byMonth[m] += e.importe; }); return byMonth; }, [fuelEntries]);
       const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
-      const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); let acumFact = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d); acumFact += s.facturacion; return { date, s, acumFact }; }); const conductorMes = acumFact * 0.5; const totalCobradoEmpresa = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const diferenciaMes = conductorMes - totalCobradoEmpresa; const efectivoMes = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const bono = acumFact >= 6000 ? 150 : 0; const combustibleMes = fuelByMonth[ym] || 0; const diasTrabajados = rows.length; const mediaDiaria = diasTrabajados ? acumFact / diasTrabajados : 0; return { ym, rows, totalFact: acumFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes, diasTrabajados, mediaDiaria }; }), [months, days, fuelByMonth]);
+      const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const s = summarize(entries); return { ym, ...s, bono: s.totalFact >= 6000 ? 150 : 0, combustibleMes: fuelByMonth[ym] || 0 }; }), [months, days, fuelByMonth]);
       useEffect(() => { if (months.length && !months.includes(selectedMonth)) setSelectedMonth(months[0]); }, [months]);
       const selectedData = monthData.find((m) => m.ym === selectedMonth);
+      const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; return summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b))); }, [days, rangeFrom, rangeTo]);
       const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
       const brandName = { fontSize: 14, fontWeight: 700, color: C.t1 };
       const FIELDS = [
@@ -196,41 +241,62 @@
                 </div>
                 {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, bono, combustibleMes, diasTrabajados, mediaDiaria } = selectedData; return (
                   <div>
-                    <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
-                      <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(totalFact)}</div>
-                      <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor (50%): <strong style={{ color: C.t1 }}>{fmt(conductorMes)}</strong></div>
-                    </div>
-                    <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Liquidación mensual</div>
-                      {[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: "50% conductor s/ facturación base", val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(bono > 0 ? [{ label: "🎁 Bono productividad +6.000€", val: bono, color: C.green }] : [])].map(({ label, val, color, bold, neg }, i, arr) => (
-                        <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                          <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color }}>{neg ? "−" : ""}{fmt(val)}</span>
-                        </div>
-                      ))}
+                    <Hero total={totalFact} conductor={conductorMes} />
+                    <StatCard title="Liquidación mensual" items={[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: "50% conductor s/ facturación base", val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(bono > 0 ? [{ label: "🎁 Bono productividad +6.000€", val: bono, color: C.green }] : [])]}>
                       {bono > 0 ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>✅ ¡Superados los 6.000€! Bono de 150€ desbloqueado</div>
                       : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Faltan {fmt(6000 - totalFact)} para el bono de 150€</div>}
-                    </div>
-                    {(() => { const neg = diferenciaMes <= 0; return (
-                      <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                        <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Balance mensual acumulado</div></div>
-                        <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(diferenciaMes))}</div>
-                      </div>
-                    ); })()}
-                    <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
-                      <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                        <thead><tr>{["Fecha", "Fact.", "Acum.", "50% día", "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
-                        <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{date.slice(5)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></tr>); })}</tbody>
-                      </table>
-                      <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
-                    </div>
+                    </StatCard>
+                    <Balance value={diferenciaMes} sub="Balance mensual acumulado" />
+                    <DayTable rows={rows} />
                   </div>
                 ); })()}
               </>}
             </>}
+            {view === "periodo" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria } = rangeData; const atajos = [["Esta semana", weekStart(today), today], ["Últimos 7 días", shiftDays(today, -6), today], ["Este mes", monthStart(today), today]]; return (<>
+              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Elige el periodo</div>
+                <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
+                  {atajos.map(([lb, f, t]) => { const on = rangeFrom === f && rangeTo === t; return (
+                    <button key={lb} className="nb" onClick={() => { setRangeFrom(f); setRangeTo(t); }} style={{ flex: 1, padding: "9px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>{lb}</button>
+                  ); })}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>
+                  <div><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Hasta</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} /></div>
+                </div>
+              </div>
+              {(() => { const largo = daysBetween(lo, hi).length; const mover = (n) => { setRangeFrom(shiftDays(lo, n * largo)); setRangeTo(shiftDays(hi, n * largo)); }; const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }; return (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+                  <button className="nb" onClick={() => mover(-1)} aria-label="Periodo anterior" style={flecha}>‹</button>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, textAlign: "center" }}>Del {dayMonth(lo)} al {dayMonth(hi)}<div style={{ fontSize: 11, color: C.t2, fontWeight: 600 }}>{diasTrabajados} {diasTrabajados === 1 ? "día trabajado" : "días trabajados"}</div></div>
+                  <button className="nb" onClick={() => mover(1)} aria-label="Periodo siguiente" style={flecha}>›</button>
+                </div>
+              ); })()}
+              {diasTrabajados === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin días registrados en este periodo.</div> : <>
+                <Hero total={totalFact} conductor={conductorMes} />
+                {(() => { const porDia = Object.fromEntries(rows.map((r) => [r.date, r.s.facturacion])); const cal = daysBetween(lo, hi); const tope = Math.max(1, ...cal.map((d) => porDia[d] || 0)); return (
+                  <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Facturación por día</div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                      {cal.map((d) => { const v = porDia[d] || 0; return (
+                        <div key={d} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, minWidth: 34, flexShrink: 0 }}>
+                          <div style={{ fontSize: 9, color: C.t3, fontWeight: 700, whiteSpace: "nowrap", height: 12 }}>{v > 0 ? Math.round(v) + "€" : ""}</div>
+                          <div style={{ height: 90, display: "flex", alignItems: "flex-end" }}><div style={{ width: 22, height: v > 0 ? Math.max(5, (v / tope) * 90) : 0, borderRadius: 5, background: `linear-gradient(180deg,${C.acc},${C.accDim})` }} /></div>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: v > 0 ? C.t1 : C.t3 }}>{Number(d.slice(8))}</div>
+                          <div style={{ fontSize: 9, color: C.t3 }}>{weekday(d)}</div>
+                        </div>
+                      ); })}
+                    </div>
+                  </div>
+                ); })()}
+                <StatCard title="Resumen del periodo" items={[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: "50% conductor s/ facturación base", val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }]} />
+                <Balance value={diferenciaMes} sub="Balance del periodo seleccionado" />
+                <DayTable rows={rows} />
+              </>}
+            </>); })()}
           </div>
           <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)" }}>
-            {[["diario", "📋", "Diario"], ["combustible", "⛽", "Combustible"], ["mensual", "📊", "Mensual"]].map(([v, ic, lb]) => (
+            {[["diario", "📋", "Diario"], ["combustible", "⛽", "Combustible"], ["mensual", "📊", "Mensual"], ["periodo", "📅", "Periodo"]].map(([v, ic, lb]) => (
               <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
                 <span style={{ fontSize: 22 }}>{ic}</span>{lb}
               </button>
