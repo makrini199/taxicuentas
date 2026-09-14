@@ -49,10 +49,10 @@
     const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
     const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
     const calcDay = (d, pct = 50) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * (pct / 100); const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
-    const DEFAULT_CFG = { pctConductor: 50, incentivo: "bono", umbral: 6000, bonoImporte: 150, pctCombustible: 50 };
+    const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "" };
     const loadCfg = () => ({ ...DEFAULT_CFG, ...loadStorage("tc_cfg", {}) });
     const num = (v) => Number(v) || 0;
-    const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = meta > 0 && totalFact >= meta; if (cfg.incentivo === "bono") return { tipo: "bono", llega, meta, importe: llega ? num(cfg.bonoImporte) : 0, etiqueta: `🎁 Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(num(cfg.bonoImporte))}`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Bono de ${fmt0(num(cfg.bonoImporte))} desbloqueado` }; if (cfg.incentivo === "combustible") { const p = num(cfg.pctCombustible); return { tipo: "combustible", llega, meta, importe: llega ? combustible * (p / 100) : 0, etiqueta: `⛽ ${p}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${p}% del combustible`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Te pagan el ${p}% del combustible` }; } return { tipo: "ninguno", llega: false, meta, importe: 0 }; };
+    const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `🎁 Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `⛽ ${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
     const summarize = (entries, pct = 50) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
     const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
     const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
@@ -161,6 +161,8 @@
       const [fuelForm, setFuelForm] = useState({ date: today, importe: "" });
       const [fuelSaved, setFuelSaved] = useState(false);
       const [cfg, setCfg] = useState(loadCfg);
+      const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
+      const marcarCfgOk = () => { setCfgOk(true); try { localStorage.setItem("tc_cfg_ok", "true"); } catch {} };
       const pct = num(cfg.pctConductor);
       const [selectedMonth, setSelectedMonth] = useState(monthKey(today));
       const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
@@ -201,6 +203,14 @@
           </div>
           <div style={{ padding: 16 }}>
             {view === "diario" && <>
+              {!cfgOk && <div style={{ background: `${C.acc}12`, border: `1.5px solid ${C.acc}44`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, marginBottom: 4 }}>Ajusta la app a tu acuerdo</div>
+                <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Pon el porcentaje que te paga tu empresa y, si te dan algún extra al llegar a cierta facturación, indícalo. Hasta que lo hagas, la app calcula con el 50% y sin extras.</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="saveBtn" onClick={() => setView("ajustes")} style={{ flex: 1, padding: 10, borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Configurar ahora</button>
+                  <button className="nb" onClick={marcarCfgOk} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ahora no</button>
+                </div>
+              </div>}
               <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
               {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>{saved === "borrado" ? "🗑️ Día eliminado" : "✅ Día guardado"}</div>}
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
@@ -267,7 +277,7 @@
                   <div>
                     <Hero total={totalFact} conductor={conductorMes} pct={pct} />
                     <StatCard title="Liquidación mensual" items={[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
-                      {incentivo.tipo === "ninguno" ? null : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
+                      {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes ⚙️</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                       : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                     </StatCard>
                     <Balance value={diferenciaMes} sub="Balance mensual acumulado" />
@@ -276,7 +286,7 @@
                 ); })()}
               </>}
             </>}
-            {view === "ajustes" && (() => { const set = (k, v) => setCfg((c) => ({ ...c, [k]: v })); const tipos = [["bono", "Bono en €"], ["combustible", "% combustible"], ["ninguno", "Ninguno"]]; const ej = incentivoDe(cfg, num(cfg.umbral), 400); return (<>
+            {view === "ajustes" && (() => { const set = (k, v) => { marcarCfgOk(); setCfg((c) => ({ ...c, [k]: v })); }; const tipos = [["bono", "Bono en €"], ["combustible", "% combustible"], ["ninguno", "Ninguno"]]; const ej = incentivoDe(cfg, num(cfg.umbral), 400); return (<>
               <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Ajustes</div>
               <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Adapta la app a lo que te paga tu empresa. Se guarda en este móvil.</div>
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
@@ -296,14 +306,14 @@
                 </div>
                 {cfg.incentivo === "ninguno" ? <div style={{ fontSize: 12, color: C.t3 }}>Tu empresa no te da ningún extra por facturación.</div> : <>
                   <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>A partir de cuánto facturado al mes (€)</label>
-                  <input className="inp" type="number" min="0" step="50" aria-label="Umbral de facturación" style={{ ...inp, marginBottom: 12 }} value={cfg.umbral} onChange={(e) => set("umbral", e.target.value)} />
+                  <input className="inp" type="number" min="0" step="50" aria-label="Umbral de facturación" placeholder="0" style={{ ...inp, marginBottom: 12 }} value={cfg.umbral} onChange={(e) => set("umbral", e.target.value)} />
                   {cfg.incentivo === "bono" ? <>
                     <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te dan de bono (€)</label>
-                    <input className="inp" type="number" min="0" step="5" aria-label="Importe del bono" style={inp} value={cfg.bonoImporte} onChange={(e) => set("bonoImporte", e.target.value)} />
+                    <input className="inp" type="number" min="0" step="5" aria-label="Importe del bono" placeholder="0" style={inp} value={cfg.bonoImporte} onChange={(e) => set("bonoImporte", e.target.value)} />
                   </> : <>
                     <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te pagan este % del combustible</label>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <input className="inp" type="number" min="0" max="100" step="1" aria-label="Porcentaje del combustible" style={{ ...inp, flex: 1 }} value={cfg.pctCombustible} onChange={(e) => set("pctCombustible", e.target.value)} />
+                      <input className="inp" type="number" min="0" max="100" step="1" aria-label="Porcentaje del combustible" placeholder="0" style={{ ...inp, flex: 1 }} value={cfg.pctCombustible} onChange={(e) => set("pctCombustible", e.target.value)} />
                       <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
                     </div>
                   </>}
@@ -311,7 +321,7 @@
               </div>
               <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Así queda tu acuerdo</div>
-                <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>Te llevas el <strong>{pct}%</strong> de todo lo que factures.{cfg.incentivo === "bono" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te dan <strong>{fmt0(num(cfg.bonoImporte))}</strong> de bono.</> : cfg.incentivo === "combustible" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te pagan el <strong>{num(cfg.pctCombustible)}%</strong> del combustible (con {fmt0(400)} de gasolina serían {fmt(ej.importe)}).</> : <> Sin extras por facturación.</>}</div>
+                <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>Te llevas el <strong>{pct}%</strong> de todo lo que factures.{ej.tipo === "incompleto" ? <> Te falta rellenar los dos datos del incentivo para que cuente.</> : cfg.incentivo === "bono" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te dan <strong>{fmt0(num(cfg.bonoImporte))}</strong> de bono.</> : cfg.incentivo === "combustible" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te pagan el <strong>{num(cfg.pctCombustible)}%</strong> del combustible (con {fmt0(400)} de gasolina serían {fmt(ej.importe)}).</> : <> Sin extras por facturación.</>}</div>
               </div>
               <button className="saveBtn" onClick={() => setCfg({ ...DEFAULT_CFG })} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginBottom: 20 }}>Restaurar valores por defecto</button>
             </>); })()}
