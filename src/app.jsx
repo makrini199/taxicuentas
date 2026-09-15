@@ -13,6 +13,7 @@ const weekday = (s) => { const [y, m, d] = s.split("-").map(Number); return WD[(
 const daysBetween = (lo, hi) => { const out = []; for (let d = lo; d <= hi && out.length < 62; d = shiftDays(d, 1)) out.push(d); return out; };
 const monthKey = (d) => d.slice(0, 7);
 const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
+const capitalizar = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
 const calcDay = (d, pct = 50) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * (pct / 100); const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
 const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "" };
@@ -256,7 +257,7 @@ function TaxiCuentas() {
           {monthData.length > 0 && <>
             <div style={{ ...card, padding: 16, marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Facturación mensual</div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 118, overflowX: "auto", paddingBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 132, overflowX: "auto", paddingBottom: 4 }}>
                 {[...monthData].reverse().map((m) => (
                   <div key={m.ym} onClick={() => setSelectedMonth(m.ym)} style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 38, flexShrink: 0 }}>
                     <div style={{ fontSize: 9, color: C.t3, fontWeight: 700, whiteSpace: "nowrap" }}>{Math.round(m.totalFact)}€</div>
@@ -267,7 +268,7 @@ function TaxiCuentas() {
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 900, color: C.t1, textTransform: "capitalize" }}>{monthLabel(selectedMonth)}</div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: C.t1 }}>{capitalizar(monthLabel(selectedMonth))}</div>
               <select className="inp" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={{ ...inp, width: "auto", padding: "8px 10px", fontSize: 13 }}>
                 {months.map((m) => (<option key={m} value={m}>{monthLabel(m)}</option>))}
               </select>
@@ -356,8 +357,8 @@ function TaxiCuentas() {
               ); })}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>
-              <div><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Hasta</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} /></div>
+              <div style={{ minWidth: 0 }}><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>
+              <div style={{ minWidth: 0 }}><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Hasta</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} /></div>
             </div>
           </div>
           {(() => { const largo = daysBetween(lo, hi).length; const mover = (n) => { setRangeFrom(shiftDays(lo, n * largo)); setRangeTo(shiftDays(hi, n * largo)); }; const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }; return (

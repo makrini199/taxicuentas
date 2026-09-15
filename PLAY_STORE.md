@@ -162,15 +162,22 @@ desde la propia app).
 
 ## 5. Material gráfico
 
-| Recurso | Requisito de Google | Estado |
-| --- | --- | --- |
-| Icono | 512 × 512 PNG | `icons/store-1024.png` (reescalar a 512) |
-| Gráfico destacado | 1024 × 500 PNG | **Pendiente** |
-| Capturas de teléfono | 2 a 8, mínimo 320 px de lado | **Pendientes** |
+Todo listo en la carpeta `store/`:
 
-Para las capturas: van bien la pantalla de Diario con datos de un día real, el
-resumen mensual con el gráfico y la pestaña de Periodo. Cuidado con no enseñar
-cifras reales que no quieras publicar.
+| Recurso | Requisito de Google | Archivo |
+| --- | --- | --- |
+| Icono | 512 × 512 PNG | `store/icon-512.png` |
+| Gráfico destacado | 1024 × 500 PNG | `store/feature-graphic.png` |
+| Capturas de teléfono | 2 a 8, mínimo 320 px de lado | `store/screenshots/*.jpg` (5, a 1080 × 1920) |
+
+Las cinco capturas salen de la aplicación real, con **datos de ejemplo inventados**:
+no hay cifras de nadie ahí dentro. Están enmarcadas sobre fondo oscuro con un
+titular cada una, que es como se presentan las fichas cuidadas.
+
+Para regenerarlas si cambia la interfaz, los guiones están en el historial de la
+sesión: capturan la app servida en local a 360 × 640 con densidad 3 y luego las
+componen. Lo importante es mantener el navegador en español (`--lang=es-ES`),
+porque si no las fechas salen en formato americano.
 
 ---
 

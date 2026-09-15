@@ -1,6 +1,6 @@
 // TaxiCuentas service worker. The cache name carries the app version, so a new
 // release fetches everything fresh and the old cache is dropped on activate.
-const VERSION = "1.2.0";
+const VERSION = "1.2.2";
 const CACHE = `taxicuentas-${VERSION}`;
 const SHELL = [
   "./",
