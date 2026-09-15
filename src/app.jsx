@@ -50,40 +50,20 @@ const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
     <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
   </svg>
 );
-const Sq = ({ bg, size = 28, radius = 8, children }) => (
-  <span style={{ width: size, height: size, borderRadius: radius, background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{children}</span>
+// Neutral badges instead of the platforms' own logos: the names are used to say
+// which service a field is for, but reproducing their marks in a published app
+// is someone else's trademark to license.
+const Badge = ({ children, size = 28 }) => (
+  <span style={{ width: size, height: size, borderRadius: 8, background: "#2f3545", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: children && children.length > 1 ? 10 : 13, fontWeight: 800, letterSpacing: -0.2, flexShrink: 0 }}>{children}</span>
 );
-const UberMark = () => (
-  <Sq bg="#000000" radius={7}><span style={{ color: "#fff", fontSize: 10, fontWeight: 600, letterSpacing: -0.2 }}>Uber</span></Sq>
-);
-const CabifyMark = () => (
-  <Sq bg="#6C3EF4" radius={9}>
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 21.5s6.6-6.3 6.6-10.8a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.5 12 21.5z" />
-      <path d="M12 15.3c-.2 0-3.2-2.2-3.2-4 0-1.1.9-1.9 1.8-1.9.6 0 1.1.3 1.4.7.3-.4.8-.7 1.4-.7.9 0 1.8.8 1.8 1.9 0 1.8-3 4-3.2 4z" fill="#fff" stroke="none" />
-    </svg>
-  </Sq>
-);
-const BoltMark = () => (
-  <Sq bg="#34D186" radius={8}>
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff">
-      <path d="M13.6 2 4.8 13.6c-.3.4 0 1 .5 1h4.3l-1.2 7.1c-.1.6.7.9 1 .4l8.8-11.6c.3-.4 0-1-.5-1h-4.3l1.2-7.1c.1-.6-.7-.9-1-.4z" />
-    </svg>
-  </Sq>
-);
-const FreeNowMark = ({ size = 28 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" style={{ flexShrink: 0, display: "block" }}>
-    <rect width="100" height="100" rx="22" fill="#E4002B" />
-    <text x="50" y="35" textAnchor="middle" fill="#fff" fontSize="16" fontWeight="700" fontFamily="'DM Sans', sans-serif">FREENOW</text>
-    <path d="M25 45h18l7 19 7-19h18L57 88H43z" fill="#fff" />
+const CardMark = ({ size = 28 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: "block" }} aria-hidden="true">
+    <rect x="1.5" y="4.5" width="21" height="15" rx="3" fill="#2f3545" />
+    <rect x="1.5" y="8" width="21" height="3" fill="#8f93a8" />
+    <rect x="4.5" y="14" width="6" height="2.2" rx="1.1" fill="#fff" />
   </svg>
 );
-const VisaMark = ({ w = 48 }) => (
-  <svg width={w} height={w * 0.34} viewBox="0 0 100 34" style={{ flexShrink: 0, display: "block" }}>
-    <path d="M56 4h42l-6 8H50z" fill="#F7B600" />
-    <text x="50" y="31" textAnchor="middle" fill="#1A1F71" fontSize="27" fontWeight="800" fontStyle="italic" fontFamily="'DM Sans', sans-serif">VISA</text>
-  </svg>
-);
+
 const Hero = ({ total, conductor, pct }) => (
   <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
     <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
@@ -127,6 +107,8 @@ function TaxiCuentas() {
   const [fuelForm, setFuelForm] = useState({ date: today, importe: "" });
   const [fuelSaved, setFuelSaved] = useState(false);
   const [cfg, setCfg] = useState(loadCfg);
+  const [copia, setCopia] = useState(null);
+  const [copiaMsg, setCopiaMsg] = useState("");
   const [hayUpdate, setHayUpdate] = useState(false);
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
@@ -149,14 +131,59 @@ function TaxiCuentas() {
   const selectedData = monthData.find((m) => m.ym === selectedMonth);
   const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; return summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct); }, [days, rangeFrom, rangeTo, pct]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
+  const exportarCopia = async () => {
+    const payload = { app: "taxicuentas", formato: 1, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, fuel: fuelEntries, cfg };
+    const texto = JSON.stringify(payload, null, 2);
+    const nombre = `taxicuentas-${todayStr()}.json`;
+    try {
+      const file = new File([texto], nombre, { type: "application/json" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: nombre });
+        setCopiaMsg("Copia enviada. Guárdala donde no se te pierda.");
+        return;
+      }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    try {
+      const url = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setCopiaMsg(`Descargado ${nombre}`);
+    } catch { setCopiaMsg("No se pudo crear la copia en este navegador."); }
+  };
+  const leerCopia = async (file) => {
+    setCopiaMsg(""); setCopia(null);
+    if (!file) return;
+    try {
+      const datos = JSON.parse(await file.text());
+      if (!datos || datos.app !== "taxicuentas" || typeof datos.days !== "object" || datos.days === null) {
+        setCopiaMsg("Ese archivo no es una copia de TaxiCuentas.");
+        return;
+      }
+      const fechas = Object.keys(datos.days).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+      setCopia({ datos, dias: fechas.length, repostajes: Array.isArray(datos.fuel) ? datos.fuel.length : 0, desde: fechas[0], hasta: fechas[fechas.length - 1] });
+    } catch { setCopiaMsg("No se pudo leer el archivo."); }
+  };
+  const restaurarCopia = () => {
+    if (!copia) return;
+    const { datos } = copia;
+    const limpios = Object.fromEntries(Object.entries(datos.days).filter(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && v && typeof v === "object" && hasData(v)).map(([d, v]) => [d, migrateDay(v)]));
+    setDays(limpios);
+    setFuelEntries(Array.isArray(datos.fuel) ? datos.fuel.filter((e) => e && e.date && Number(e.importe)) : []);
+    if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg }); marcarCfgOk(); }
+    setForm(limpios[editDate] ? { ...limpios[editDate] } : { ...EMPTY });
+    setCopia(null);
+    setCopiaMsg(`Restaurados ${Object.keys(limpios).length} días.`);
+  };
   const brandName = { fontSize: 14, fontWeight: 700, color: C.t1 };
   const FIELDS = [
     { key: "taximetro", name: "Taxi", full: true, head: <><TaxiLogo size={26} color={C.acc} /><span style={{ ...brandName, fontSize: 15, fontWeight: 900, color: "#c08a06", letterSpacing: 0.5 }}>TAXI</span></> },
-    { key: "uber", cobKey: "uberEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Uber", head: <><UberMark /><span style={brandName}>Uber</span></> },
-    { key: "cabify", cobKey: "cabifyEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Cabify", head: <><CabifyMark /><span style={brandName}>Cabify</span></> },
-    { key: "bolt", cobKey: "boltEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Bolt", head: <><BoltMark /><span style={brandName}>Bolt</span></> },
-    { key: "fnt9", cobKey: "fncob", cobLabel: "COBRADO", cobColor: C.green, name: "FreeNow T9", head: <><FreeNowMark /><span style={brandName}>T9</span></> },
-    { key: "visa", name: "Visa", full: true, head: <VisaMark w={56} /> },
+    { key: "uber", cobKey: "uberEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Uber", head: <><Badge>U</Badge><span style={brandName}>Uber</span></> },
+    { key: "cabify", cobKey: "cabifyEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Cabify", head: <><Badge>C</Badge><span style={brandName}>Cabify</span></> },
+    { key: "bolt", cobKey: "boltEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Bolt", head: <><Badge>B</Badge><span style={brandName}>Bolt</span></> },
+    { key: "fnt9", cobKey: "fncob", cobLabel: "COBRADO", cobColor: C.green, name: "FreeNow T9", head: <><Badge>FN</Badge><span style={brandName}>FreeNow T9</span></> },
+    { key: "visa", name: "Tarjeta", full: true, head: <><CardMark /><span style={brandName}>Tarjeta</span></> },
   ];
   const cobTag = (bg) => ({ background: bg, color: "#fff", fontSize: 9, fontWeight: 800, letterSpacing: 0.3, padding: "3px 7px", borderRadius: 6, display: "inline-block", margin: "7px 0 5px" });
   const inp = { width: "100%", background: "#f6f7fb", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
@@ -192,12 +219,12 @@ function TaxiCuentas() {
             </div>
           </div>
           <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
-            <div><div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Total facturación día</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Tax + Uber + Cabify + Bolt + FN T9</div></div>
+            <div><div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Total facturación día</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Taxímetro + apps</div></div>
             <div style={{ fontSize: 28, fontWeight: 900, color: C.accDim }}>{fmt(dayStats.facturacion)}</div>
           </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
-            {[{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (cobrado en apps + Visa)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
+            {[{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (cobrado en apps + tarjeta)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
                 <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontSize: bold ? 16 : 14, fontWeight: bold ? 800 : 600, color }}>{fmt(val)}</span>
               </div>
@@ -295,7 +322,25 @@ function TaxiCuentas() {
             <div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Así queda tu acuerdo</div>
             <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>Te llevas el <strong>{pct}%</strong> de todo lo que factures.{ej.tipo === "incompleto" ? <> Te falta rellenar los dos datos del incentivo para que cuente.</> : cfg.incentivo === "bono" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te dan <strong>{fmt0(num(cfg.bonoImporte))}</strong> de bono.</> : cfg.incentivo === "combustible" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te pagan el <strong>{num(cfg.pctCombustible)}%</strong> del combustible (con {fmt0(400)} de gasolina serían {fmt(ej.importe)}).</> : <> Sin extras por facturación.</>}</div>
           </div>
-          <button className="saveBtn" onClick={() => setCfg({ ...DEFAULT_CFG })} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar valores por defecto</button>
+          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Copia de seguridad</div>
+        <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Tus cuentas se guardan solo en este móvil. Si lo pierdes o desinstalas la app, se van contigo. Guarda una copia de vez en cuando.</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="saveBtn" onClick={exportarCopia} style={{ flex: 1, padding: 11, borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Exportar copia</button>
+          <button className="nb" onClick={() => document.getElementById("tcImport").click()} style={{ flex: 1, padding: 11, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Importar copia</button>
+        </div>
+        <input id="tcImport" type="file" accept="application/json,.json" style={{ display: "none" }} onChange={(e) => { leerCopia(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+        {copiaMsg && <div style={{ marginTop: 10, fontSize: 12, color: C.t2 }}>{copiaMsg}</div>}
+        {copia && <div style={{ marginTop: 12, background: `${C.red}0e`, border: `1.5px solid ${C.red}44`, borderRadius: 12, padding: 13 }}>
+          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.55 }}>La copia tiene <strong>{copia.dias} {copia.dias === 1 ? "día" : "días"}</strong>{copia.desde ? <> ({dayMonth(copia.desde)} – {dayMonth(copia.hasta)})</> : null} y {copia.repostajes} {copia.repostajes === 1 ? "repostaje" : "repostajes"}.</div>
+          <div style={{ fontSize: 12.5, color: C.red, fontWeight: 700, margin: "7px 0 11px" }}>Ahora tienes {Object.keys(days).length} días guardados. Al restaurar se reemplazan por los de la copia.</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="saveBtn" onClick={restaurarCopia} style={{ flex: 1, padding: 10, borderRadius: 10, border: "none", background: C.red, color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar</button>
+            <button className="nb" onClick={() => setCopia(null)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cancelar</button>
+          </div>
+        </div>}
+      </div>
+      <button className="saveBtn" onClick={() => setCfg({ ...DEFAULT_CFG })} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar valores por defecto</button>
       <div style={{ textAlign: "center", fontSize: 11, color: C.t3, margin: "14px 0 20px" }}>TaxiCuentas Pro · versión {APP_VERSION}<div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div></div>
         </>); })()}
         {view === "periodo" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria } = rangeData; const atajos = [["Esta semana", weekStart(today), today], ["Últimos 7 días", shiftDays(today, -6), today], ["Este mes", monthStart(today), today]]; return (<>
