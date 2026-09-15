@@ -1,6 +1,6 @@
 # Publicar en Google Play
 
-Guía para llevar TaxiCuentas Pro a Play Store. Todo esto se puede hacer desde
+Guía para llevar TXpro a Play Store. Todo esto se puede hacer desde
 Windows: no hace falta Mac (eso sería para App Store, más adelante).
 
 ---
@@ -14,7 +14,7 @@ En `privacidad.html`, al final, hay dos marcadores que **hay que sustituir**:
 
 Google exige un contacto real y verificable. **No conviene usar el correo
 personal de siempre**, porque queda publicado: mejor crear uno del estilo
-`taxicuentas.soporte@gmail.com` y usarlo también como correo de contacto en la
+`txpro.soporte@gmail.com` y usarlo también como correo de contacto en la
 ficha de Play.
 
 ---
@@ -70,7 +70,7 @@ En este repositorio eso significa crear la carpeta `.well-known/` en la raíz co
 ese archivo dentro, y volver a desplegar. Si este paso falta, la app funciona
 igual pero se ve la barra de direcciones arriba, y eso desmerece bastante.
 
-**Nombre de paquete sugerido:** `com.taxicuentas.app` (hay que fijarlo al generar
+**Nombre de paquete sugerido:** `com.txpro.cuentas` (hay que fijarlo al generar
 el paquete; después no se puede cambiar).
 
 ---
@@ -80,7 +80,7 @@ el paquete; después no se puede cambiar).
 ### Nombre de la aplicación (máx. 30 caracteres)
 
 ```
-TaxiCuentas Pro
+TXpro Cuentas del Taxi
 ```
 
 ### Descripción breve (máx. 80 caracteres)
@@ -92,7 +92,7 @@ Lleva las cuentas de tu taxi: facturación, tu porcentaje y el efectivo del día
 ### Descripción completa (máx. 4000 caracteres)
 
 ```
-TaxiCuentas Pro es la libreta de cuentas para conductores de taxi y VTC. Apunta
+TXpro es la libreta de cuentas para conductores de taxi y VTC. Apunta
 lo que haces cada día y la app calcula sola lo que te toca a ti, lo que cobra la
 empresa y el efectivo que llevas encima al terminar el turno.
 
@@ -125,7 +125,7 @@ SIN PUBLICIDAD NI SEGUIMIENTO
 Ni anuncios, ni analítica, ni permisos raros. La app no pide ubicación, ni
 cámara, ni contactos. No pide nada.
 
-TaxiCuentas Pro no está asociada a Uber, Cabify, Bolt ni FreeNow. Esos nombres
+TXpro no está asociada a Uber, Cabify, Bolt ni FreeNow. Esos nombres
 aparecen únicamente para identificar cada casilla.
 ```
 

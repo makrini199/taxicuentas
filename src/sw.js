@@ -1,7 +1,7 @@
-// TaxiCuentas service worker. The cache name carries the app version, so a new
+// TXpro service worker. The cache name carries the app version, so a new
 // release fetches everything fresh and the old cache is dropped on activate.
 const VERSION = "__APP_VERSION__";
-const CACHE = `taxicuentas-${VERSION}`;
+const CACHE = `txpro-${VERSION}`;
 const SHELL = [
   "./",
   "./index.html",

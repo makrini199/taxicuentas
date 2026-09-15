@@ -1,4 +1,4 @@
-# TaxiCuentas Pro
+# TXpro
 
 Liquidaciones diarias y mensuales para conductores de taxi y VTC. Apunta lo
 facturado en el taxímetro y en cada app, y calcula tu parte, lo que cobra la
