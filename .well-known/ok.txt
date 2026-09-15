@@ -1,0 +1,1 @@
+La carpeta .well-known se sirve correctamente.

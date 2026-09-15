@@ -18,6 +18,10 @@ apuntas se queda en el navegador del propio móvil.
 | `vendor/` | React y ReactDOM, copiados de `node_modules` en el build. |
 | `icons/` | Iconos generados a partir del logo. |
 | `index.html` | Shell: carga React, la app y registra el service worker. |
+| `CNAME` | El dominio propio: `txpro.app`. Lo lee GitHub Pages al desplegar. |
+| `.nojekyll` | Desactiva Jekyll, que si no se saltaría la carpeta `.well-known/`. |
+| `.well-known/` | Verificación del dominio para la app de Android. |
+| `scripts/` | Utilidades sueltas que no forman parte de la app. |
 
 Los archivos generados se suben al repositorio a propósito, para que GitHub
 Pages sirva la app sin necesidad de compilar nada en el servidor.
@@ -59,6 +63,30 @@ El cambio de versión renueva el nombre de la caché, así que los móviles que 
 tengan la app instalada descargan la versión nueva y muestran el aviso
 «Hay una versión nueva» con un botón para aplicarla. Nunca se recarga sola
 mientras se está escribiendo.
+
+## El dominio
+
+La app se publica en <https://txpro.app>, servida por GitHub Pages desde `main`.
+Dos archivos de la raíz lo sostienen y conviene no borrarlos:
+
+- **`CNAME`** le dice a GitHub qué dominio usar. Si desaparece, Pages vuelve a
+  servir en `makrini199.github.io/taxicuentas` y la app instalada deja de abrir.
+- **`.nojekyll`** apaga el procesado de Jekyll. Sin él, GitHub descarta las
+  carpetas que empiezan por punto y `/.well-known/assetlinks.json` devolvería
+  404, que es lo que vincula el dominio con la app de Play.
+
+`https://txpro.app/.well-known/ok.txt` sirve para comprobar de un vistazo que
+esa carpeta se está publicando.
+
+## Vincular la app de Android
+
+```bash
+npm run assetlinks -- HUELLA_DE_SUBIDA HUELLA_DE_PLAY
+```
+
+Escribe `.well-known/assetlinks.json` con las huellas SHA-256 de firma. Hacen
+falta las dos: la del `signing.keystore` y la que Google genera al volver a
+firmar la app. El detalle completo está en `PLAY_STORE.md`.
 
 ## Datos
 
