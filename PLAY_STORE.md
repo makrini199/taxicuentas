@@ -103,15 +103,46 @@ lleva un archivo `.nojekyll` en la raíz, que desactiva ese filtro. Si
 
 ## 2. Cuenta de desarrollador
 
-- Alta en <https://play.google.com/console>: **25 $ una sola vez**.
-- Desde 2023 Google **verifica la identidad** del desarrollador (DNI y, si es
-  cuenta de empresa, documentación de la sociedad). Tarda unos días.
-- Si la cuenta es **personal**, Google pide además que la app la prueben
-  **12 personas durante 14 días seguidos** antes de permitir la publicación
-  abierta. Con una cuenta de **empresa** ese requisito no aplica.
+Dada de alta el 15 de septiembre de 2026, pendiente de verificación.
 
-> Los compañeros que ya usan la app sirven perfectamente como probadores. Vale
-> la pena tenerlo en cuenta al elegir el tipo de cuenta.
+| | |
+| --- | --- |
+| Cuenta de Google | `proyecto.txpro@gmail.com` |
+| Tipo | **Personal** |
+| Nombre de desarrollador (público) | **TXpro** |
+| Sitio web declarado | `https://txpro.app` |
+| Cuota | 25 $, pago único |
+
+La cuenta queda **atada para siempre a esa cuenta de Google**: por eso se usa la
+del proyecto y no una personal. El nombre de desarrollador es lo que Play
+muestra bajo el nombre de la app, y es distinto del nombre del perfil de pagos,
+que va a nombre de la persona porque Google lo cruza con el DNI y la tarjeta.
+
+Se eligió personal y no de empresa porque la de organización exige una sociedad
+constituida con número **D-U-N-S**, que es gratis pero puede tardar **hasta 30
+días** en emitirse. Un autónomo no la puede pedir.
+
+### Lo que falta
+
+- **Verificación de identidad**: DNI por las dos caras. De unas horas a dos días
+  laborables.
+- **12 probadores durante 14 días seguidos**, requisito de las cuentas
+  personales creadas después del 13 de noviembre de 2023. Tienen que ser
+  personas reales con Android, apuntadas con su cuenta de Google; ni emuladores
+  ni cuentas duplicadas cuentan. Si alguien se sale a mitad, el contador vuelve
+  a empezar. Los mismos 12 valen para todas las versiones que se publiquen
+  después.
+
+> Los compañeros que ya usan la app sirven perfectamente como probadores, y esas
+> dos semanas son rodaje real antes de abrirla a todo el gremio.
+
+### Si algún día se cobra por la app
+
+Al registrarse se declara **no ser «trader»**, porque la app es gratuita y no
+genera ingresos. El día que haya suscripción esa respuesta cambia, y con ella
+Google publica los datos de contacto del desarrollador en la ficha, dirección
+incluida. Es una razón de peso para cobrar desde una sociedad y no a título
+personal.
 
 ---
 
@@ -345,6 +376,8 @@ cada cambio de la aplicación.
 
 ## Antes de darle a publicar
 
+- [ ] Identidad verificada en Play Console.
+- [ ] 12 probadores apuntados y 14 días cumplidos.
 - [ ] `https://txpro.app/` abre la app, con candado y sin aviso de certificado.
 - [ ] `https://txpro.app/.well-known/ok.txt` responde (confirma que `.nojekyll`
       hace su trabajo).
