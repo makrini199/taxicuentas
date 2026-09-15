@@ -1,6 +1,6 @@
 {
   "name": "txpro",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Liquidaciones diarias y mensuales para conductores de taxi y VTC",
   "scripts": {

@@ -16,6 +16,26 @@ const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m 
 const capitalizar = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
 const calcDay = (d, pct = 50) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * (pct / 100); const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
+const CONCEPTOS = ["Combustible", "Pinchazo", "ITV", "Lavado", "Taller", "Multa", "Parking", "Otros"];
+const gastoValido = (g) => g && typeof g === "object" && /^\d{4}-\d{2}-\d{2}$/.test(g.date) && Number(g.importe) > 0;
+// Los repostajes se guardaban aparte; pasan a ser un gasto más, con su concepto.
+const loadGastos = () => {
+  const guardados = loadStorage("tc_gastos", null);
+  if (Array.isArray(guardados)) return guardados.filter(gastoValido);
+  const viejos = loadStorage("tc_fuel", []);
+  return (Array.isArray(viejos) ? viejos : [])
+    .filter((e) => e && e.date && Number(e.importe) > 0)
+    .map((e, i) => ({ id: e.id || Date.now() + i, date: e.date, concepto: "Combustible", importe: Number(e.importe), reembolsable: false }));
+};
+const sumarGastos = (lista, desde, hasta) => lista.reduce((a, g) => {
+  if (g.date < desde || g.date > hasta) return a;
+  const v = Number(g.importe) || 0;
+  a.total += v;
+  if (g.reembolsable) a.reembolsable += v;
+  if (g.concepto === "Combustible") a.combustible += v;
+  return a;
+}, { total: 0, reembolsable: 0, combustible: 0 });
+const finDeMes = (ym) => ym + "-31";
 const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "" };
 const loadCfg = () => ({ ...DEFAULT_CFG, ...loadStorage("tc_cfg", {}) });
 const num = (v) => Number(v) || 0;
@@ -53,7 +73,7 @@ const TXLogo = ({ size = 52 }) => (
 
 const TRAZOS = {
   diario: <><rect x="4.2" y="3.6" width="15.6" height="17" rx="2.6" /><path d="M9 3.2h6v2.6H9z" /><path d="M8.4 11h7.2M8.4 15h4.6" /></>,
-  combustible: <><path d="M4.4 20.4V5.2a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v15.2" /><path d="M3.2 20.4h11.2" /><path d="M6.9 8h3.8" /><path d="M13.2 9.4h2.6a1.8 1.8 0 0 1 1.8 1.8v4.4a1.6 1.6 0 0 0 3.2 0V9.2l-2.4-2.4" /></>,
+  gastos: <><path d="M4.4 20.4V5.2a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v15.2" /><path d="M3.2 20.4h11.2" /><path d="M6.9 8h3.8" /><path d="M13.2 9.4h2.6a1.8 1.8 0 0 1 1.8 1.8v4.4a1.6 1.6 0 0 0 3.2 0V9.2l-2.4-2.4" /></>,
   mensual: <><path d="M4 20.4h16" /><rect x="6.2" y="12.4" width="3.4" height="5.6" rx="1.1" /><rect x="11.3" y="8.4" width="3.4" height="9.6" rx="1.1" /><rect x="16.4" y="5" width="3.4" height="13" rx="1.1" /></>,
   periodo: <><rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" /><path d="M3.6 10h16.8" /><path d="M8.2 3.4v3.4M15.8 3.4v3.4" /></>,
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
@@ -119,9 +139,9 @@ function TXpro() {
   const [editDate, setEditDate] = useState(today);
   const [form, setForm] = useState(() => { const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
   const [saved, setSaved] = useState(false);
-  const [fuelEntries, setFuelEntries] = useState(() => loadStorage("tc_fuel", []));
-  const [fuelForm, setFuelForm] = useState({ date: today, importe: "" });
-  const [fuelSaved, setFuelSaved] = useState(false);
+  const [gastos, setGastos] = useState(loadGastos);
+  const [gastoForm, setGastoForm] = useState({ date: today, concepto: "Combustible", importe: "", reembolsable: false });
+  const [gastoSaved, setGastoSaved] = useState(false);
   const [cfg, setCfg] = useState(loadCfg);
   const [copia, setCopia] = useState(null);
   const [copiaMsg, setCopiaMsg] = useState("");
@@ -134,21 +154,21 @@ function TXpro() {
   const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
   const [rangeTo, setRangeTo] = useState(today);
   useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
-  useEffect(() => { try { localStorage.setItem("tc_fuel", JSON.stringify(fuelEntries)); } catch {} }, [fuelEntries]);
+  useEffect(() => { try { localStorage.setItem("tc_gastos", JSON.stringify(gastos)); } catch {} }, [gastos]);
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
   const saveDay = () => { const parsed = {}; for (const k of Object.keys(EMPTY)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
   const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
   const dayStats = useMemo(() => { const raw = {}; for (const k of Object.keys(EMPTY)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw, pct); }, [form, pct]);
-  const saveFuel = () => { const importe = parseFloat(fuelForm.importe) || 0; if (!importe) return; setFuelEntries((prev) => [...prev, { id: Date.now(), date: fuelForm.date, importe }]); setFuelForm((f) => ({ ...f, importe: "" })); setFuelSaved(true); setTimeout(() => setFuelSaved(false), 2000); };
-  const fuelByMonth = useMemo(() => { const byMonth = {}; fuelEntries.forEach((e) => { const m = monthKey(e.date); if (!byMonth[m]) byMonth[m] = 0; byMonth[m] += e.importe; }); return byMonth; }, [fuelEntries]);
+  const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
+  const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
   const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
-  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const combustibleMes = fuelByMonth[ym] || 0; const s = summarize(entries, pct); return { ym, ...s, combustibleMes, incentivo: incentivoDe(cfg, s.totalFact, combustibleMes) }; }), [months, days, fuelByMonth, pct, cfg]);
+  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const g = sumarGastos(gastos, ym + "-01", finDeMes(ym)); const s = summarize(entries, pct); return { ym, ...s, gastos: g, combustibleMes: g.combustible, diferenciaMes: s.diferenciaMes - g.reembolsable, incentivo: incentivoDe(cfg, s.totalFact, g.combustible) }; }), [months, days, gastos, pct, cfg]);
   useEffect(() => { if (months.length && !months.includes(selectedMonth)) setSelectedMonth(months[0]); }, [months]);
   const selectedData = monthData.find((m) => m.ym === selectedMonth);
-  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; return summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct); }, [days, rangeFrom, rangeTo, pct]);
+  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = sumarGastos(gastos, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, pct]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
   const exportarCopia = async () => {
-    const payload = { app: "txpro", formato: 1, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, fuel: fuelEntries, cfg };
+    const payload = { app: "txpro", formato: 2, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, gastos, cfg };
     const texto = JSON.stringify(payload, null, 2);
     const nombre = `txpro-${todayStr()}.json`;
     try {
@@ -178,15 +198,16 @@ function TXpro() {
         return;
       }
       const fechas = Object.keys(datos.days).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-      setCopia({ datos, dias: fechas.length, repostajes: Array.isArray(datos.fuel) ? datos.fuel.length : 0, desde: fechas[0], hasta: fechas[fechas.length - 1] });
+      setCopia({ datos, dias: fechas.length, gastos: Array.isArray(datos.gastos) ? datos.gastos.length : (Array.isArray(datos.fuel) ? datos.fuel.length : 0), desde: fechas[0], hasta: fechas[fechas.length - 1] });
     } catch { setCopiaMsg("No se pudo leer el archivo."); }
   };
   const restaurarCopia = () => {
     if (!copia) return;
     const { datos } = copia;
+    const gastosCopia = Array.isArray(datos.gastos) ? datos.gastos.filter(gastoValido) : (Array.isArray(datos.fuel) ? datos.fuel.filter((e) => e && e.date && Number(e.importe) > 0).map((e, i) => ({ id: e.id || Date.now() + i, date: e.date, concepto: "Combustible", importe: Number(e.importe), reembolsable: false })) : []);
     const limpios = Object.fromEntries(Object.entries(datos.days).filter(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && v && typeof v === "object" && hasData(v)).map(([d, v]) => [d, migrateDay(v)]));
     setDays(limpios);
-    setFuelEntries(Array.isArray(datos.fuel) ? datos.fuel.filter((e) => e && e.date && Number(e.importe)) : []);
+    setGastos(gastosCopia);
     if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg }); marcarCfgOk(); }
     setForm(limpios[editDate] ? { ...limpios[editDate] } : { ...EMPTY });
     setCopia(null);
@@ -254,19 +275,59 @@ function TXpro() {
           ); })()}
           <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar día</button>
         </>}
-        {view === "combustible" && <>
-          <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 14 }}>Combustible</div>
-          {fuelSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>Guardado</div>}
+        {view === "gastos" && (() => { const mesActual = monthKey(today); const ordenados = [...gastos].sort((a, b) => b.date.localeCompare(a.date)); const meses = [...new Set(ordenados.map((g) => monthKey(g.date)))]; return (<>
+          <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Gastos</div>
+          <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Lo que pagas tú de tu bolsillo. Marca los que te devuelve la empresa y se descontarán de lo que le debes.</div>
+          {gastoSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>Gasto guardado</div>}
+
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo repostaje</div>
-            <label htmlFor="fuelMes" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Mes</label>
-            <input type="month" id="fuelMes" aria-label="Mes del repostaje" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={fuelForm.date.slice(0, 7)} onChange={(e) => setFuelForm((f) => ({ ...f, date: e.target.value + "-01" }))} />
-            <label htmlFor="fuelImporte" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Importe total (€)</label>
-            <input id="fuelImporte" aria-label="Importe total del repostaje" className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inp, marginBottom: 14 }} value={fuelForm.importe} onChange={(e) => setFuelForm((f) => ({ ...f, importe: e.target.value }))} />
-            <button className="saveBtn" onClick={saveFuel} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar</button>
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo gasto</div>
+            <label htmlFor="gastoFecha" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Fecha</label>
+            <input type="date" id="gastoFecha" aria-label="Fecha del gasto" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={gastoForm.date} onChange={(e) => setGastoForm((f) => ({ ...f, date: e.target.value }))} />
+
+            <label htmlFor="gastoConcepto" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Concepto</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {CONCEPTOS.map((c) => { const on = gastoForm.concepto === c; return (
+                <button key={c} className="nb" onClick={() => setGastoForm((f) => ({ ...f, concepto: c, reembolsable: c !== "Combustible" }))} style={{ padding: "7px 11px", borderRadius: 999, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>{c}</button>
+              ); })}
+            </div>
+            <input id="gastoConcepto" aria-label="Concepto del gasto" className="inp" type="text" maxLength="40" placeholder="O escribe otro concepto" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={gastoForm.concepto} onChange={(e) => setGastoForm((f) => ({ ...f, concepto: e.target.value }))} />
+
+            <label htmlFor="gastoImporte" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Importe (€)</label>
+            <input id="gastoImporte" aria-label="Importe del gasto" className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inp, marginBottom: 12 }} value={gastoForm.importe} onChange={(e) => setGastoForm((f) => ({ ...f, importe: e.target.value }))} />
+
+            <label htmlFor="gastoReemb" style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 14, padding: "10px 12px", borderRadius: 10, background: gastoForm.reembolsable ? `${C.green}12` : "#f6f7fb", border: `1.5px solid ${gastoForm.reembolsable ? C.green + "55" : C.border}` }}>
+              <input id="gastoReemb" type="checkbox" checked={!!gastoForm.reembolsable} onChange={(e) => setGastoForm((f) => ({ ...f, reembolsable: e.target.checked }))} style={{ width: 19, height: 19, accentColor: C.green, flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: gastoForm.reembolsable ? C.green : C.t2 }}>Me lo devuelve la empresa</span>
+            </label>
+
+            <button className="saveBtn" onClick={saveGasto} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar gasto</button>
           </div>
-          {(() => { const meses = [...new Set(fuelEntries.map((e) => monthKey(e.date)))].sort().reverse(); if (meses.length === 0) return <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin repostajes registrados.</div>; return meses.map((m) => (<div key={m} style={{ ...card, padding: 16, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Combustible</div><div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginTop: 2 }}>{monthLabel(m)}</div></div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div style={{ fontSize: 20, fontWeight: 900, color: C.red }}>−{fmt(fuelByMonth[m])}</div><button onClick={() => setFuelEntries((prev) => prev.filter((e) => monthKey(e.date) !== m))} style={{ background: `${C.red}18`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "4px 9px", color: C.red, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✕</button></div></div>)); })()}
-        </>}
+
+          {meses.length === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Todavía no has apuntado ningún gasto.</div> : meses.map((m) => {
+            const delMes = ordenados.filter((g) => monthKey(g.date) === m);
+            const sum = sumarGastos(gastos, m + "-01", finDeMes(m));
+            return (
+              <div key={m} style={{ ...card, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, gap: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.t1 }}>{capitalizar(monthLabel(m))}{m === mesActual ? <span style={{ fontSize: 11, color: C.accDim, fontWeight: 700 }}> · en curso</span> : null}</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: C.red, whiteSpace: "nowrap" }}>−{fmt(sum.total)}</div>
+                </div>
+                {sum.reembolsable > 0 && <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 12.5, color: C.green, fontWeight: 700 }}>La empresa te debe {fmt(sum.reembolsable)} de estos gastos</div>}
+                {delMes.map((g) => (
+                  <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${C.border}44` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: C.t1 }}>{g.concepto}</div>
+                      <div style={{ fontSize: 11, color: C.t3 }}>{dayMonth(g.date)}{g.reembolsable ? " · te lo devuelven" : ""}</div>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: g.reembolsable ? C.green : C.t1, whiteSpace: "nowrap" }}>{fmt(g.importe)}</div>
+                    <button className="nb" onClick={() => borrarGasto(g.id)} aria-label={`Borrar ${g.concepto} de ${dayMonth(g.date)}`} style={{ background: `${C.red}14`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "5px 9px", color: C.red, fontSize: 12, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </>); })()}
         {view === "mensual" && <>
           {monthData.length === 0 && <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>}
           {monthData.length > 0 && <>
@@ -288,14 +349,14 @@ function TXpro() {
                 {months.map((m) => (<option key={m} value={m}>{monthLabel(m)}</option>))}
               </select>
             </div>
-            {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria } = selectedData; return (
+            {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria, gastos: gastosMes } = selectedData; return (
               <div>
                 <Hero total={totalFact} conductor={conductorMes} pct={pct} />
-                <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
+                <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfg.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                 </StatCard>
-                <Balance value={diferenciaMes} sub="Balance mensual acumulado" />
+                <Balance value={diferenciaMes} sub={gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
                 <DayTable rows={rows} pct={pct} />
               </div>
             ); })()}
@@ -348,7 +409,7 @@ function TXpro() {
         <input id="tcImport" type="file" accept="application/json,.json" style={{ display: "none" }} onChange={(e) => { leerCopia(e.target.files && e.target.files[0]); e.target.value = ""; }} />
         {copiaMsg && <div style={{ marginTop: 10, fontSize: 12, color: C.t2 }}>{copiaMsg}</div>}
         {copia && <div style={{ marginTop: 12, background: `${C.red}0e`, border: `1.5px solid ${C.red}44`, borderRadius: 12, padding: 13 }}>
-          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.55 }}>La copia tiene <strong>{copia.dias} {copia.dias === 1 ? "día" : "días"}</strong>{copia.desde ? <> ({dayMonth(copia.desde)} – {dayMonth(copia.hasta)})</> : null} y {copia.repostajes} {copia.repostajes === 1 ? "repostaje" : "repostajes"}.</div>
+          <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.55 }}>La copia tiene <strong>{copia.dias} {copia.dias === 1 ? "día" : "días"}</strong>{copia.desde ? <> ({dayMonth(copia.desde)} – {dayMonth(copia.hasta)})</> : null} y {copia.gastos} {copia.gastos === 1 ? "gasto" : "gastos"}.</div>
           <div style={{ fontSize: 12.5, color: C.red, fontWeight: 700, margin: "7px 0 11px" }}>Ahora tienes {Object.keys(days).length} días guardados. Al restaurar se reemplazan por los de la copia.</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="saveBtn" onClick={restaurarCopia} style={{ flex: 1, padding: 10, borderRadius: 10, border: "none", background: C.red, color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar</button>
@@ -363,7 +424,7 @@ function TXpro() {
         <div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div>
       </div>
         </>); })()}
-        {view === "periodo" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria } = rangeData; const atajos = [["Esta semana", weekStart(today), today], ["Últimos 7 días", shiftDays(today, -6), today], ["Este mes", monthStart(today), today]]; return (<>
+        {view === "periodo" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria, gastos: gastosPeriodo } = rangeData; const atajos = [["Esta semana", weekStart(today), today], ["Últimos 7 días", shiftDays(today, -6), today], ["Este mes", monthStart(today), today]]; return (<>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Elige el periodo</div>
             <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
@@ -400,14 +461,14 @@ function TXpro() {
                 </div>
               </div>
             ); })()}
-            <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }]} />
-            <Balance value={diferenciaMes} sub="Balance del periodo seleccionado" />
+            <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosPeriodo.total > 0 ? [{ label: "Gastos del periodo", val: gastosPeriodo.total, color: C.red, neg: true }] : []), ...(gastosPeriodo.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosPeriodo.reembolsable, color: C.green }] : [])]} />
+            <Balance value={diferenciaMes} sub={gastosPeriodo.reembolsable > 0 ? "Balance del periodo · incluye los gastos a devolver" : "Balance del periodo seleccionado"} />
             <DayTable rows={rows} pct={pct} />
           </>}
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "Diario"], ["combustible", "Combustible"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
+        {[["diario", "Diario"], ["gastos", "Gastos"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
           <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
             <Icono name={v} />{lb}
           </button>

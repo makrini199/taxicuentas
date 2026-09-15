@@ -45,22 +45,32 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(500);
   comprobar('aviso de guardado', await p.getByText('Día guardado').count() > 0);
 
-  console.log('\n— COMBUSTIBLE —');
-  await p.getByRole('button', { name: /Combustible/ }).click();
+  console.log('\n— GASTOS —');
+  await p.getByRole('button', { name: /Gastos/ }).click();
   await p.waitForTimeout(500);
-  await p.locator('input[aria-label="Importe total del repostaje"]').fill('318.40');
-  await p.getByRole('button', { name: 'Guardar', exact: true }).click();
+  await p.locator('#gastoImporte').fill('318.40');   // Combustible viene elegido
+  await p.getByRole('button', { name: 'Guardar gasto' }).click();
   await p.waitForTimeout(600);
-  const comb = await p.locator('body').innerText();
-  comprobar('repostaje guardado', comb.includes('318,40'));
-  comprobar('mes del repostaje', /septiembre/i.test(comb));
+  await p.getByRole('button', { name: 'Pinchazo', exact: true }).click();
+  await p.locator('#gastoImporte').fill('45');
+  comprobar('lo reembolsable viene marcado', await p.locator('#gastoReemb').isChecked());
+  await p.getByRole('button', { name: 'Guardar gasto' }).click();
+  await p.waitForTimeout(600);
+  const gas = await p.locator('body').innerText();
+  comprobar('gastos guardados', gas.includes('318,40') && gas.includes('45,00'));
+  comprobar('total del mes', gas.includes('363,40'), '318,40 + 45');
+  comprobar('lo que debe la empresa', /empresa te debe 45,00/.test(gas));
 
   console.log('\n— MENSUAL —');
   await p.getByRole('button', { name: /Mensual/ }).click();
   await p.waitForTimeout(600);
   const mes = await p.locator('body').innerText();
   comprobar('facturación del mes', mes.includes('332,75'));
-  comprobar('combustible reflejado', mes.includes('318,40'));
+  comprobar('gastos reflejados en el mes', mes.includes('363,40'));
+  comprobar('gastos a devolver', mes.includes('45,00'));
+  // facturación 332,75 · 50% = 166,375 · cobrado 212,10 → la empresa debe 45,725
+  // más los 45 del pinchazo a devolver → 90,73
+  comprobar('balance con los gastos a devolver', mes.includes('90,73'));
   comprobar('media diaria presente', /Media diaria \(1 día\)/.test(mes));
   comprobar('sin incentivo por defecto', !/[Bb]ono/.test(mes), 'no debe inventar acuerdos');
 
