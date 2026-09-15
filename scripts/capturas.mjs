@@ -64,6 +64,7 @@ const FICHAS = [
   ["05-mensual", "Mensual", 0, "Mira cómo<br>va el mes", "Y compáralo con los anteriores"],
   ["06-periodo", "Periodo", 0, "El periodo<br>que tú quieras", "Una semana, del 1 al 22, lo que necesites"],
   ["07-ajustes", "Ajustes", 0, "Tu acuerdo,<br>no el de otro", "Tu porcentaje y tu incentivo los pones tú"],
+  ["08-apps", "Ajustes", 672, "Solo las apps<br>que tú uses", "Y si trabajas con otra, la añades tú"],
 ];
 
 const marco = (titular, sub, dataUri) => `<!DOCTYPE html>
@@ -112,7 +113,8 @@ await p.evaluate(([dias, gastos]) => {
   localStorage.setItem("tc_days", JSON.stringify(dias));
   localStorage.setItem("tc_gastos", JSON.stringify(gastos));
   localStorage.setItem("tc_notas", JSON.stringify({ "2026-09-19": "Concierto Bernabéu, salir a las 22h", "2026-09-24": "Revisión del coche" }));
-  localStorage.setItem("tc_cfg", JSON.stringify({ pctConductor: 50, incentivo: "combustible", umbral: "6000", bonoImporte: "", pctCombustible: "50" }));
+  localStorage.setItem("tc_cfg", JSON.stringify({ pctConductor: 50, incentivo: "combustible", umbral: "6000", bonoImporte: "", pctCombustible: "50",
+    plataformas: [{ key: "uber", activa: true }, { key: "cabify", activa: true }, { key: "bolt", activa: false }, { key: "fnt9", activa: true }] }));
   localStorage.setItem("tc_cfg_ok", "true");
 }, [diasDeEjemplo(), GASTOS]);
 await p.reload({ waitUntil: "load" });
@@ -128,7 +130,10 @@ await p.waitForTimeout(400);
 
 await mkdir(DEST, { recursive: true });
 for (const [nombre, pestana, bajar, titular, sub] of FICHAS) {
-  if (pestana) {
+  if (pestana === "Ajustes") {
+    await p.getByLabel("Ajustes").click();   // el de la cabecera, no el enlace del parte
+    await p.waitForTimeout(900);
+  } else if (pestana) {
     await p.getByRole("button", { name: new RegExp(pestana) }).click();
     await p.waitForTimeout(900);
   }

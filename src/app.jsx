@@ -18,7 +18,36 @@ const diasEnMes = (ym) => { const [y, m] = ym.split("-").map(Number); return new
 const primerDiaSemana = (ym) => { const [y, m] = ym.split("-").map(Number); return (new Date(y, m - 1, 1).getDay() + 6) % 7; };
 const mesVecino = (ym, n) => { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
-const calcDay = (d, pct = 50) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * (pct / 100); const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
+// Las plataformas que vienen de serie. Las claves (uber, uberEfec, fnt9...) son
+// las que llevan años guardadas en los días de la gente: no se tocan nunca.
+// El nombre sí puede cambiar, y al vivir aquí el cambio le llega a todo el mundo.
+//
+// tipo dice qué significa la segunda casilla:
+//   "efectivo" → lo que el conductor se cobró en mano; la empresa se queda el resto
+//   "cobrado"  → lo que ya cobró la empresa; el resto se lo quedó el conductor
+// La T9 es una tarifa de Madrid, no una aplicación: los viajes de FreeNow con
+// taxímetro ya van contados en la casilla del taxi.
+const PLATAFORMAS_BASE = [
+  { key: "uber", cobKey: "uberEfec", nombre: "Uber", tipo: "efectivo", base: true },
+  { key: "cabify", cobKey: "cabifyEfec", nombre: "Cabify", tipo: "efectivo", base: true },
+  { key: "bolt", cobKey: "boltEfec", nombre: "Bolt", tipo: "efectivo", base: true },
+  { key: "fnt9", cobKey: "fncob", nombre: "FreeNow \u00b7 precio cerrado", tipo: "cobrado", base: true },
+];
+// Los cálculos recorren TODAS las plataformas, también las apagadas: si alguien
+// deja de trabajar con Bolt, sus meses de Bolt tienen que seguir cuadrando.
+const calcDay = (d, pct = 50, plats = PLATAFORMAS_BASE) => {
+  const n = (v) => Number(v) || 0;
+  let apps = 0;
+  let empresa = n(d.visa);
+  for (const p of plats) {
+    const total = n(d[p.key]);
+    apps += total;
+    empresa += p.tipo === "cobrado" ? n(d[p.cobKey]) : total - n(d[p.cobKey]);
+  }
+  const facturacion = n(d.taximetro) + apps;
+  const conductor50 = facturacion * (pct / 100);
+  return { facturacion, conductor50, cobradoEmpresa: empresa, diferencia: conductor50 - empresa };
+};
 const CONCEPTOS = ["Combustible", "Pinchazo", "ITV", "Lavado", "Taller", "Multa", "Parking", "Otros"];
 const gastoValido = (g) => g && typeof g === "object" && /^\d{4}-\d{2}-\d{2}$/.test(g.date) && Number(g.importe) > 0;
 // Los repostajes se guardaban aparte; pasan a ser un gasto más, con su concepto.
@@ -39,16 +68,38 @@ const sumarGastos = (lista, desde, hasta) => lista.reduce((a, g) => {
   return a;
 }, { total: 0, reembolsable: 0, combustible: 0 });
 const finDeMes = (ym) => ym + "-31";
-const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "" };
-const loadCfg = () => ({ ...DEFAULT_CFG, ...loadStorage("tc_cfg", {}) });
+const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
+// Deja la lista siempre completa y en orden: las cuatro de serie primero, con el
+// interruptor que tuviera cada una, y detrás las que haya añadido el conductor.
+// Quien nunca haya pasado por Ajustes las tiene las cuatro encendidas, que es
+// como funcionaba la app antes de que esto se pudiera elegir.
+const normPlataformas = (lista) => {
+  const guardadas = Array.isArray(lista) ? lista.filter((p) => p && typeof p.key === "string") : [];
+  const suyas = new Map(guardadas.map((p) => [p.key, p]));
+  const deSerie = PLATAFORMAS_BASE.map((p) => ({ ...p, activa: suyas.has(p.key) ? suyas.get(p.key).activa !== false : true }));
+  const propias = guardadas
+    .filter((p) => !PLATAFORMAS_BASE.some((b) => b.key === p.key))
+    .map((p) => ({
+      key: p.key,
+      cobKey: typeof p.cobKey === "string" && p.cobKey ? p.cobKey : p.key + "b",
+      nombre: String(p.nombre || "Sin nombre").slice(0, 24),
+      tipo: p.tipo === "cobrado" ? "cobrado" : "efectivo",
+      base: false,
+      activa: p.activa !== false,
+    }));
+  return [...deSerie, ...propias];
+};
+const nuevaPlataforma = (nombre, tipo) => { const key = "p" + Date.now().toString(36); return { key, cobKey: key + "b", nombre: nombre.trim().slice(0, 24), tipo: tipo === "cobrado" ? "cobrado" : "efectivo", base: false, activa: true }; };
+const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas) }; };
 const num = (v) => Number(v) || 0;
 const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
-const summarize = (entries, pct = 50) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
+const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
+const clavesDia = (plats) => ["taximetro", "visa", ...plats.flatMap((p) => [p.key, p.cobKey])];
 const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
 const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
 const today = todayStr();
 const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
-const hasData = (d) => Object.keys(EMPTY).some((k) => (Number(d[k]) || 0) !== 0);
+const hasData = (d) => !!d && typeof d === "object" && Object.values(d).some((v) => (Number(v) || 0) !== 0);
 const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob] of EFEC_TRIOS) { if (out[efec] === undefined) { const total = Number(out[fact]) || 0; const cobrado = out[oldCob] === undefined ? total : Number(out[oldCob]) || 0; out[efec] = Math.max(0, total - cobrado); } delete out[oldCob]; } return out; };
 const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
 const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
@@ -88,19 +139,6 @@ const Icono = ({ name, size = 23 }) => (
 const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ flexShrink: 0, display: "block" }}>
     <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
-  </svg>
-);
-// Neutral badges instead of the platforms' own logos: the names are used to say
-// which service a field is for, but reproducing their marks in a published app
-// is someone else's trademark to license.
-const Badge = ({ children, size = 28 }) => (
-  <span style={{ width: size, height: size, borderRadius: 8, background: "#2f3545", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: children && children.length > 1 ? 10 : 13, fontWeight: 800, letterSpacing: -0.2, flexShrink: 0 }}>{children}</span>
-);
-const CardMark = ({ size = 28 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: "block" }} aria-hidden="true">
-    <rect x="1.5" y="4.5" width="21" height="15" rx="3" fill="#2f3545" />
-    <rect x="1.5" y="8" width="21" height="3" fill="#8f93a8" />
-    <rect x="4.5" y="14" width="6" height="2.2" rx="1.1" fill="#fff" />
   </svg>
 );
 
@@ -157,6 +195,17 @@ function TXpro() {
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
   const marcarCfgOk = () => { setCfgOk(true); try { localStorage.setItem("tc_cfg_ok", "true"); } catch {} };
   const pct = num(cfg.pctConductor);
+  const plats = cfg.plataformas;
+  const platsActivas = plats.filter((p) => p.activa);
+  const [appNueva, setAppNueva] = useState({ nombre: "", tipo: "efectivo" });
+  const cambiarPlats = (fn) => { marcarCfgOk(); setCfg((c) => ({ ...c, plataformas: fn(c.plataformas) })); };
+  const togglePlat = (key) => cambiarPlats((lista) => lista.map((pl) => (pl.key === key ? { ...pl, activa: !pl.activa } : pl)));
+  const addPlat = () => { const nombre = appNueva.nombre.trim(); if (!nombre) return; cambiarPlats((lista) => [...lista, nuevaPlataforma(nombre, appNueva.tipo)]); setAppNueva({ nombre: "", tipo: "efectivo" }); };
+  // Solo se puede borrar del todo una plataforma que no tenga nada apuntado: si
+  // se fuera con días dentro, esas cifras seguirían en tc_days sin que nada las
+  // sumara y los meses dejarían de cuadrar sin avisar. Con datos, se apaga.
+  const platConDatos = (pl) => Object.values(days).some((d) => (Number(d[pl.key]) || 0) !== 0 || (Number(d[pl.cobKey]) || 0) !== 0);
+  const quitarPlat = (key) => cambiarPlats((lista) => lista.filter((pl) => pl.key !== key));
   const [selectedMonth, setSelectedMonth] = useState(monthKey(today));
   const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
   const [rangeTo, setRangeTo] = useState(today);
@@ -165,16 +214,16 @@ function TXpro() {
   useEffect(() => { try { localStorage.setItem("tc_notas", JSON.stringify(notas)); } catch {} }, [notas]);
   const ponerNota = (fecha, texto) => setNotas((prev) => { const next = { ...prev }; if (texto.trim()) next[fecha] = texto.slice(0, 120); else delete next[fecha]; return next; });
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
-  const saveDay = () => { const parsed = {}; for (const k of Object.keys(EMPTY)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
+  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
   const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
-  const dayStats = useMemo(() => { const raw = {}; for (const k of Object.keys(EMPTY)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw, pct); }, [form, pct]);
+  const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw, pct, plats); }, [form, pct, plats]);
   const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
   const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
   const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
-  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const g = sumarGastos(gastos, ym + "-01", finDeMes(ym)); const s = summarize(entries, pct); return { ym, ...s, gastos: g, combustibleMes: g.combustible, diferenciaMes: s.diferenciaMes - g.reembolsable, incentivo: incentivoDe(cfg, s.totalFact, g.combustible) }; }), [months, days, gastos, pct, cfg]);
+  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const g = sumarGastos(gastos, ym + "-01", finDeMes(ym)); const s = summarize(entries, pct, plats); return { ym, ...s, gastos: g, combustibleMes: g.combustible, diferenciaMes: s.diferenciaMes - g.reembolsable, incentivo: incentivoDe(cfg, s.totalFact, g.combustible) }; }), [months, days, gastos, pct, cfg, plats]);
   useEffect(() => { if (months.length && !months.includes(selectedMonth)) setSelectedMonth(months[0]); }, [months]);
   const selectedData = monthData.find((m) => m.ym === selectedMonth);
-  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = sumarGastos(gastos, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, pct]);
+  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = sumarGastos(gastos, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct, plats); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, pct, plats]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
   const exportarCopia = async () => {
     const payload = { app: "txpro", formato: 3, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, gastos, notas, cfg };
@@ -218,21 +267,21 @@ function TXpro() {
     setDays(limpios);
     setGastos(gastosCopia);
     setNotas(datos.notas && typeof datos.notas === "object" ? datos.notas : {});
-    if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg }); marcarCfgOk(); }
+    if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg, plataformas: normPlataformas(datos.cfg.plataformas) }); marcarCfgOk(); }
     setForm(limpios[editDate] ? { ...limpios[editDate] } : { ...EMPTY });
     setCopia(null);
     setCopiaMsg(`Restaurados ${Object.keys(limpios).length} días.`);
   };
-  const brandName = { fontSize: 14, fontWeight: 700, color: C.t1 };
-  const FIELDS = [
-    { key: "taximetro", name: "Taxi", full: true, head: <><TaxiLogo size={26} color={C.acc} /><span style={{ ...brandName, fontSize: 15, fontWeight: 900, color: "#c08a06", letterSpacing: 0.5 }}>TAXI</span></> },
-    { key: "uber", cobKey: "uberEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Uber", head: <><Badge>U</Badge><span style={brandName}>Uber</span></> },
-    { key: "cabify", cobKey: "cabifyEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Cabify", head: <><Badge>C</Badge><span style={brandName}>Cabify</span></> },
-    { key: "bolt", cobKey: "boltEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Bolt", head: <><Badge>B</Badge><span style={brandName}>Bolt</span></> },
-    { key: "fnt9", cobKey: "fncob", cobLabel: "COBRADO", cobColor: C.green, name: "FreeNow T9", head: <><Badge>FN</Badge><span style={brandName}>FreeNow T9</span></> },
-    { key: "visa", name: "Tarjeta", full: true, head: <><CardMark /><span style={brandName}>Tarjeta</span></> },
+  const ANCHO = 84;
+  // Una fila por concepto: el nombre a la izquierda y las casillas a la derecha,
+  // todas alineadas en columna. Sin distintivos de las plataformas: el nombre en
+  // texto dice de qué es la casilla y las marcas son de quien son.
+  const filas = [
+    { key: "taximetro", nombre: "Taxímetro", oro: true },
+    ...platsActivas.map((pl) => ({ key: pl.key, cobKey: pl.cobKey, nombre: pl.nombre, cobrado: pl.tipo === "cobrado" })),
+    { key: "visa", nombre: "Tarjeta" },
   ];
-  const cobTag = (bg) => ({ background: bg, color: "#fff", fontSize: 9, fontWeight: 800, letterSpacing: 0.3, padding: "3px 7px", borderRadius: 6, display: "inline-block", margin: "7px 0 5px" });
+  const colHead = { fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: 0.4, textTransform: "uppercase", textAlign: "right", flexShrink: 0 };
   const inp = { width: "100%", background: "#f6f7fb", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
@@ -260,9 +309,29 @@ function TXpro() {
           <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
           {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>{saved === "borrado" ? "Día eliminado" : "Día guardado"}</div>}
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {FIELDS.map(({ key, cobKey, cobLabel, cobColor, name, head, gap, full }) => (<div key={key} style={full ? { gridColumn: "span 2" } : undefined}><div style={{ display: "flex", alignItems: "center", gap: gap ?? 8, height: 30, marginBottom: 7 }}>{head}</div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={name} style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} />{cobKey && <><div><span style={cobTag(cobColor)}>{cobLabel}</span></div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={`${name} ${cobLabel.toLowerCase()}`} style={inp} value={form[cobKey] || ""} onChange={(e) => setForm((f) => ({ ...f, [cobKey]: e.target.value }))} /></>}</div>))}
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Ingresos del día</div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 7, paddingBottom: 7 }}>
+              <div style={{ flex: 1, minWidth: 0 }} />
+              <div style={{ ...colHead, width: ANCHO }}>Facturado</div>
+              <div style={{ ...colHead, width: ANCHO, color: C.blue }}>Efectivo</div>
+            </div>
+            {filas.map((f) => (
+              <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 7, borderTop: "1px solid #eef0f6", padding: "10px 0" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {f.oro && <TaxiLogo size={18} color={C.acc} />}
+                    <span style={{ fontSize: 13.5, fontWeight: 800, color: f.oro ? "#c08a06" : C.t1, lineHeight: 1.2, wordBreak: "break-word" }}>{f.nombre}</span>
+                  </div>
+                  {f.cobrado && <div style={{ fontSize: 9.5, fontWeight: 700, color: C.green, marginTop: 3 }}>2ª casilla: ya cobrado</div>}
+                </div>
+                <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={f.nombre} style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right" }} value={form[f.key] || ""} onChange={(e) => setForm((v) => ({ ...v, [f.key]: e.target.value }))} />
+                {f.cobKey
+                  ? <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={`${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`} style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` }} value={form[f.cobKey] || ""} onChange={(e) => setForm((v) => ({ ...v, [f.cobKey]: e.target.value }))} />
+                  : <div style={{ width: ANCHO, flexShrink: 0 }} />}
+              </div>
+            ))}
+            <div style={{ borderTop: "1px solid #eef0f6", paddingTop: 10, fontSize: 10.5, color: C.t3, lineHeight: 1.45 }}>
+              ¿Trabajas con otras aplicaciones? Enciende las que uses o añade la tuya en <button className="nb" onClick={() => setView("ajustes")} style={{ background: "none", border: "none", padding: 0, font: "inherit", color: C.accDim, fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>Ajustes</button>.
             </div>
           </div>
           <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
@@ -344,10 +413,10 @@ function TXpro() {
           const celdas = [...Array(huecos).fill(null), ...Array.from({ length: total }, (_, i) => `${calMes}-${String(i + 1).padStart(2, "0")}`)];
           const delMes = celdas.filter(Boolean);
           const trabajados = delMes.filter((f) => days[f]).length;
-          const facturado = delMes.reduce((a, f) => a + (days[f] ? calcDay(days[f], pct).facturacion : 0), 0);
-          const tope = Math.max(1, ...delMes.map((f) => (days[f] ? calcDay(days[f], pct).facturacion : 0)));
+          const facturado = delMes.reduce((a, f) => a + (days[f] ? calcDay(days[f], pct, plats).facturacion : 0), 0);
+          const tope = Math.max(1, ...delMes.map((f) => (days[f] ? calcDay(days[f], pct, plats).facturacion : 0)));
           const sel = calDia && monthKey(calDia) === calMes ? calDia : null;
-          const datosSel = sel && days[sel] ? calcDay(days[sel], pct) : null;
+          const datosSel = sel && days[sel] ? calcDay(days[sel], pct, plats) : null;
           const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 36, height: 36, fontSize: 18, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 };
           return (<>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
@@ -367,7 +436,7 @@ function TXpro() {
                 {celdas.map((f, i) => {
                   if (!f) return <div key={`h${i}`} />;
                   const d = days[f];
-                  const fact = d ? calcDay(d, pct).facturacion : 0;
+                  const fact = d ? calcDay(d, pct, plats).facturacion : 0;
                   const esHoy = f === today;
                   const elegido = f === sel;
                   const intensidad = fact > 0 ? 0.18 + 0.55 * (fact / tope) : 0;
@@ -486,6 +555,35 @@ function TXpro() {
             <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>Te llevas el <strong>{pct}%</strong> de todo lo que factures.{ej.tipo === "incompleto" ? <> Te falta rellenar los dos datos del incentivo para que cuente.</> : cfg.incentivo === "bono" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te dan <strong>{fmt0(num(cfg.bonoImporte))}</strong> de bono.</> : cfg.incentivo === "combustible" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te pagan el <strong>{num(cfg.pctCombustible)}%</strong> del combustible (con {fmt0(400)} de gasolina serían {fmt(ej.importe)}).</> : <> Sin extras por facturación.</>}</div>
           </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Con qué aplicaciones trabajas</div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 6 }}>Enciende solo las que uses: las demás desaparecen del parte diario. Apagar una <strong>no borra nada</strong>, lo que ya tengas apuntado sigue contando en tus meses.</div>
+            {plats.map((pl) => (
+              <div key={pl.key} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: "1px solid #eef0f6", padding: "11px 0" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: pl.activa ? C.t1 : C.t3, wordBreak: "break-word" }}>{pl.nombre}</div>
+                  <div style={{ fontSize: 10.5, color: C.t3, marginTop: 2, lineHeight: 1.35 }}>{pl.tipo === "cobrado" ? "2ª casilla: lo que ya cobró la empresa" : "2ª casilla: lo que cobras tú en mano"}</div>
+                </div>
+                {!pl.base && !platConDatos(pl) && (
+                  <button className="nb" onClick={() => quitarPlat(pl.key)} aria-label={`Quitar ${pl.nombre}`} style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 9, border: `1px solid ${C.red}33`, background: `${C.red}0e`, color: C.red, fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}>×</button>
+                )}
+                <button className="nb" role="switch" aria-checked={pl.activa} aria-label={pl.nombre} onClick={() => togglePlat(pl.key)} style={{ flexShrink: 0, width: 46, height: 27, borderRadius: 14, border: "none", padding: 3, cursor: "pointer", background: pl.activa ? C.green : "#ccd1e0", display: "flex", justifyContent: pl.activa ? "flex-end" : "flex-start", alignItems: "center", transition: "background .15s" }}>
+                  <span style={{ display: "block", width: 21, height: 21, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.25)" }} />
+                </button>
+              </div>
+            ))}
+            <div style={{ borderTop: `1.5px solid ${C.border}`, marginTop: 4, paddingTop: 13 }}>
+              <label htmlFor="appNueva" style={{ fontSize: 12, color: C.t2, fontWeight: 700, marginBottom: 6, display: "block" }}>Añadir otra aplicación</label>
+              <input className="inp" id="appNueva" type="text" maxLength={24} placeholder="Vecttor, Auro, tu emisora…" style={{ ...inp, fontSize: 14, marginBottom: 9 }} value={appNueva.nombre} onChange={(e) => setAppNueva((a) => ({ ...a, nombre: e.target.value }))} />
+              <div style={{ fontSize: 11.5, color: C.t2, fontWeight: 600, marginBottom: 6 }}>¿Qué vas a apuntar en la segunda casilla?</div>
+              <div style={{ display: "flex", gap: 7, marginBottom: 11 }}>
+                {[["efectivo", "Lo que cobro en mano"], ["cobrado", "Lo que cobra la empresa"]].map(([t, etiqueta]) => (
+                  <button key={t} className="nb" onClick={() => setAppNueva((a) => ({ ...a, tipo: t }))} aria-pressed={appNueva.tipo === t} style={{ flex: 1, padding: "9px 8px", borderRadius: 10, border: `1.5px solid ${appNueva.tipo === t ? C.acc : C.border}`, background: appNueva.tipo === t ? `${C.acc}1c` : C.surf, color: appNueva.tipo === t ? C.accDim : C.t2, fontWeight: 700, fontSize: 11.5, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.3 }}>{etiqueta}</button>
+                ))}
+              </div>
+              <button className="saveBtn" onClick={addPlat} disabled={!appNueva.nombre.trim()} style={{ width: "100%", padding: 11, borderRadius: 10, border: "none", background: appNueva.nombre.trim() ? `linear-gradient(135deg,${C.acc},${C.accDim})` : "#e7eaf2", color: appNueva.nombre.trim() ? "#0d0f14" : C.t3, fontWeight: 800, fontSize: 13, cursor: appNueva.nombre.trim() ? "pointer" : "default", fontFamily: "inherit" }}>Añadir aplicación</button>
+            </div>
+          </div>
+          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
         <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Copia de seguridad</div>
         <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Tus cuentas se guardan solo en este móvil. Si lo pierdes o desinstalas la app, se van contigo. Guarda una copia de vez en cuando.</div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -503,7 +601,7 @@ function TXpro() {
           </div>
         </div>}
       </div>
-      <button className="saveBtn" onClick={() => setCfg({ ...DEFAULT_CFG })} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar valores por defecto</button>
+      <button className="saveBtn" onClick={() => setCfg((c) => ({ ...DEFAULT_CFG, plataformas: c.plataformas }))} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar valores por defecto</button>
       <div style={{ textAlign: "center", fontSize: 11, color: C.t3, margin: "14px 0 20px" }}>
         <a href="./privacidad.html" target="_blank" rel="noopener" style={{ color: C.accDim, fontWeight: 700, textDecoration: "none", fontSize: 12 }}>Política de privacidad</a>
         <div style={{ marginTop: 7 }}>TXpro · versión {APP_VERSION}</div>
