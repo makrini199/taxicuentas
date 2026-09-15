@@ -572,8 +572,9 @@ function TXpro() {
               </div>
             ))}
             <div style={{ borderTop: `1.5px solid ${C.border}`, marginTop: 4, paddingTop: 13 }}>
-              <label htmlFor="appNueva" style={{ fontSize: 12, color: C.t2, fontWeight: 700, marginBottom: 6, display: "block" }}>Añadir otra aplicación</label>
-              <input className="inp" id="appNueva" type="text" maxLength={24} placeholder="Vecttor, Auro, tu emisora…" style={{ ...inp, fontSize: 14, marginBottom: 9 }} value={appNueva.nombre} onChange={(e) => setAppNueva((a) => ({ ...a, nombre: e.target.value }))} />
+              <label htmlFor="appNueva" style={{ fontSize: 12, color: C.t2, fontWeight: 700, marginBottom: 3, display: "block" }}>Añadir otra aplicación o emisora</label>
+              <div style={{ fontSize: 10.5, color: C.t3, marginBottom: 7, lineHeight: 1.4 }}>Por ejemplo: RTI, Teletaxi, Radio Teléfono Taxi.</div>
+              <input className="inp" id="appNueva" type="text" maxLength={24} placeholder="Escribe el nombre" style={{ ...inp, fontSize: 14, marginBottom: 9 }} value={appNueva.nombre} onChange={(e) => setAppNueva((a) => ({ ...a, nombre: e.target.value }))} />
               <div style={{ fontSize: 11.5, color: C.t2, fontWeight: 600, marginBottom: 6 }}>¿Qué vas a apuntar en la segunda casilla?</div>
               <div style={{ display: "flex", gap: 7, marginBottom: 11 }}>
                 {[["efectivo", "Lo que cobro en mano"], ["cobrado", "Lo que cobra la empresa"]].map(([t, etiqueta]) => (
