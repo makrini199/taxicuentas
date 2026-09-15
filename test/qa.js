@@ -152,13 +152,13 @@ const { chromium } = require('playwright');
 
   await p.getByLabel('Ajustes').click();
   await p.waitForTimeout(600);
-  await p.locator('#appNueva').fill('Vecttor');
+  await p.locator('#appNueva').fill('RTI');
   await p.getByRole('button', { name: 'Añadir aplicación' }).click();
   await p.waitForTimeout(600);
   await p.getByRole('button', { name: /Diario/ }).click();
   await p.waitForTimeout(600);
-  comprobar('la propia sale en el parte', await p.locator('input[aria-label="Vecttor"]').count() === 1);
-  await set('Vecttor', '80'); await set('Vecttor, cobrado en efectivo', '30');
+  comprobar('la propia sale en el parte', await p.locator('input[aria-label="RTI"]').count() === 1);
+  await set('RTI', '80'); await set('RTI, cobrado en efectivo', '30');
   await p.waitForTimeout(400);
   const propia = await p.getByText('Cálculo del día').locator('..').innerText();
   comprobar('la propia suma a la facturación', (await p.locator('body').innerText()).includes('230,00'), '100 + 50 + 80');
@@ -168,7 +168,7 @@ const { chromium } = require('playwright');
 
   await p.getByLabel('Ajustes').click();
   await p.waitForTimeout(600);
-  comprobar('no se puede quitar una con cifras dentro', await p.getByRole('button', { name: 'Quitar Vecttor' }).count() === 0);
+  comprobar('no se puede quitar una con cifras dentro', await p.getByRole('button', { name: 'Quitar RTI' }).count() === 0);
 
   console.log('\n— SIN CONEXIÓN —');
   await p.waitForTimeout(1500);
