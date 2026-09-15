@@ -19,7 +19,7 @@ const calcDay = (d, pct = 50) => { const n = (v) => Number(v) || 0; const factur
 const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "" };
 const loadCfg = () => ({ ...DEFAULT_CFG, ...loadStorage("tc_cfg", {}) });
 const num = (v) => Number(v) || 0;
-const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `🎁 Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `⛽ ${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
+const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
 const summarize = (entries, pct = 50) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
 const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
 const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
@@ -51,6 +51,16 @@ const TXLogo = ({ size = 52 }) => (
   </svg>
 );
 
+const TRAZOS = {
+  diario: <><rect x="4.2" y="3.6" width="15.6" height="17" rx="2.6" /><path d="M9 3.2h6v2.6H9z" /><path d="M8.4 11h7.2M8.4 15h4.6" /></>,
+  combustible: <><path d="M4.4 20.4V5.2a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v15.2" /><path d="M3.2 20.4h11.2" /><path d="M6.9 8h3.8" /><path d="M13.2 9.4h2.6a1.8 1.8 0 0 1 1.8 1.8v4.4a1.6 1.6 0 0 0 3.2 0V9.2l-2.4-2.4" /></>,
+  mensual: <><path d="M4 20.4h16" /><rect x="6.2" y="12.4" width="3.4" height="5.6" rx="1.1" /><rect x="11.3" y="8.4" width="3.4" height="9.6" rx="1.1" /><rect x="16.4" y="5" width="3.4" height="13" rx="1.1" /></>,
+  periodo: <><rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" /><path d="M3.6 10h16.8" /><path d="M8.2 3.4v3.4M15.8 3.4v3.4" /></>,
+  ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
+};
+const Icono = ({ name, size = 23 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}>{TRAZOS[name]}</svg>
+);
 const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ flexShrink: 0, display: "block" }}>
     <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
@@ -89,7 +99,7 @@ const StatCard = ({ title, items, children }) => (
 );
 const Balance = ({ value, sub }) => { const neg = value <= 0; return (
   <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-    <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
+    <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}><><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: neg ? C.green : C.red, marginRight: 7, verticalAlign: "middle" }} />{neg ? "Empresa debe al conductor" : "Conductor debe a empresa"}</></div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
     <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(value))}</div>
   </div>
 ); };
@@ -199,7 +209,7 @@ function TXpro() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <TXLogo size={52} />
           <div style={{ flex: 1 }}><div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1 }}>TX<span style={{ color: C.accDim }}>pro</span></div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
-          <button className="nb" onClick={() => setView(view === "ajustes" ? "diario" : "ajustes")} aria-label="Ajustes" style={{ background: view === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${view === "ajustes" ? C.acc : C.border}`, borderRadius: 12, width: 40, height: 40, fontSize: 19, cursor: "pointer", flexShrink: 0, lineHeight: 1 }}>⚙️</button>
+          <button className="nb" onClick={() => setView(view === "ajustes" ? "diario" : "ajustes")} aria-label="Ajustes" style={{ background: view === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${view === "ajustes" ? C.acc : C.border}`, borderRadius: 12, width: 40, height: 40, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: view === "ajustes" ? C.accDim : C.t2 }}><Icono name="ajustes" size={20} /></button>
         </div>
       </div>
       {hayUpdate && <div style={{ margin: "16px 16px 0", background: `${C.green}14`, border: `1.5px solid ${C.green}44`, borderRadius: 14, padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
@@ -217,7 +227,7 @@ function TXpro() {
             </div>
           </div>}
           <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
-          {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>{saved === "borrado" ? "🗑️ Día eliminado" : "✅ Día guardado"}</div>}
+          {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>{saved === "borrado" ? "Día eliminado" : "Día guardado"}</div>}
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -230,7 +240,7 @@ function TXpro() {
           </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
-            {[{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (cobrado en apps + tarjeta)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
+            {[{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (cobrado en apps + tarjeta)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
                 <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontSize: bold ? 16 : 14, fontWeight: bold ? 800 : 600, color }}>{fmt(val)}</span>
               </div>
@@ -238,7 +248,7 @@ function TXpro() {
           </div>
           {(() => { const neg = dayStats.diferencia <= 0; return (
             <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 4 }}>{neg ? "Empresa cobró más → paga diferencia" : "Conductor cobró más efectivo → descuenta"}</div></div>
+              <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}><><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: neg ? C.green : C.red, marginRight: 7, verticalAlign: "middle" }} />{neg ? "Empresa debe al conductor" : "Conductor debe a empresa"}</></div><div style={{ fontSize: 11, color: C.t3, marginTop: 4 }}>{neg ? "Empresa cobró más → paga diferencia" : "Conductor cobró más efectivo → descuenta"}</div></div>
               <div style={{ fontSize: 26, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(dayStats.diferencia))}</div>
             </div>
           ); })()}
@@ -246,7 +256,7 @@ function TXpro() {
         </>}
         {view === "combustible" && <>
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 14 }}>Combustible</div>
-          {fuelSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>✅ Guardado</div>}
+          {fuelSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>Guardado</div>}
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo repostaje</div>
             <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Mes</label>
@@ -281,8 +291,8 @@ function TXpro() {
             {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria } = selectedData; return (
               <div>
                 <Hero total={totalFact} conductor={conductorMes} pct={pct} />
-                <StatCard title="Liquidación mensual" items={[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
-                  {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes ⚙️</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
+                <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
+                  {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                 </StatCard>
                 <Balance value={diferenciaMes} sub="Balance mensual acumulado" />
@@ -390,16 +400,16 @@ function TXpro() {
                 </div>
               </div>
             ); })()}
-            <StatCard title="Resumen del periodo" items={[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }]} />
+            <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }]} />
             <Balance value={diferenciaMes} sub="Balance del periodo seleccionado" />
             <DayTable rows={rows} pct={pct} />
           </>}
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "📋", "Diario"], ["combustible", "⛽", "Combustible"], ["mensual", "📊", "Mensual"], ["periodo", "📅", "Periodo"]].map(([v, ic, lb]) => (
+        {[["diario", "Diario"], ["combustible", "Combustible"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
           <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
-            <span style={{ fontSize: 22 }}>{ic}</span>{lb}
+            <Icono name={v} />{lb}
           </button>
         ))}
       </nav>
