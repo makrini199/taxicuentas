@@ -5,21 +5,7 @@ Windows: no hace falta Mac (eso sería para App Store, más adelante).
 
 ---
 
-## 0. Antes de nada: dos huecos por rellenar
-
-En `privacidad.html`, al final, hay dos marcadores que **hay que sustituir**:
-
-- `COMPLETAR_NOMBRE_O_RAZON_SOCIAL`
-- `COMPLETAR_CORREO_DE_CONTACTO`
-
-Google exige un contacto real y verificable. **No conviene usar el correo
-personal de siempre**, porque queda publicado: mejor crear uno del estilo
-`txpro.soporte@gmail.com` y usarlo también como correo de contacto en la
-ficha de Play.
-
----
-
-## 0 bis. El nombre, ya comprobado
+## 0. El nombre, ya comprobado
 
 Comprobado el 15 de septiembre de 2026, antes de fijar nada:
 
@@ -160,7 +146,7 @@ aparecen únicamente para identificar cada casilla.
 | --- | --- |
 | Categoría | Finanzas (alternativa: Empresa) |
 | Etiquetas | taxi, VTC, cuentas, facturación, conductor |
-| Correo de contacto | el correo de soporte que se cree |
+| Correo de contacto | `proyecto.txpro@gmail.com` |
 | Política de privacidad | `https://TU-DOMINIO/privacidad.html` |
 | Clasificación de contenido | Para todos los públicos (el cuestionario sale limpio: sin violencia, sin compras, sin datos compartidos) |
 | Anuncios | **No**, la app no contiene anuncios |
@@ -221,7 +207,6 @@ cada cambio de la aplicación.
 
 ## Antes de darle a publicar
 
-- [ ] Rellenados los dos marcadores de `privacidad.html`.
 - [ ] `assetlinks.json` publicado en `/.well-known/` y comprobado.
 - [ ] Copia de seguridad del `signing.keystore` en dos sitios distintos.
 - [ ] La app abierta en un Android real, instalada desde la pantalla de inicio,
