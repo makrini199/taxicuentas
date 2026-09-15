@@ -14,6 +14,9 @@ const daysBetween = (lo, hi) => { const out = []; for (let d = lo; d <= hi && ou
 const monthKey = (d) => d.slice(0, 7);
 const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
 const capitalizar = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+const diasEnMes = (ym) => { const [y, m] = ym.split("-").map(Number); return new Date(y, m, 0).getDate(); };
+const primerDiaSemana = (ym) => { const [y, m] = ym.split("-").map(Number); return (new Date(y, m - 1, 1).getDay() + 6) % 7; };
+const mesVecino = (ym, n) => { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
 const calcDay = (d, pct = 50) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * (pct / 100); const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
 const CONCEPTOS = ["Combustible", "Pinchazo", "ITV", "Lavado", "Taller", "Multa", "Parking", "Otros"];
@@ -73,9 +76,10 @@ const TXLogo = ({ size = 52 }) => (
 
 const TRAZOS = {
   diario: <><rect x="4.2" y="3.6" width="15.6" height="17" rx="2.6" /><path d="M9 3.2h6v2.6H9z" /><path d="M8.4 11h7.2M8.4 15h4.6" /></>,
+  calendario: <><rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" /><path d="M3.6 10h16.8" /><path d="M8.2 3.4v3.4M15.8 3.4v3.4" /><path d="M7.6 13.6h2.2M12 13.6h2.2M7.6 17h2.2M12 17h2.2" /></>,
   gastos: <><path d="M4.4 20.4V5.2a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v15.2" /><path d="M3.2 20.4h11.2" /><path d="M6.9 8h3.8" /><path d="M13.2 9.4h2.6a1.8 1.8 0 0 1 1.8 1.8v4.4a1.6 1.6 0 0 0 3.2 0V9.2l-2.4-2.4" /></>,
   mensual: <><path d="M4 20.4h16" /><rect x="6.2" y="12.4" width="3.4" height="5.6" rx="1.1" /><rect x="11.3" y="8.4" width="3.4" height="9.6" rx="1.1" /><rect x="16.4" y="5" width="3.4" height="13" rx="1.1" /></>,
-  periodo: <><rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" /><path d="M3.6 10h16.8" /><path d="M8.2 3.4v3.4M15.8 3.4v3.4" /></>,
+  periodo: <><path d="M4 12h16" /><circle cx="7" cy="12" r="2.6" /><circle cx="17" cy="12" r="2.6" /><path d="M7 6.4v2.6M17 15v2.6" /></>,
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
 };
 const Icono = ({ name, size = 23 }) => (
@@ -139,6 +143,9 @@ function TXpro() {
   const [editDate, setEditDate] = useState(today);
   const [form, setForm] = useState(() => { const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
   const [saved, setSaved] = useState(false);
+  const [notas, setNotas] = useState(() => { const n = loadStorage("tc_notas", {}); return n && typeof n === "object" ? n : {}; });
+  const [calMes, setCalMes] = useState(monthKey(today));
+  const [calDia, setCalDia] = useState(today);
   const [gastos, setGastos] = useState(loadGastos);
   const [gastoForm, setGastoForm] = useState({ date: today, concepto: "Combustible", importe: "", reembolsable: false });
   const [gastoSaved, setGastoSaved] = useState(false);
@@ -155,6 +162,8 @@ function TXpro() {
   const [rangeTo, setRangeTo] = useState(today);
   useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
   useEffect(() => { try { localStorage.setItem("tc_gastos", JSON.stringify(gastos)); } catch {} }, [gastos]);
+  useEffect(() => { try { localStorage.setItem("tc_notas", JSON.stringify(notas)); } catch {} }, [notas]);
+  const ponerNota = (fecha, texto) => setNotas((prev) => { const next = { ...prev }; if (texto.trim()) next[fecha] = texto.slice(0, 120); else delete next[fecha]; return next; });
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
   const saveDay = () => { const parsed = {}; for (const k of Object.keys(EMPTY)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
   const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
@@ -168,7 +177,7 @@ function TXpro() {
   const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = sumarGastos(gastos, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, pct]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
   const exportarCopia = async () => {
-    const payload = { app: "txpro", formato: 2, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, gastos, cfg };
+    const payload = { app: "txpro", formato: 3, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, gastos, notas, cfg };
     const texto = JSON.stringify(payload, null, 2);
     const nombre = `txpro-${todayStr()}.json`;
     try {
@@ -208,6 +217,7 @@ function TXpro() {
     const limpios = Object.fromEntries(Object.entries(datos.days).filter(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && v && typeof v === "object" && hasData(v)).map(([d, v]) => [d, migrateDay(v)]));
     setDays(limpios);
     setGastos(gastosCopia);
+    setNotas(datos.notas && typeof datos.notas === "object" ? datos.notas : {});
     if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg }); marcarCfgOk(); }
     setForm(limpios[editDate] ? { ...limpios[editDate] } : { ...EMPTY });
     setCopia(null);
@@ -328,6 +338,82 @@ function TXpro() {
             );
           })}
         </>); })()}
+        {view === "calendario" && (() => {
+          const huecos = primerDiaSemana(calMes);
+          const total = diasEnMes(calMes);
+          const celdas = [...Array(huecos).fill(null), ...Array.from({ length: total }, (_, i) => `${calMes}-${String(i + 1).padStart(2, "0")}`)];
+          const delMes = celdas.filter(Boolean);
+          const trabajados = delMes.filter((f) => days[f]).length;
+          const facturado = delMes.reduce((a, f) => a + (days[f] ? calcDay(days[f], pct).facturacion : 0), 0);
+          const tope = Math.max(1, ...delMes.map((f) => (days[f] ? calcDay(days[f], pct).facturacion : 0)));
+          const sel = calDia && monthKey(calDia) === calMes ? calDia : null;
+          const datosSel = sel && days[sel] ? calcDay(days[sel], pct) : null;
+          const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 36, height: 36, fontSize: 18, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 };
+          return (<>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+              <button className="nb" onClick={() => setCalMes(mesVecino(calMes, -1))} aria-label="Mes anterior" style={flecha}>‹</button>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: C.t1 }}>{capitalizar(monthLabel(calMes))}</div>
+                <div style={{ fontSize: 11.5, color: C.t2 }}>{trabajados} {trabajados === 1 ? "día trabajado" : "días trabajados"} · {fmt(facturado)}</div>
+              </div>
+              <button className="nb" onClick={() => setCalMes(mesVecino(calMes, 1))} aria-label="Mes siguiente" style={flecha}>›</button>
+            </div>
+
+            <div style={{ ...card, padding: 12, marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 }}>
+                {WD.map((d) => (<div key={d} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: C.t3, textTransform: "uppercase", letterSpacing: 0.3 }}>{d}</div>))}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+                {celdas.map((f, i) => {
+                  if (!f) return <div key={`h${i}`} />;
+                  const d = days[f];
+                  const fact = d ? calcDay(d, pct).facturacion : 0;
+                  const esHoy = f === today;
+                  const elegido = f === sel;
+                  const intensidad = fact > 0 ? 0.18 + 0.55 * (fact / tope) : 0;
+                  return (
+                    <button key={f} className="nb" onClick={() => setCalDia(f)} aria-label={`${f}${fact > 0 ? `, ${fmt(fact)}` : ", sin datos"}`} style={{
+                      aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", padding: 2,
+                      border: elegido ? `2px solid ${C.accDim}` : esHoy ? `1.5px solid ${C.acc}` : `1px solid ${C.border}`,
+                      background: fact > 0 ? `rgba(240,192,64,${intensidad})` : C.surf,
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, position: "relative",
+                    }}>
+                      <span style={{ fontSize: 12.5, fontWeight: esHoy || elegido ? 900 : 600, color: fact > 0 ? C.t1 : C.t3 }}>{Number(f.slice(8))}</span>
+                      {fact > 0 && <span style={{ fontSize: 8.5, fontWeight: 700, color: C.accDim, lineHeight: 1 }}>{Math.round(fact)}</span>}
+                      {notas[f] && <span style={{ position: "absolute", top: 3, right: 3, width: 5, height: 5, borderRadius: "50%", background: C.blue }} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {sel && (
+              <div style={{ ...card, padding: 16, marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, textTransform: "capitalize" }}>{weekday(sel)} {Number(sel.slice(8))}</div>
+                  {datosSel ? <div style={{ fontSize: 17, fontWeight: 900, color: C.accDim }}>{fmt(datosSel.facturacion)}</div>
+                    : <div style={{ fontSize: 12.5, color: C.t3 }}>Sin datos</div>}
+                </div>
+                {datosSel && <div style={{ fontSize: 12.5, color: C.t2, marginBottom: 12 }}>{pct}% para ti: <strong style={{ color: C.t1 }}>{fmt(datosSel.conductor50)}</strong> · efectivo: <strong style={{ color: C.blue }}>{fmt(datosSel.facturacion - datosSel.cobradoEmpresa)}</strong></div>}
+                <label htmlFor="calNota" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Nota del día</label>
+                <input id="calNota" aria-label="Nota del día" className="inp" type="text" maxLength="120" placeholder="Concierto, feria, día libre…" style={{ ...inp, fontSize: 14, fontWeight: 500, marginBottom: 12 }} value={notas[sel] || ""} onChange={(e) => ponerNota(sel, e.target.value)} />
+                <button className="saveBtn" onClick={() => { changeDate(sel); setView("diario"); }} style={{ width: "100%", padding: 11, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{datosSel ? "Editar este día" : "Apuntar este día"}</button>
+              </div>
+            )}
+
+            {(() => { const conNota = Object.keys(notas).filter((f) => monthKey(f) === calMes).sort(); if (!conNota.length) return null; return (
+              <div style={{ ...card, padding: 16, marginBottom: 20 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Notas del mes</div>
+                {conNota.map((f) => (
+                  <div key={f} onClick={() => setCalDia(f)} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}44`, cursor: "pointer" }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: C.accDim, minWidth: 38 }}>{dayMonth(f)}</div>
+                    <div style={{ fontSize: 13, color: C.t1, flex: 1 }}>{notas[f]}</div>
+                  </div>
+                ))}
+              </div>
+            ); })()}
+          </>);
+        })()}
         {view === "mensual" && <>
           {monthData.length === 0 && <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>}
           {monthData.length > 0 && <>
@@ -468,7 +554,7 @@ function TXpro() {
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "Diario"], ["gastos", "Gastos"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
+        {[["diario", "Diario"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
           <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
             <Icono name={v} />{lb}
           </button>
