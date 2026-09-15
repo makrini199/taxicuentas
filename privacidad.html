@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Política de privacidad · TaxiCuentas Pro</title>
+<meta name="description" content="Política de privacidad de TaxiCuentas Pro. La aplicación no recoge datos personales: todo se guarda en el propio dispositivo." />
+<link rel="icon" type="image/png" href="./icons/favicon.png" />
+<link rel="stylesheet" href="./fonts/dmsans.css" />
+<style>
+  :root {
+    --ground: #f5f6fa;
+    --surface: #ffffff;
+    --line: #e3e6f0;
+    --ink: #1a1d29;
+    --muted: #5c6178;
+    --soft: #8f93a8;
+    --acc: #a8760b;
+    --green: #189a5f;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; }
+
+  header { border-bottom: 2px solid rgba(240, 192, 64, .4); padding-bottom: 22px; margin-bottom: 30px; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .brand img { width: 46px; height: 46px; border-radius: 12px; display: block; }
+  .brand b { font-size: 17px; font-weight: 900; letter-spacing: -.3px; }
+  .brand b span { color: var(--acc); }
+  h1 { font-size: clamp(26px, 6vw, 34px); font-weight: 900; letter-spacing: -.5px; line-height: 1.15; text-wrap: balance; }
+  .updated { margin-top: 10px; font-size: 13px; color: var(--soft); }
+
+  .lead {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--green);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 34px;
+    font-size: 16px;
+  }
+  .lead strong { font-weight: 800; }
+
+  h2 {
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -.2px;
+    margin: 34px 0 10px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+  }
+  h2:first-of-type { border-top: 0; padding-top: 0; }
+  p { margin-bottom: 14px; color: var(--muted); }
+  p strong, li strong { color: var(--ink); font-weight: 700; }
+  ul { margin: 0 0 16px 20px; color: var(--muted); }
+  li { margin-bottom: 8px; }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 14.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--soft); font-weight: 800; }
+  td:first-child { font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+
+  .contact { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-top: 10px; }
+  .contact p:last-child { margin-bottom: 0; }
+
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--soft); }
+  a { color: var(--acc); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <img src="./icons/icon-192.png" alt="" />
+      <b>TaxiCuentas <span>Pro</span></b>
+    </div>
+    <h1>Política de privacidad</h1>
+    <p class="updated">Última actualización: 15 de septiembre de 2026 · Versión 1.2.0 de la aplicación</p>
+  </header>
+
+  <div class="lead">
+    <strong>TaxiCuentas Pro no recoge ningún dato personal.</strong> Todo lo que apuntas
+    —los días trabajados, las cantidades y tu acuerdo con la empresa— se guarda únicamente
+    en el almacenamiento de tu propio teléfono. No hay cuentas de usuario, no hay servidores
+    a los que se envíe nada, y ni el desarrollador ni terceros pueden ver tus cuentas.
+  </div>
+
+  <h2>Qué datos se guardan y dónde</h2>
+  <p>
+    La aplicación guarda la información que tú introduces en el almacenamiento local del
+    navegador del dispositivo (<em>localStorage</em>). Esa información no sale del teléfono.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Información</th><th>Para qué</th><th>Dónde se guarda</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Días trabajados</td><td>Calcular la facturación y la liquidación</td><td>Solo en el dispositivo</td></tr>
+        <tr><td>Repostajes</td><td>Mostrar el gasto de combustible del mes</td><td>Solo en el dispositivo</td></tr>
+        <tr><td>Tu acuerdo</td><td>Aplicar tu porcentaje y tu incentivo</td><td>Solo en el dispositivo</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    No se recogen datos identificativos: ni nombre, ni correo, ni teléfono, ni matrícula,
+    ni número de licencia, ni datos de clientes o trayectos.
+  </p>
+
+  <h2>Lo que la aplicación no hace</h2>
+  <ul>
+    <li><strong>No pide registro</strong> ni crea ninguna cuenta.</li>
+    <li><strong>No envía datos a ningún servidor.</strong> Funciona entera sin conexión a internet.</li>
+    <li><strong>No incluye publicidad</strong> ni redes publicitarias.</li>
+    <li><strong>No usa analítica</strong> ni herramientas de medición o seguimiento.</li>
+    <li><strong>No usa cookies</strong> de seguimiento ni identificadores de publicidad.</li>
+    <li><strong>No comparte ni vende información</strong> a terceros, porque no dispone de ella.</li>
+  </ul>
+
+  <h2>Permisos del dispositivo</h2>
+  <p>
+    La aplicación no solicita permisos: ni ubicación, ni cámara, ni micrófono, ni contactos,
+    ni almacenamiento del dispositivo, ni acceso a las llamadas.
+  </p>
+  <p>
+    La única excepción ocurre cuando tú pulsas <strong>«Exportar copia»</strong>: en ese momento
+    el teléfono abre su propio menú para compartir o guardar el archivo, y eres tú quien decide
+    dónde va. La aplicación no accede por su cuenta a tus archivos.
+  </p>
+
+  <h2>Copias de seguridad</h2>
+  <p>
+    La función de copia genera un archivo con tus datos y te lo entrega. A partir de ahí, ese
+    archivo es tuyo y queda bajo tu control: si lo envías por mensajería o lo subes a un
+    servicio en la nube, se aplicarán las condiciones de privacidad de ese servicio, no las de
+    esta aplicación.
+  </p>
+
+  <h2>Servicios de terceros</h2>
+  <p>
+    La aplicación <strong>no integra servicios de terceros</strong>. No utiliza kits de
+    desarrollo de análisis, publicidad ni redes sociales, y no carga recursos externos: la
+    tipografía y el resto de archivos se sirven desde la propia aplicación.
+  </p>
+  <p>
+    Se nombran servicios como Uber, Cabify, Bolt o FreeNow únicamente para indicar a qué
+    corresponde cada casilla. La aplicación no se conecta a ellos, no accede a sus cuentas ni
+    está asociada a esas empresas, que son titulares de sus respectivas marcas.
+  </p>
+
+  <h2>Menores</h2>
+  <p>
+    La aplicación es una herramienta de trabajo dirigida a profesionales del taxi y del VTC.
+    No está destinada a menores de 13 años y no recoge datos de ellos.
+  </p>
+
+  <h2>Conservación y borrado de datos</h2>
+  <p>
+    Tus datos permanecen en el dispositivo hasta que tú los elimines. Puedes borrarlos en
+    cualquier momento desinstalando la aplicación o borrando los datos de la aplicación desde
+    los ajustes del teléfono. Como no existe copia en ningún servidor, ese borrado es
+    definitivo: conviene exportar una copia antes.
+  </p>
+
+  <h2>Tus derechos</h2>
+  <p>
+    El Reglamento General de Protección de Datos (RGPD) reconoce derechos de acceso,
+    rectificación, supresión, limitación, portabilidad y oposición sobre los datos personales.
+    En esta aplicación esos derechos se ejercen directamente desde el propio teléfono, ya que
+    el tratamiento es exclusivamente local: puedes consultar y modificar tus datos dentro de la
+    aplicación, exportarlos con «Exportar copia» y borrarlos desinstalándola. No hay que
+    solicitar nada a nadie porque nadie más tiene tus datos.
+  </p>
+
+  <h2>Cambios en esta política</h2>
+  <p>
+    Si en el futuro la aplicación incorpora funciones que sí traten datos fuera del dispositivo
+    —por ejemplo, sincronización entre móviles—, esta política se actualizará antes de que esa
+    función esté disponible y se indicará claramente en la aplicación.
+  </p>
+
+  <h2>Contacto</h2>
+  <div class="contact">
+    <p>
+      Para cualquier duda sobre esta política o sobre la aplicación:
+    </p>
+    <p>
+      <strong>Responsable:</strong> COMPLETAR_NOMBRE_O_RAZON_SOCIAL<br />
+      <strong>Correo de contacto:</strong> COMPLETAR_CORREO_DE_CONTACTO
+    </p>
+  </div>
+
+  <footer>
+    TaxiCuentas Pro · <a href="./">Volver a la aplicación</a>
+  </footer>
+
+</div>
+</body>
+</html>
