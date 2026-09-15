@@ -212,8 +212,14 @@ empresa y el efectivo que llevas encima al terminar el turno.
 CADA DÍA, EN UN MINUTO
 Anota el taxímetro y lo facturado en cada plataforma. En las apps de viajes
 tienes dos casillas: el total que has hecho con ellas y lo que has cobrado en
-mano. La app deduce sola lo que se queda la empresa. Con la tarjeta y el
-combustible, igual de fácil.
+mano. La app deduce sola lo que se queda la empresa. Con la tarjeta, igual de
+fácil.
+
+SOLO LAS APPS QUE USES
+Enciende Uber, Cabify, Bolt o FreeNow según con cuáles trabajes, y si usas otra
+que no está en la lista, la añades tú escribiendo su nombre. El parte diario se
+queda con lo tuyo y nada más. Apagar una no borra nada: lo que ya tengas
+apuntado sigue contando en tus meses.
 
 TU ACUERDO, NO EL DE OTRO
 Cada empresa paga distinto, así que nada viene impuesto. En Ajustes pones tu
@@ -291,9 +297,9 @@ Todo listo en la carpeta `store/`:
 | --- | --- | --- |
 | Icono | 512 × 512 PNG | `store/icon-512.png` |
 | Gráfico destacado | 1024 × 500 PNG | `store/feature-graphic.png` |
-| Capturas de teléfono | 2 a 8, mínimo 320 px de lado | `store/screenshots/*.jpg` (7, a 1080 × 1920) |
+| Capturas de teléfono | 2 a 8, mínimo 320 px de lado | `store/screenshots/*.jpg` (8, a 1080 × 1920) |
 
-Las siete capturas salen de la aplicación real, con **datos de ejemplo inventados**:
+Las ocho capturas salen de la aplicación real, con **datos de ejemplo inventados**:
 no hay cifras de nadie ahí dentro. Están enmarcadas sobre fondo oscuro con un
 titular cada una, que es como se presentan las fichas cuidadas.
 
@@ -306,6 +312,7 @@ titular cada una, que es como se presentan las fichas cuidadas.
 | `05-mensual` | El gráfico mes a mes y la liquidación |
 | `06-periodo` | Un periodo a medida con una barra por día |
 | `07-ajustes` | El porcentaje y el incentivo configurables |
+| `08-apps` | Los interruptores de cada plataforma y el alta de otras |
 
 ### Rehacerlas cuando cambie la interfaz
 

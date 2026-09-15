@@ -30,9 +30,10 @@ const { chromium } = require('playwright');
 
   console.log('\n— DIARIO —');
   const set = async (l, v) => p.locator(`input[aria-label="${l}"]`).fill(v);
-  await set('Taxi', '142.30'); await set('Uber', '68.40'); await set('Uber efectivo', '18');
-  await set('Cabify', '51.20'); await set('Bolt', '24.75'); await set('Bolt efectivo', '24.75');
-  await set('FreeNow T9', '46.10'); await set('FreeNow T9 cobrado', '12'); await set('Tarjeta', '98.50');
+  await set('Taxímetro', '142.30'); await set('Uber', '68.40'); await set('Uber, cobrado en efectivo', '18');
+  await set('Cabify', '51.20'); await set('Bolt', '24.75'); await set('Bolt, cobrado en efectivo', '24.75');
+  await set('FreeNow · precio cerrado', '46.10'); await set('FreeNow · precio cerrado, ya cobrado', '12');
+  await set('Tarjeta', '98.50');
   await p.waitForTimeout(400);
   // facturación = 142.30+68.40+51.20+24.75+46.10 = 332.75
   // cobrado = (68.40-18)+(51.20-0)+(24.75-24.75)+12+98.50 = 50.40+51.20+0+12+98.50 = 212.10
@@ -84,7 +85,7 @@ const { chromium } = require('playwright');
   comprobar('un día trabajado', /1 día trabajado/.test(per));
 
   console.log('\n— AJUSTES —');
-  await p.getByRole('button', { name: 'Ajustes' }).click();
+  await p.getByLabel('Ajustes').click();
   await p.waitForTimeout(500);
   await p.locator('input[aria-label="Porcentaje del conductor"]').fill('45');
   await p.getByRole('button', { name: '% combustible' }).click();
@@ -101,7 +102,7 @@ const { chromium } = require('playwright');
   comprobar('incentivo de combustible', mes2.includes('95,52'), '30% de 318,40');
 
   console.log('\n— COPIA DE SEGURIDAD —');
-  await p.getByRole('button', { name: 'Ajustes' }).click();
+  await p.getByLabel('Ajustes').click();
   await p.waitForTimeout(400);
   const dl = p.waitForEvent('download', { timeout: 15000 });
   await p.getByRole('button', { name: 'Exportar copia' }).click();
@@ -111,7 +112,7 @@ const { chromium } = require('playwright');
   await p.evaluate(() => localStorage.clear());
   await p.reload({ waitUntil: 'load' });
   await p.waitForSelector('text=INGRESOS DEL DÍA');
-  await p.getByRole('button', { name: 'Ajustes' }).click();
+  await p.getByLabel('Ajustes').click();
   await p.waitForTimeout(400);
   await p.locator('#tcImport').setInputFiles('/tmp/qa_copia.json');
   await p.waitForTimeout(600);
@@ -122,6 +123,52 @@ const { chromium } = require('playwright');
   await p.getByRole('button', { name: /Mensual/ }).click();
   await p.waitForTimeout(600);
   comprobar('datos restaurados', (await p.locator('body').innerText()).includes('332,75'));
+
+  console.log('\n— CON QUÉ APLICACIONES TRABAJA CADA UNO —');
+  // Lo delicado de esto no es que la casilla aparezca o desaparezca, es que
+  // apagar una plataforma no puede hacer que sus meses dejen de cuadrar.
+  await p.evaluate(() => { localStorage.clear(); localStorage.setItem('tc_cfg_ok', 'true'); });
+  await p.reload({ waitUntil: 'load' });
+  await p.waitForSelector('text=INGRESOS DEL DÍA');
+  for (const n of ['Uber', 'Cabify', 'Bolt', 'FreeNow · precio cerrado'])
+    comprobar(`${n} viene de serie`, await p.locator(`input[aria-label="${n}"]`).count() === 1);
+
+  await set('Taxímetro', '100'); await set('Bolt', '50'); await set('Bolt, cobrado en efectivo', '20');
+  await p.waitForTimeout(300);
+  await p.getByRole('button', { name: 'Guardar día' }).click();
+  await p.waitForTimeout(500);
+
+  await p.getByLabel('Ajustes').click();
+  await p.waitForTimeout(600);
+  await p.getByRole('switch', { name: 'Bolt' }).click();
+  await p.waitForTimeout(500);
+  await p.getByRole('button', { name: /Diario/ }).click();
+  await p.waitForTimeout(600);
+  comprobar('apagada desaparece del parte', await p.locator('input[aria-label="Bolt"]').count() === 0);
+  comprobar('las demás siguen', await p.locator('input[aria-label="Uber"]').count() === 1);
+  await p.getByRole('button', { name: /Mensual/ }).click();
+  await p.waitForTimeout(700);
+  comprobar('apagarla NO borra sus cuentas', (await p.locator('body').innerText()).includes('150,00'), '100 + 50 de Bolt');
+
+  await p.getByLabel('Ajustes').click();
+  await p.waitForTimeout(600);
+  await p.locator('#appNueva').fill('Vecttor');
+  await p.getByRole('button', { name: 'Añadir aplicación' }).click();
+  await p.waitForTimeout(600);
+  await p.getByRole('button', { name: /Diario/ }).click();
+  await p.waitForTimeout(600);
+  comprobar('la propia sale en el parte', await p.locator('input[aria-label="Vecttor"]').count() === 1);
+  await set('Vecttor', '80'); await set('Vecttor, cobrado en efectivo', '30');
+  await p.waitForTimeout(400);
+  const propia = await p.getByText('Cálculo del día').locator('..').innerText();
+  comprobar('la propia suma a la facturación', (await p.locator('body').innerText()).includes('230,00'), '100 + 50 + 80');
+  comprobar('y la empresa cobra su parte', propia.includes('80,00'), '(50−20) + (80−30)');
+  await p.getByRole('button', { name: 'Guardar día' }).click();
+  await p.waitForTimeout(600);
+
+  await p.getByLabel('Ajustes').click();
+  await p.waitForTimeout(600);
+  comprobar('no se puede quitar una con cifras dentro', await p.getByRole('button', { name: 'Quitar Vecttor' }).count() === 0);
 
   console.log('\n— SIN CONEXIÓN —');
   await p.waitForTimeout(1500);
