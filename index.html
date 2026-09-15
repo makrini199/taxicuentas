@@ -2,383 +2,82 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="description" content="Liquidaciones diarias y mensuales para conductores de taxi y VTC. Calcula tu parte, lo que cobra la empresa y el efectivo que llevas encima." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="TaxiCuentas" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#f5f6fa" />
+  <meta name="color-scheme" content="light" />
   <title>TaxiCuentas Pro</title>
-  <link rel="icon" type="image/png" href="data:image/png;base64,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" />
-  <link rel="apple-touch-icon" href="data:image/png;base64,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" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="./icons/favicon.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <link rel="preload" as="script" href="./vendor/react.production.min.js" />
+  <link rel="preload" as="script" href="./vendor/react-dom.production.min.js" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: #f5f6fa; overflow-x: hidden; }
-    body { font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
     input[type=number]::-webkit-inner-spin-button,
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
     input[type=number] { -moz-appearance: textfield; }
     .inp:focus { border-color: #f0c040 !important; outline: none; }
     .saveBtn:active { opacity: 0.85; }
     .nb:active { opacity: 0.7; }
+    button:focus-visible, .inp:focus-visible { outline: 2px solid #c08a06; outline-offset: 2px; }
     tr:hover td { background: #f2f4fa; }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #d5d8e3; border-radius: 4px; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+    #boot { display: flex; align-items: center; justify-content: center; height: 100%; color: #8f93a8; font-size: 14px; }
   </style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useMemo, useEffect } = React;
-    const fmt = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
-    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const fmt0 = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
-    const todayStr = () => ymd(new Date());
-    const shiftDays = (s, n) => { const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y, m - 1, d + n)); };
-    const weekStart = (s) => { const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y, m - 1, d - ((new Date(y, m - 1, d).getDay() + 6) % 7))); };
-    const monthStart = (s) => s.slice(0, 8) + "01";
-    const dayMonth = (s) => s.slice(8) + "/" + s.slice(5, 7);
-    const WD = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
-    const weekday = (s) => { const [y, m, d] = s.split("-").map(Number); return WD[(new Date(y, m - 1, d).getDay() + 6) % 7]; };
-    const daysBetween = (lo, hi) => { const out = []; for (let d = lo; d <= hi && out.length < 62; d = shiftDays(d, 1)) out.push(d); return out; };
-    const monthKey = (d) => d.slice(0, 7);
-    const monthLabel = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); };
-    const monthShort = (ym) => { const [y, m] = ym.split("-"); return new Date(y, m - 1).toLocaleDateString("es-ES", { month: "short" }); };
-    const calcDay = (d, pct = 50) => { const n = (v) => Number(v) || 0; const facturacion = n(d.taximetro) + n(d.uber) + n(d.cabify) + n(d.bolt) + n(d.fnt9); const conductor50 = facturacion * (pct / 100); const cobradoEmpresa = (n(d.uber) - n(d.uberEfec)) + (n(d.cabify) - n(d.cabifyEfec)) + (n(d.bolt) - n(d.boltEfec)) + n(d.fncob) + n(d.visa); const diferencia = conductor50 - cobradoEmpresa; return { facturacion, conductor50, cobradoEmpresa, diferencia }; };
-    const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "" };
-    const loadCfg = () => ({ ...DEFAULT_CFG, ...loadStorage("tc_cfg", {}) });
-    const num = (v) => Number(v) || 0;
-    const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `🎁 Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `⛽ ${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `✅ ¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
-    const summarize = (entries, pct = 50) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
-    const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
-    const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
-    const today = todayStr();
-    const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
-    const hasData = (d) => Object.keys(EMPTY).some((k) => (Number(d[k]) || 0) !== 0);
-    const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob] of EFEC_TRIOS) { if (out[efec] === undefined) { const total = Number(out[fact]) || 0; const cobrado = out[oldCob] === undefined ? total : Number(out[oldCob]) || 0; out[efec] = Math.max(0, total - cobrado); } delete out[oldCob]; } return out; };
-    const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
-    const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
-    const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
-    const TCLogo = ({ size = 52 }) => (
-      <svg width={size} height={size} viewBox="0 0 100 100" aria-label="TaxiCuentas" role="img" style={{ display: "block", flexShrink: 0, filter: "drop-shadow(0 2px 7px rgba(30,34,54,0.20))" }}>
-        <defs>
-          <clipPath id="tcTile"><rect width="100" height="100" rx="23" /></clipPath>
-          <clipPath id="tcBand"><path d="M0 77 L100 27 L100 55 L0 105 Z" /></clipPath>
-          <mask id="tcMask"><rect width="100" height="100" fill="#fff" /><path d="M0 77 L100 27 L100 55 L0 105 Z" fill="#000" /></mask>
-        </defs>
-        <g clipPath="url(#tcTile)">
-          <rect width="100" height="100" fill="#FFFFFF" />
-          <path d="M0 77 L100 27 L100 55 L0 105 Z" fill="#D8232A" />
-          <g mask="url(#tcMask)"><path d="M69.1 26.9 A27 27 0 1 0 69.1 65.1" fill="none" stroke="#D8232A" strokeWidth="9.5" strokeLinecap="round" /><rect x="35" y="33.5" width="29" height="8.5" rx="4.25" fill="#D8232A" /><rect x="45.75" y="33.5" width="8.5" height="30.5" rx="4.25" fill="#D8232A" /></g>
-          <g clipPath="url(#tcBand)"><path d="M69.1 26.9 A27 27 0 1 0 69.1 65.1" fill="none" stroke="#FFFFFF" strokeWidth="9.5" strokeLinecap="round" /><rect x="35" y="33.5" width="29" height="8.5" rx="4.25" fill="#FFFFFF" /><rect x="45.75" y="33.5" width="8.5" height="30.5" rx="4.25" fill="#FFFFFF" /></g>
-          <rect x="0.7" y="0.7" width="98.6" height="98.6" rx="22.3" fill="none" stroke="rgba(21,23,31,0.15)" strokeWidth="1.4" />
-        </g>
-      </svg>
-    );
-    const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ flexShrink: 0, display: "block" }}>
-        <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
-      </svg>
-    );
-    const Sq = ({ bg, size = 28, radius = 8, children }) => (
-      <span style={{ width: size, height: size, borderRadius: radius, background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{children}</span>
-    );
-    const UberMark = () => (
-      <Sq bg="#000000" radius={7}><span style={{ color: "#fff", fontSize: 10, fontWeight: 600, letterSpacing: -0.2 }}>Uber</span></Sq>
-    );
-    const CabifyMark = () => (
-      <Sq bg="#6C3EF4" radius={9}>
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 21.5s6.6-6.3 6.6-10.8a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.5 12 21.5z" />
-          <path d="M12 15.3c-.2 0-3.2-2.2-3.2-4 0-1.1.9-1.9 1.8-1.9.6 0 1.1.3 1.4.7.3-.4.8-.7 1.4-.7.9 0 1.8.8 1.8 1.9 0 1.8-3 4-3.2 4z" fill="#fff" stroke="none" />
-        </svg>
-      </Sq>
-    );
-    const BoltMark = () => (
-      <Sq bg="#34D186" radius={8}>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff">
-          <path d="M13.6 2 4.8 13.6c-.3.4 0 1 .5 1h4.3l-1.2 7.1c-.1.6.7.9 1 .4l8.8-11.6c.3-.4 0-1-.5-1h-4.3l1.2-7.1c.1-.6-.7-.9-1-.4z" />
-        </svg>
-      </Sq>
-    );
-    const FreeNowMark = ({ size = 28 }) => (
-      <svg width={size} height={size} viewBox="0 0 100 100" style={{ flexShrink: 0, display: "block" }}>
-        <rect width="100" height="100" rx="22" fill="#E4002B" />
-        <text x="50" y="35" textAnchor="middle" fill="#fff" fontSize="16" fontWeight="700" fontFamily="'DM Sans', sans-serif">FREENOW</text>
-        <path d="M25 45h18l7 19 7-19h18L57 88H43z" fill="#fff" />
-      </svg>
-    );
-    const VisaMark = ({ w = 48 }) => (
-      <svg width={w} height={w * 0.34} viewBox="0 0 100 34" style={{ flexShrink: 0, display: "block" }}>
-        <path d="M56 4h42l-6 8H50z" fill="#F7B600" />
-        <text x="50" y="31" textAnchor="middle" fill="#1A1F71" fontSize="27" fontWeight="800" fontStyle="italic" fontFamily="'DM Sans', sans-serif">VISA</text>
-      </svg>
-    );
-    const Hero = ({ total, conductor, pct }) => (
-      <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
-        <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor ({pct}%): <strong style={{ color: C.t1 }}>{fmt(conductor)}</strong></div>
-      </div>
-    );
-    const StatCard = ({ title, items, children }) => (
-      <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>{title}</div>
-        {items.map(({ label, val, color, bold, neg }, i, arr) => (
-          <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
-            <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color }}>{neg ? "−" : ""}{fmt(val)}</span>
-          </div>
-        ))}
-        {children}
-      </div>
-    );
-    const Balance = ({ value, sub }) => { const neg = value <= 0; return (
-      <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
-        <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(value))}</div>
-      </div>
-    ); };
-    const DayTable = ({ rows, pct }) => (
-      <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
-        <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead><tr>{["Fecha", "Fact.", "Acum.", `${pct}% día`, "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
-          <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{dayMonth(date)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></tr>); })}</tbody>
-        </table>
-        <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
-      </div>
-    );
-    function TaxiCuentas() {
-      const [days, setDays] = useState(loadDays);
-      const [view, setView] = useState("diario");
-      const [editDate, setEditDate] = useState(today);
-      const [form, setForm] = useState(() => { const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
-      const [saved, setSaved] = useState(false);
-      const [fuelEntries, setFuelEntries] = useState(() => loadStorage("tc_fuel", []));
-      const [fuelForm, setFuelForm] = useState({ date: today, importe: "" });
-      const [fuelSaved, setFuelSaved] = useState(false);
-      const [cfg, setCfg] = useState(loadCfg);
-      const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
-      const marcarCfgOk = () => { setCfgOk(true); try { localStorage.setItem("tc_cfg_ok", "true"); } catch {} };
-      const pct = num(cfg.pctConductor);
-      const [selectedMonth, setSelectedMonth] = useState(monthKey(today));
-      const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
-      const [rangeTo, setRangeTo] = useState(today);
-      useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
-      useEffect(() => { try { localStorage.setItem("tc_fuel", JSON.stringify(fuelEntries)); } catch {} }, [fuelEntries]);
-      useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
-      const saveDay = () => { const parsed = {}; for (const k of Object.keys(EMPTY)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
-      const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
-      const dayStats = useMemo(() => { const raw = {}; for (const k of Object.keys(EMPTY)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw, pct); }, [form, pct]);
-      const saveFuel = () => { const importe = parseFloat(fuelForm.importe) || 0; if (!importe) return; setFuelEntries((prev) => [...prev, { id: Date.now(), date: fuelForm.date, importe }]); setFuelForm((f) => ({ ...f, importe: "" })); setFuelSaved(true); setTimeout(() => setFuelSaved(false), 2000); };
-      const fuelByMonth = useMemo(() => { const byMonth = {}; fuelEntries.forEach((e) => { const m = monthKey(e.date); if (!byMonth[m]) byMonth[m] = 0; byMonth[m] += e.importe; }); return byMonth; }, [fuelEntries]);
-      const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
-      const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const combustibleMes = fuelByMonth[ym] || 0; const s = summarize(entries, pct); return { ym, ...s, combustibleMes, incentivo: incentivoDe(cfg, s.totalFact, combustibleMes) }; }), [months, days, fuelByMonth, pct, cfg]);
-      useEffect(() => { if (months.length && !months.includes(selectedMonth)) setSelectedMonth(months[0]); }, [months]);
-      const selectedData = monthData.find((m) => m.ym === selectedMonth);
-      const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; return summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct); }, [days, rangeFrom, rangeTo, pct]);
-      const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
-      const brandName = { fontSize: 14, fontWeight: 700, color: C.t1 };
-      const FIELDS = [
-        { key: "taximetro", name: "Taxi", full: true, head: <><TaxiLogo size={26} color={C.acc} /><span style={{ ...brandName, fontSize: 15, fontWeight: 900, color: "#c08a06", letterSpacing: 0.5 }}>TAXI</span></> },
-        { key: "uber", cobKey: "uberEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Uber", head: <><UberMark /><span style={brandName}>Uber</span></> },
-        { key: "cabify", cobKey: "cabifyEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Cabify", head: <><CabifyMark /><span style={brandName}>Cabify</span></> },
-        { key: "bolt", cobKey: "boltEfec", cobLabel: "EFECTIVO", cobColor: C.blue, name: "Bolt", head: <><BoltMark /><span style={brandName}>Bolt</span></> },
-        { key: "fnt9", cobKey: "fncob", cobLabel: "COBRADO", cobColor: C.green, name: "FreeNow T9", head: <><FreeNowMark /><span style={brandName}>T9</span></> },
-        { key: "visa", name: "Visa", full: true, head: <VisaMark w={56} /> },
-      ];
-      const cobTag = (bg) => ({ background: bg, color: "#fff", fontSize: 9, fontWeight: 800, letterSpacing: 0.3, padding: "3px 7px", borderRadius: 6, display: "inline-block", margin: "7px 0 5px" });
-      const inp = { width: "100%", background: "#f6f7fb", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
-      return (
-        <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: 80 }}>
-          <div style={{ background: `linear-gradient(180deg, ${C.surf}, #eef0f7)`, borderBottom: `2px solid ${C.acc}40`, padding: "18px 20px 14px", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 14px rgba(30,34,54,0.08)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <TCLogo size={52} />
-              <div style={{ flex: 1 }}><div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1 }}>TaxiCuentas <span style={{ color: C.accDim }}>Pro</span></div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
-              <button className="nb" onClick={() => setView(view === "ajustes" ? "diario" : "ajustes")} aria-label="Ajustes" style={{ background: view === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${view === "ajustes" ? C.acc : C.border}`, borderRadius: 12, width: 40, height: 40, fontSize: 19, cursor: "pointer", flexShrink: 0, lineHeight: 1 }}>⚙️</button>
-            </div>
-          </div>
-          <div style={{ padding: 16 }}>
-            {view === "diario" && <>
-              {!cfgOk && <div style={{ background: `${C.acc}12`, border: `1.5px solid ${C.acc}44`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, marginBottom: 4 }}>Ajusta la app a tu acuerdo</div>
-                <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Pon el porcentaje que te paga tu empresa y, si te dan algún extra al llegar a cierta facturación, indícalo. Hasta que lo hagas, la app calcula con el 50% y sin extras.</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="saveBtn" onClick={() => setView("ajustes")} style={{ flex: 1, padding: 10, borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Configurar ahora</button>
-                  <button className="nb" onClick={marcarCfgOk} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ahora no</button>
-                </div>
-              </div>}
-              <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
-              {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>{saved === "borrado" ? "🗑️ Día eliminado" : "✅ Día guardado"}</div>}
-              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Ingresos del día</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {FIELDS.map(({ key, cobKey, cobLabel, cobColor, name, head, gap, full }) => (<div key={key} style={full ? { gridColumn: "span 2" } : undefined}><div style={{ display: "flex", alignItems: "center", gap: gap ?? 8, height: 30, marginBottom: 7 }}>{head}</div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={name} style={inp} value={form[key] || ""} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} />{cobKey && <><div><span style={cobTag(cobColor)}>{cobLabel}</span></div><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={`${name} ${cobLabel.toLowerCase()}`} style={inp} value={form[cobKey] || ""} onChange={(e) => setForm((f) => ({ ...f, [cobKey]: e.target.value }))} /></>}</div>))}
-                </div>
-              </div>
-              <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
-                <div><div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Total facturación día</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Tax + Uber + Cabify + Bolt + FN T9</div></div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: C.accDim }}>{fmt(dayStats.facturacion)}</div>
-              </div>
-              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
-                {[{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (cobrado en apps + Visa)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "💵 Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                    <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontSize: bold ? 16 : 14, fontWeight: bold ? 800 : 600, color }}>{fmt(val)}</span>
-                  </div>
-                ))}
-              </div>
-              {(() => { const neg = dayStats.diferencia <= 0; return (
-                <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{neg ? "🟢 Empresa debe al conductor" : "🔴 Conductor debe a empresa"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 4 }}>{neg ? "Empresa cobró más → paga diferencia" : "Conductor cobró más efectivo → descuenta"}</div></div>
-                  <div style={{ fontSize: 26, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(dayStats.diferencia))}</div>
-                </div>
-              ); })()}
-              <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar día</button>
-            </>}
-            {view === "combustible" && <>
-              <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 14 }}>Combustible</div>
-              {fuelSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>✅ Guardado</div>}
-              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo repostaje</div>
-                <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Mes</label>
-                <input type="month" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={fuelForm.date.slice(0, 7)} onChange={(e) => setFuelForm((f) => ({ ...f, date: e.target.value + "-01" }))} />
-                <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Importe total (€)</label>
-                <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inp, marginBottom: 14 }} value={fuelForm.importe} onChange={(e) => setFuelForm((f) => ({ ...f, importe: e.target.value }))} />
-                <button className="saveBtn" onClick={saveFuel} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar</button>
-              </div>
-              {(() => { const meses = [...new Set(fuelEntries.map((e) => monthKey(e.date)))].sort().reverse(); if (meses.length === 0) return <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin repostajes registrados.</div>; return meses.map((m) => (<div key={m} style={{ ...card, padding: 16, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Combustible</div><div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginTop: 2 }}>{monthLabel(m)}</div></div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div style={{ fontSize: 20, fontWeight: 900, color: C.red }}>−{fmt(fuelByMonth[m])}</div><button onClick={() => setFuelEntries((prev) => prev.filter((e) => monthKey(e.date) !== m))} style={{ background: `${C.red}18`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "4px 9px", color: C.red, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✕</button></div></div>)); })()}
-            </>}
-            {view === "mensual" && <>
-              {monthData.length === 0 && <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>}
-              {monthData.length > 0 && <>
-                <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Facturación mensual</div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 118, overflowX: "auto", paddingBottom: 4 }}>
-                    {[...monthData].reverse().map((m) => (
-                      <div key={m.ym} onClick={() => setSelectedMonth(m.ym)} style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 38, flexShrink: 0 }}>
-                        <div style={{ fontSize: 9, color: C.t3, fontWeight: 700, whiteSpace: "nowrap" }}>{Math.round(m.totalFact)}€</div>
-                        <div style={{ width: 22, height: Math.max(4, (m.totalFact / maxFact) * 84), borderRadius: 5, background: m.ym === selectedMonth ? `linear-gradient(180deg,${C.acc},${C.accDim})` : C.border, transition: "background 0.15s" }} />
-                        <div style={{ fontSize: 10, color: m.ym === selectedMonth ? C.accDim : C.t3, fontWeight: m.ym === selectedMonth ? 800 : 500, textTransform: "capitalize" }}>{monthShort(m.ym)}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
-                  <div style={{ fontSize: 15, fontWeight: 900, color: C.t1, textTransform: "capitalize" }}>{monthLabel(selectedMonth)}</div>
-                  <select className="inp" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={{ ...inp, width: "auto", padding: "8px 10px", fontSize: 13 }}>
-                    {months.map((m) => (<option key={m} value={m}>{monthLabel(m)}</option>))}
-                  </select>
-                </div>
-                {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria } = selectedData; return (
-                  <div>
-                    <Hero total={totalFact} conductor={conductorMes} pct={pct} />
-                    <StatCard title="Liquidación mensual" items={[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(combustibleMes > 0 ? [{ label: "⛽ Combustible del mes (informativo)", val: combustibleMes, color: C.red, neg: true }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
-                      {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes ⚙️</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
-                      : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
-                    </StatCard>
-                    <Balance value={diferenciaMes} sub="Balance mensual acumulado" />
-                    <DayTable rows={rows} pct={pct} />
-                  </div>
-                ); })()}
-              </>}
-            </>}
-            {view === "ajustes" && (() => { const set = (k, v) => { marcarCfgOk(); setCfg((c) => ({ ...c, [k]: v })); }; const tipos = [["bono", "Bono en €"], ["combustible", "% combustible"], ["ninguno", "Ninguno"]]; const ej = incentivoDe(cfg, num(cfg.umbral), 400); return (<>
-              <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Ajustes</div>
-              <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Adapta la app a lo que te paga tu empresa. Se guarda en este móvil.</div>
-              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu porcentaje</div>
-                <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Qué % de la facturación te llevas</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <input className="inp" type="number" min="0" max="100" step="0.5" aria-label="Porcentaje del conductor" style={{ ...inp, flex: 1 }} value={cfg.pctConductor} onChange={(e) => set("pctConductor", e.target.value)} />
-                  <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
-                </div>
-              </div>
-              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Incentivo por facturación</div>
-                <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
-                  {tipos.map(([v, lb]) => { const on = cfg.incentivo === v; return (
-                    <button key={v} className="nb" onClick={() => set("incentivo", v)} style={{ flex: 1, padding: "9px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>{lb}</button>
-                  ); })}
-                </div>
-                {cfg.incentivo === "ninguno" ? <div style={{ fontSize: 12, color: C.t3 }}>Tu empresa no te da ningún extra por facturación.</div> : <>
-                  <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>A partir de cuánto facturado al mes (€)</label>
-                  <input className="inp" type="number" min="0" step="50" aria-label="Umbral de facturación" placeholder="0" style={{ ...inp, marginBottom: 12 }} value={cfg.umbral} onChange={(e) => set("umbral", e.target.value)} />
-                  {cfg.incentivo === "bono" ? <>
-                    <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te dan de bono (€)</label>
-                    <input className="inp" type="number" min="0" step="5" aria-label="Importe del bono" placeholder="0" style={inp} value={cfg.bonoImporte} onChange={(e) => set("bonoImporte", e.target.value)} />
-                  </> : <>
-                    <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te pagan este % del combustible</label>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <input className="inp" type="number" min="0" max="100" step="1" aria-label="Porcentaje del combustible" placeholder="0" style={{ ...inp, flex: 1 }} value={cfg.pctCombustible} onChange={(e) => set("pctCombustible", e.target.value)} />
-                      <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
-                    </div>
-                  </>}
-                </>}
-              </div>
-              <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Así queda tu acuerdo</div>
-                <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>Te llevas el <strong>{pct}%</strong> de todo lo que factures.{ej.tipo === "incompleto" ? <> Te falta rellenar los dos datos del incentivo para que cuente.</> : cfg.incentivo === "bono" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te dan <strong>{fmt0(num(cfg.bonoImporte))}</strong> de bono.</> : cfg.incentivo === "combustible" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te pagan el <strong>{num(cfg.pctCombustible)}%</strong> del combustible (con {fmt0(400)} de gasolina serían {fmt(ej.importe)}).</> : <> Sin extras por facturación.</>}</div>
-              </div>
-              <button className="saveBtn" onClick={() => setCfg({ ...DEFAULT_CFG })} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginBottom: 20 }}>Restaurar valores por defecto</button>
-            </>); })()}
-            {view === "periodo" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria } = rangeData; const atajos = [["Esta semana", weekStart(today), today], ["Últimos 7 días", shiftDays(today, -6), today], ["Este mes", monthStart(today), today]]; return (<>
-              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Elige el periodo</div>
-                <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
-                  {atajos.map(([lb, f, t]) => { const on = rangeFrom === f && rangeTo === t; return (
-                    <button key={lb} className="nb" onClick={() => { setRangeFrom(f); setRangeTo(t); }} style={{ flex: 1, padding: "9px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>{lb}</button>
-                  ); })}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <div><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>
-                  <div><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Hasta</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} /></div>
-                </div>
-              </div>
-              {(() => { const largo = daysBetween(lo, hi).length; const mover = (n) => { setRangeFrom(shiftDays(lo, n * largo)); setRangeTo(shiftDays(hi, n * largo)); }; const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }; return (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
-                  <button className="nb" onClick={() => mover(-1)} aria-label="Periodo anterior" style={flecha}>‹</button>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, textAlign: "center" }}>Del {dayMonth(lo)} al {dayMonth(hi)}<div style={{ fontSize: 11, color: C.t2, fontWeight: 600 }}>{diasTrabajados} {diasTrabajados === 1 ? "día trabajado" : "días trabajados"}</div></div>
-                  <button className="nb" onClick={() => mover(1)} aria-label="Periodo siguiente" style={flecha}>›</button>
-                </div>
-              ); })()}
-              {diasTrabajados === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin días registrados en este periodo.</div> : <>
-                <Hero total={totalFact} conductor={conductorMes} pct={pct} />
-                {(() => { const porDia = Object.fromEntries(rows.map((r) => [r.date, r.s.facturacion])); const cal = daysBetween(lo, hi); const tope = Math.max(1, ...cal.map((d) => porDia[d] || 0)); return (
-                  <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Facturación por día</div>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-                      {cal.map((d) => { const v = porDia[d] || 0; return (
-                        <div key={d} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, minWidth: 34, flexShrink: 0 }}>
-                          <div style={{ fontSize: 9, color: C.t3, fontWeight: 700, whiteSpace: "nowrap", height: 12 }}>{v > 0 ? Math.round(v) + "€" : ""}</div>
-                          <div style={{ height: 90, display: "flex", alignItems: "flex-end" }}><div style={{ width: 22, height: v > 0 ? Math.max(5, (v / tope) * 90) : 0, borderRadius: 5, background: `linear-gradient(180deg,${C.acc},${C.accDim})` }} /></div>
-                          <div style={{ fontSize: 11, fontWeight: 800, color: v > 0 ? C.t1 : C.t3 }}>{Number(d.slice(8))}</div>
-                          <div style={{ fontSize: 9, color: C.t3 }}>{weekday(d)}</div>
-                        </div>
-                      ); })}
-                    </div>
-                  </div>
-                ); })()}
-                <StatCard title="Resumen del periodo" items={[{ label: `📊 Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "💵 Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }]} />
-                <Balance value={diferenciaMes} sub="Balance del periodo seleccionado" />
-                <DayTable rows={rows} pct={pct} />
-              </>}
-            </>); })()}
-          </div>
-          <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)" }}>
-            {[["diario", "📋", "Diario"], ["combustible", "⛽", "Combustible"], ["mensual", "📊", "Mensual"], ["periodo", "📅", "Periodo"]].map(([v, ic, lb]) => (
-              <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
-                <span style={{ fontSize: 22 }}>{ic}</span>{lb}
-              </button>
-            ))}
-          </nav>
-        </div>
-      );
+  <div id="root"><div id="boot">Cargando…</div></div>
+  <script src="./vendor/react.production.min.js"></script>
+  <script src="./vendor/react-dom.production.min.js"></script>
+  <script src="./app.js"></script>
+  <script>
+    // The app updates itself: a new release is downloaded in the background and
+    // applied only when the driver taps the notice, never mid-entry.
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./sw.js").then(function (reg) {
+          function offer(worker) {
+            if (!worker) return;
+            window.tcApplyUpdate = function () { worker.postMessage({ type: "SKIP_WAITING" }); };
+            window.dispatchEvent(new CustomEvent("tc:update-ready"));
+          }
+          if (reg.waiting) offer(reg.waiting);
+          reg.addEventListener("updatefound", function () {
+            var nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener("statechange", function () {
+              if (nw.state === "installed" && navigator.serviceWorker.controller) offer(nw);
+            });
+          });
+        }).catch(function () { /* sin service worker la app sigue funcionando */ });
+
+        // On the very first visit the worker claims this page, which also fires
+        // controllerchange. Reloading there would wipe whatever is half typed,
+        // so only an actual update (there was already a controller) reloads.
+        var hadController = !!navigator.serviceWorker.controller;
+        var refreshing = false;
+        navigator.serviceWorker.addEventListener("controllerchange", function () {
+          if (!hadController || refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+      });
     }
-    ReactDOM.createRoot(document.getElementById("root")).render(<TaxiCuentas />);
   </script>
 </body>
 </html>

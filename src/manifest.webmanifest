@@ -1,0 +1,20 @@
+{
+  "name": "TaxiCuentas Pro",
+  "short_name": "TaxiCuentas",
+  "description": "Liquidaciones diarias y mensuales para conductores de taxi y VTC. Calcula tu parte, lo que cobra la empresa y el efectivo que llevas encima.",
+  "lang": "es-ES",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "taxicuentas",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6fa",
+  "theme_color": "#f5f6fa",
+  "categories": ["finance", "business", "productivity"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
