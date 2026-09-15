@@ -29,4 +29,4 @@ await writeFile("sw.js", sw.replace(/__APP_VERSION__/g, VERSION));
 const manifest = JSON.parse(await readFile("src/manifest.webmanifest", "utf8"));
 await writeFile("manifest.webmanifest", JSON.stringify(manifest, null, 2) + "\n");
 
-console.log(`TaxiCuentas ${VERSION} · app.js ${(code.length / 1024).toFixed(1)} KB`);
+console.log(`TXpro ${VERSION} · app.js ${(code.length / 1024).toFixed(1)} KB`);

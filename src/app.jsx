@@ -30,22 +30,27 @@ const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob
 const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
 const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
-const TCLogo = ({ size = 52 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" aria-label="TaxiCuentas" role="img" style={{ display: "block", flexShrink: 0, filter: "drop-shadow(0 2px 7px rgba(30,34,54,0.20))" }}>
+const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
+const Mono = ({ color }) => (
+  <text x="50" y="62" textAnchor="middle" fill={color} fontFamily="'DM Sans', system-ui, sans-serif" fontSize="41" fontWeight="800" letterSpacing="-2">TX</text>
+);
+const TXLogo = ({ size = 52 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" aria-label="TXpro" role="img" style={{ display: "block", flexShrink: 0, filter: "drop-shadow(0 2px 7px rgba(30,34,54,0.20))" }}>
     <defs>
-      <clipPath id="tcTile"><rect width="100" height="100" rx="23" /></clipPath>
-      <clipPath id="tcBand"><path d="M0 77 L100 27 L100 55 L0 105 Z" /></clipPath>
-      <mask id="tcMask"><rect width="100" height="100" fill="#fff" /><path d="M0 77 L100 27 L100 55 L0 105 Z" fill="#000" /></mask>
+      <clipPath id="txTile"><rect width="100" height="100" rx="23" /></clipPath>
+      <clipPath id="txBand"><path d={BANDA} /></clipPath>
+      <mask id="txMask"><rect width="100" height="100" fill="#fff" /><path d={BANDA} fill="#000" /></mask>
     </defs>
-    <g clipPath="url(#tcTile)">
+    <g clipPath="url(#txTile)">
       <rect width="100" height="100" fill="#FFFFFF" />
-      <path d="M0 77 L100 27 L100 55 L0 105 Z" fill="#D8232A" />
-      <g mask="url(#tcMask)"><path d="M69.1 26.9 A27 27 0 1 0 69.1 65.1" fill="none" stroke="#D8232A" strokeWidth="9.5" strokeLinecap="round" /><rect x="35" y="33.5" width="29" height="8.5" rx="4.25" fill="#D8232A" /><rect x="45.75" y="33.5" width="8.5" height="30.5" rx="4.25" fill="#D8232A" /></g>
-      <g clipPath="url(#tcBand)"><path d="M69.1 26.9 A27 27 0 1 0 69.1 65.1" fill="none" stroke="#FFFFFF" strokeWidth="9.5" strokeLinecap="round" /><rect x="35" y="33.5" width="29" height="8.5" rx="4.25" fill="#FFFFFF" /><rect x="45.75" y="33.5" width="8.5" height="30.5" rx="4.25" fill="#FFFFFF" /></g>
+      <path d={BANDA} fill="#D8232A" />
+      <g mask="url(#txMask)"><Mono color="#D8232A" /></g>
+      <g clipPath="url(#txBand)"><Mono color="#FFFFFF" /></g>
       <rect x="0.7" y="0.7" width="98.6" height="98.6" rx="22.3" fill="none" stroke="rgba(21,23,31,0.15)" strokeWidth="1.4" />
     </g>
   </svg>
 );
+
 const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ flexShrink: 0, display: "block" }}>
     <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
@@ -98,7 +103,7 @@ const DayTable = ({ rows, pct }) => (
     <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
   </div>
 );
-function TaxiCuentas() {
+function TXpro() {
   const [days, setDays] = useState(loadDays);
   const [view, setView] = useState("diario");
   const [editDate, setEditDate] = useState(today);
@@ -133,9 +138,9 @@ function TaxiCuentas() {
   const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; return summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct); }, [days, rangeFrom, rangeTo, pct]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
   const exportarCopia = async () => {
-    const payload = { app: "taxicuentas", formato: 1, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, fuel: fuelEntries, cfg };
+    const payload = { app: "txpro", formato: 1, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, fuel: fuelEntries, cfg };
     const texto = JSON.stringify(payload, null, 2);
-    const nombre = `taxicuentas-${todayStr()}.json`;
+    const nombre = `txpro-${todayStr()}.json`;
     try {
       const file = new File([texto], nombre, { type: "application/json" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -158,8 +163,8 @@ function TaxiCuentas() {
     if (!file) return;
     try {
       const datos = JSON.parse(await file.text());
-      if (!datos || datos.app !== "taxicuentas" || typeof datos.days !== "object" || datos.days === null) {
-        setCopiaMsg("Ese archivo no es una copia de TaxiCuentas.");
+      if (!datos || !["txpro", "taxicuentas"].includes(datos.app) || typeof datos.days !== "object" || datos.days === null) {
+        setCopiaMsg("Ese archivo no es una copia de TXpro.");
         return;
       }
       const fechas = Object.keys(datos.days).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
@@ -192,8 +197,8 @@ function TaxiCuentas() {
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
       <div style={{ background: `linear-gradient(180deg, ${C.surf}, #eef0f7)`, borderBottom: `2px solid ${C.acc}40`, padding: "18px 20px 14px", paddingTop: "calc(18px + env(safe-area-inset-top, 0px))", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 14px rgba(30,34,54,0.08)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <TCLogo size={52} />
-          <div style={{ flex: 1 }}><div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1 }}>TaxiCuentas <span style={{ color: C.accDim }}>Pro</span></div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
+          <TXLogo size={52} />
+          <div style={{ flex: 1 }}><div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1 }}>TX<span style={{ color: C.accDim }}>pro</span></div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
           <button className="nb" onClick={() => setView(view === "ajustes" ? "diario" : "ajustes")} aria-label="Ajustes" style={{ background: view === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${view === "ajustes" ? C.acc : C.border}`, borderRadius: 12, width: 40, height: 40, fontSize: 19, cursor: "pointer", flexShrink: 0, lineHeight: 1 }}>⚙️</button>
         </div>
       </div>
@@ -344,7 +349,7 @@ function TaxiCuentas() {
       <button className="saveBtn" onClick={() => setCfg({ ...DEFAULT_CFG })} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar valores por defecto</button>
       <div style={{ textAlign: "center", fontSize: 11, color: C.t3, margin: "14px 0 20px" }}>
         <a href="./privacidad.html" target="_blank" rel="noopener" style={{ color: C.accDim, fontWeight: 700, textDecoration: "none", fontSize: 12 }}>Política de privacidad</a>
-        <div style={{ marginTop: 7 }}>TaxiCuentas Pro · versión {APP_VERSION}</div>
+        <div style={{ marginTop: 7 }}>TXpro · versión {APP_VERSION}</div>
         <div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div>
       </div>
         </>); })()}
@@ -401,4 +406,4 @@ function TaxiCuentas() {
     </div>
   );
 }
-ReactDOM.createRoot(document.getElementById("root")).render(<TaxiCuentas />);
+ReactDOM.createRoot(document.getElementById("root")).render(<TXpro />);
