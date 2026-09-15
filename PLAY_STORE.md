@@ -30,7 +30,78 @@ usándola públicamente desde 2016.
 
 ---
 
-## 1. Cuenta de desarrollador
+## 1. El dominio: `txpro.app`
+
+El dominio está comprado en Porkbun. La app se sirve desde GitHub Pages, así que
+hay que apuntar uno al otro. Son dos partes: **DNS en Porkbun** y **dominio en
+GitHub**.
+
+`.app` es un dominio con **HTTPS obligatorio**: está en la lista HSTS que los
+navegadores llevan de fábrica, así que nadie podrá abrirlo por `http://` ni
+aunque lo escriba a mano. Para una app es justo lo que interesa.
+
+### 1.1 En Porkbun
+
+Entrar en el panel del dominio → **DNS Records**.
+
+**Primero, borrar lo que trae puesto.** Porkbun añade por su cuenta un registro
+`ALIAS` (y a veces un `CNAME` de `www`) apuntando a su página de aparcamiento.
+Mientras estén ahí, los registros nuevos no surten efecto. Hay que eliminarlos.
+
+Después, crear estos **cuatro registros A**, todos con el host vacío (la raíz):
+
+| Tipo | Host | Responde a | TTL |
+| --- | --- | --- | --- |
+| A | *(vacío)* | `185.199.108.153` | 600 |
+| A | *(vacío)* | `185.199.109.153` | 600 |
+| A | *(vacío)* | `185.199.110.153` | 600 |
+| A | *(vacío)* | `185.199.111.153` | 600 |
+
+Son las cuatro máquinas de GitHub Pages; se ponen las cuatro para que si una
+falla la app siga abriendo.
+
+Y uno más, para que `www.txpro.app` también lleve a la app:
+
+| Tipo | Host | Responde a | TTL |
+| --- | --- | --- | --- |
+| CNAME | `www` | `makrini199.github.io` | 600 |
+
+> Ese último valor **termina en punto o no según lo pida Porkbun**; si el panel
+> se queja, probar con `makrini199.github.io.`
+
+### 1.2 En GitHub
+
+El archivo `CNAME` de este repositorio ya contiene `txpro.app`. GitHub lo lee
+solo al desplegar, así que en cuanto esta rama se fusione en `main` el dominio
+queda configurado sin tocar nada más.
+
+Aun así conviene comprobarlo en **Settings → Pages** del repositorio:
+
+- *Custom domain* debe decir `txpro.app`.
+- Esperar a que salga el check verde de **DNS check successful** (desde unos
+  minutos hasta unas horas, según tarde el DNS en propagarse).
+- Cuando aparezca, marcar **Enforce HTTPS**. Si la casilla sale en gris, es que
+  el certificado todavía se está emitiendo: hay que volver al rato.
+
+### 1.3 Comprobar que funciona
+
+Cuando el DNS haya propagado, estas tres direcciones tienen que abrir:
+
+```
+https://txpro.app/
+https://txpro.app/privacidad.html
+https://txpro.app/.well-known/ok.txt
+```
+
+La tercera es la importante y es fácil pasarla por alto. GitHub Pages pasa los
+archivos por Jekyll, que **se salta las carpetas que empiezan por punto** — y la
+verificación de la app va justamente en `/.well-known/`. Por eso el repositorio
+lleva un archivo `.nojekyll` en la raíz, que desactiva ese filtro. Si
+`ok.txt` responde, la carpeta se está sirviendo y el paso 2.3 funcionará.
+
+---
+
+## 2. Cuenta de desarrollador
 
 - Alta en <https://play.google.com/console>: **25 $ una sola vez**.
 - Desde 2023 Google **verifica la identidad** del desarrollador (DNI y, si es
@@ -44,7 +115,7 @@ usándola públicamente desde 2016.
 
 ---
 
-## 2. Convertir la web en aplicación (TWA)
+## 3. Convertir la web en aplicación (TWA)
 
 La app ya cumple los requisitos de PWA instalable, así que se envuelve en una
 *Trusted Web Activity*: un contenedor de Android que abre la web a pantalla
@@ -53,40 +124,71 @@ completa, sin barra de navegador.
 La vía más simple, sin instalar nada:
 
 1. Ir a <https://www.pwabuilder.com>.
-2. Pegar la URL pública de la app.
+2. Pegar **`https://txpro.app`**. (Hacerlo cuando el dominio ya funcione: si se
+   genera el paquete apuntando a la dirección vieja de GitHub, después no se
+   puede cambiar sin rehacerlo.)
 3. Revisar el informe (debería salir en verde: manifest, service worker, iconos).
 4. **Package for stores → Android → Generate**.
-5. Descargar el paquete. Dentro vienen:
+5. Antes de generar, fijar el **nombre de paquete**: `com.txpro.cuentas`.
+   Esto **no se puede cambiar nunca más**; es la identidad de la app en Play.
+6. Descargar el paquete. Dentro vienen:
    - `app-release-bundle.aab` — esto es lo que se sube a Play.
    - `signing.keystore` y `signing-key-info.txt` — **la clave de firma**.
    - `assetlinks.json` — para vincular la web con la app.
 
-### ⚠️ La clave de firma
+### 3.1 ⚠️ La clave de firma
 
 `signing.keystore` y su contraseña son **irreemplazables**. Si se pierden, no se
 puede volver a actualizar la app nunca: habría que publicarla de cero con otro
 nombre de paquete y los usuarios tendrían que reinstalarla. Guardar una copia en
 sitio seguro y otra fuera del ordenador.
 
-### Vincular la web con la app
+### 3.2 Vincular la web con la app
 
-Para que la app abra sin barra de navegador, hay que subir el archivo
-`assetlinks.json` que genera PWABuilder a:
+Para que la app abra sin barra de direcciones, el dominio tiene que declarar a
+qué aplicación pertenece. Eso va en `/.well-known/assetlinks.json`, y este
+repositorio trae un guion que lo escribe:
+
+```bash
+npm run assetlinks -- HUELLA_DE_SUBIDA HUELLA_DE_PLAY
+```
+
+**Hacen falta las dos huellas SHA-256**, y aquí es donde falla casi todo el
+mundo:
+
+| Cuál | De dónde se saca |
+| --- | --- |
+| La de **subida** | `signing-key-info.txt`, dentro del paquete de PWABuilder |
+| La de **firma de Play** | Play Console → *Configuración → Integridad de la aplicación → Firma de apps* → «Huella digital del certificado SHA-256» |
+
+El motivo: al subir el `.aab`, Google vuelve a firmar la app con **su propia
+clave** antes de repartirla. La huella que llega a los móviles es la segunda, no
+la del keystore. Si solo se pone la primera, en el móvil de uno mismo funciona
+(porque ahí está instalada la versión firmada con la clave de subida) pero a
+todos los que la instalen desde Play les sale la barra de direcciones.
+
+La segunda huella no existe hasta haber subido el primer `.aab`, así que el
+orden real es: generar → subir a Play → copiar la huella de Play → ejecutar el
+guion con las dos → commit y push.
+
+Después, comprobar que responde:
 
 ```
-/.well-known/assetlinks.json
+https://txpro.app/.well-known/assetlinks.json
 ```
 
-En este repositorio eso significa crear la carpeta `.well-known/` en la raíz con
-ese archivo dentro, y volver a desplegar. Si este paso falta, la app funciona
-igual pero se ve la barra de direcciones arriba, y eso desmerece bastante.
+Y confirmar la verificación con la herramienta de Google:
 
-**Nombre de paquete sugerido:** `com.txpro.cuentas` (hay que fijarlo al generar
-el paquete; después no se puede cambiar).
+```
+https://developers.google.com/digital-asset-links/tools/generator
+```
+
+Si esto falta o está mal, la app funciona igual pero se ve la barra de
+direcciones arriba, y eso desmerece bastante.
 
 ---
 
-## 3. Ficha de Play Store
+## 4. Ficha de Play Store
 
 ### Nombre de la aplicación (máx. 30 caracteres)
 
@@ -119,9 +221,15 @@ porcentaje sobre la facturación y, si tu empresa da algún extra al llegar a
 cierto importe, lo configuras: un bono fijo en euros o un porcentaje del
 combustible. Los números son los tuyos.
 
+GASTOS QUE TE DEBEN
+Pinchazos, ITV, lavados, taller, multas. Apuntas lo que pagas de tu bolsillo y
+marcas lo que te devuelve la empresa; al cerrar el mes sabes exactamente cuánto
+te tienen que reembolsar, sin discusiones.
+
 SABER CÓMO VAS
 - Resumen del mes con tu media diaria y el balance con la empresa.
 - Gráfico de facturación mes a mes, para ver la temporada de un vistazo.
+- Calendario del mes con lo facturado cada día y sitio para tus notas.
 - Cualquier periodo a medida: una semana, del 1 al 22, lo que necesites, con una
   barra por día.
 - Tabla día a día con el acumulado.
@@ -147,13 +255,14 @@ aparecen únicamente para identificar cada casilla.
 | Categoría | Finanzas (alternativa: Empresa) |
 | Etiquetas | taxi, VTC, cuentas, facturación, conductor |
 | Correo de contacto | `proyecto.txpro@gmail.com` |
-| Política de privacidad | `https://TU-DOMINIO/privacidad.html` |
+| Sitio web | `https://txpro.app` |
+| Política de privacidad | `https://txpro.app/privacidad.html` |
 | Clasificación de contenido | Para todos los públicos (el cuestionario sale limpio: sin violencia, sin compras, sin datos compartidos) |
 | Anuncios | **No**, la app no contiene anuncios |
 
 ---
 
-## 4. Formulario de seguridad de datos
+## 5. Formulario de seguridad de datos
 
 Google lo pregunta en Play Console y **hay que responderlo con exactitud**: una
 respuesta que no cuadre con lo que hace la app es motivo de retirada.
@@ -169,9 +278,12 @@ dispositivo y nunca salen de él. La app no lleva SDK de analítica, ni de
 publicidad, ni ningún recurso externo (ni siquiera la tipografía, que se sirve
 desde la propia app).
 
+> Si algún día se añade sincronización en la nube, **este formulario y la
+> política de privacidad hay que actualizarlos antes** de publicar esa versión.
+
 ---
 
-## 5. Material gráfico
+## 6. Material gráfico
 
 Todo listo en la carpeta `store/`:
 
@@ -192,7 +304,7 @@ porque si no las fechas salen en formato americano.
 
 ---
 
-## 6. Publicar una actualización
+## 7. Publicar una actualización
 
 1. Subir `version` en `package.json`.
 2. `npm run build`.
@@ -207,7 +319,12 @@ cada cambio de la aplicación.
 
 ## Antes de darle a publicar
 
-- [ ] `assetlinks.json` publicado en `/.well-known/` y comprobado.
+- [ ] `https://txpro.app/` abre la app, con candado y sin aviso de certificado.
+- [ ] `https://txpro.app/.well-known/ok.txt` responde (confirma que `.nojekyll`
+      hace su trabajo).
+- [ ] **Enforce HTTPS** marcado en Settings → Pages.
+- [ ] `assetlinks.json` publicado **con las dos huellas** y validado con la
+      herramienta de Google.
 - [ ] Copia de seguridad del `signing.keystore` en dos sitios distintos.
 - [ ] La app abierta en un Android real, instalada desde la pantalla de inicio,
       probando un día completo y una copia de seguridad.
