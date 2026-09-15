@@ -5,6 +5,7 @@ const CACHE = `taxicuentas-${VERSION}`;
 const SHELL = [
   "./",
   "./index.html",
+  "./privacidad.html",
   "./app.js",
   "./vendor/react.production.min.js",
   "./vendor/react-dom.production.min.js",
@@ -13,6 +14,9 @@ const SHELL = [
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
   "./icons/favicon.png",
+  "./fonts/dmsans.css",
+  "./fonts/dmsans-latin.woff2",
+  "./fonts/dmsans-latin-ext.woff2",
 ];
 
 self.addEventListener("install", (event) => {

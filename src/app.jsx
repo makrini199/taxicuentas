@@ -341,7 +341,11 @@ function TaxiCuentas() {
         </div>}
       </div>
       <button className="saveBtn" onClick={() => setCfg({ ...DEFAULT_CFG })} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar valores por defecto</button>
-      <div style={{ textAlign: "center", fontSize: 11, color: C.t3, margin: "14px 0 20px" }}>TaxiCuentas Pro · versión {APP_VERSION}<div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div></div>
+      <div style={{ textAlign: "center", fontSize: 11, color: C.t3, margin: "14px 0 20px" }}>
+        <a href="./privacidad.html" target="_blank" rel="noopener" style={{ color: C.accDim, fontWeight: 700, textDecoration: "none", fontSize: 12 }}>Política de privacidad</a>
+        <div style={{ marginTop: 7 }}>TaxiCuentas Pro · versión {APP_VERSION}</div>
+        <div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div>
+      </div>
         </>); })()}
         {view === "periodo" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria } = rangeData; const atajos = [["Esta semana", weekStart(today), today], ["Últimos 7 días", shiftDays(today, -6), today], ["Este mes", monthStart(today), today]]; return (<>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
