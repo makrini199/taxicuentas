@@ -17,7 +17,7 @@ const { code, warnings } = await transform(source, {
 });
 for (const w of warnings) console.warn("aviso:", w.text);
 
-await writeFile("app.js", `/* TaxiCuentas ${VERSION} — generado por build.mjs, no editar a mano */\n${code.replace(/__APP_VERSION__/g, VERSION)}`);
+await writeFile("app.js", `/* TXpro ${VERSION} — generado por build.mjs, no editar a mano */\n${code.replace(/__APP_VERSION__/g, VERSION)}`);
 
 await mkdir("vendor", { recursive: true });
 await copyFile("node_modules/react/umd/react.production.min.js", "vendor/react.production.min.js");
