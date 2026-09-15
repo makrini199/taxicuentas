@@ -67,7 +67,7 @@ Todo se guarda en `localStorage` del navegador:
 | Clave | Contenido |
 | --- | --- |
 | `tc_days` | Los días registrados. |
-| `tc_fuel` | Los repostajes. |
+| `tc_gastos` | Los gastos, el combustible incluido. |
 | `tc_cfg` | El acuerdo del conductor: porcentaje e incentivo. |
 | `tc_cfg_ok` | Si ya pasó por Ajustes, para no repetir el aviso inicial. |
 
