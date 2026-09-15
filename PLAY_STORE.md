@@ -291,16 +291,35 @@ Todo listo en la carpeta `store/`:
 | --- | --- | --- |
 | Icono | 512 × 512 PNG | `store/icon-512.png` |
 | Gráfico destacado | 1024 × 500 PNG | `store/feature-graphic.png` |
-| Capturas de teléfono | 2 a 8, mínimo 320 px de lado | `store/screenshots/*.jpg` (5, a 1080 × 1920) |
+| Capturas de teléfono | 2 a 8, mínimo 320 px de lado | `store/screenshots/*.jpg` (7, a 1080 × 1920) |
 
-Las cinco capturas salen de la aplicación real, con **datos de ejemplo inventados**:
+Las siete capturas salen de la aplicación real, con **datos de ejemplo inventados**:
 no hay cifras de nadie ahí dentro. Están enmarcadas sobre fondo oscuro con un
 titular cada una, que es como se presentan las fichas cuidadas.
 
-Para regenerarlas si cambia la interfaz, los guiones están en el historial de la
-sesión: capturan la app servida en local a 360 × 640 con densidad 3 y luego las
-componen. Lo importante es mantener el navegador en español (`--lang=es-ES`),
-porque si no las fechas salen en formato americano.
+| Archivo | Qué enseña |
+| --- | --- |
+| `01-diario` | El formulario del día, una casilla por plataforma |
+| `02-calculo` | El cálculo: tu parte, la de la empresa y el efectivo |
+| `03-gastos` | Los gastos del mes y lo que la empresa debe devolver |
+| `04-calendario` | El mes coloreado por facturación |
+| `05-mensual` | El gráfico mes a mes y la liquidación |
+| `06-periodo` | Un periodo a medida con una barra por día |
+| `07-ajustes` | El porcentaje y el incentivo configurables |
+
+### Rehacerlas cuando cambie la interfaz
+
+```bash
+npm run build
+python3 -m http.server 8080    # en otra terminal
+npm run capturas
+```
+
+`scripts/capturas.mjs` siembra un mes y medio de trabajo inventado, fotografía
+cada pantalla a 360 × 640 con densidad 3 y las compone con su titular. El
+navegador va en español a propósito (`--lang=es-ES` más `LANG`/`LC_TIME`):
+si no, los campos de fecha se dibujan en formato americano y eso en una ficha
+española canta muchísimo.
 
 ---
 
