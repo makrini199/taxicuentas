@@ -259,10 +259,10 @@ function TXpro() {
           {fuelSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>Guardado</div>}
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo repostaje</div>
-            <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Mes</label>
-            <input type="month" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={fuelForm.date.slice(0, 7)} onChange={(e) => setFuelForm((f) => ({ ...f, date: e.target.value + "-01" }))} />
-            <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Importe total (€)</label>
-            <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inp, marginBottom: 14 }} value={fuelForm.importe} onChange={(e) => setFuelForm((f) => ({ ...f, importe: e.target.value }))} />
+            <label htmlFor="fuelMes" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Mes</label>
+            <input type="month" id="fuelMes" aria-label="Mes del repostaje" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 12 }} value={fuelForm.date.slice(0, 7)} onChange={(e) => setFuelForm((f) => ({ ...f, date: e.target.value + "-01" }))} />
+            <label htmlFor="fuelImporte" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Importe total (€)</label>
+            <input id="fuelImporte" aria-label="Importe total del repostaje" className="inp" type="number" min="0" step="0.01" placeholder="0.00" style={{ ...inp, marginBottom: 14 }} value={fuelForm.importe} onChange={(e) => setFuelForm((f) => ({ ...f, importe: e.target.value }))} />
             <button className="saveBtn" onClick={saveFuel} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar</button>
           </div>
           {(() => { const meses = [...new Set(fuelEntries.map((e) => monthKey(e.date)))].sort().reverse(); if (meses.length === 0) return <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin repostajes registrados.</div>; return meses.map((m) => (<div key={m} style={{ ...card, padding: 16, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Combustible</div><div style={{ fontSize: 14, fontWeight: 700, color: C.t1, marginTop: 2 }}>{monthLabel(m)}</div></div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><div style={{ fontSize: 20, fontWeight: 900, color: C.red }}>−{fmt(fuelByMonth[m])}</div><button onClick={() => setFuelEntries((prev) => prev.filter((e) => monthKey(e.date) !== m))} style={{ background: `${C.red}18`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "4px 9px", color: C.red, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✕</button></div></div>)); })()}
@@ -306,9 +306,9 @@ function TXpro() {
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Adapta la app a lo que te paga tu empresa. Se guarda en este móvil.</div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu porcentaje</div>
-            <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Qué % de la facturación te llevas</label>
+            <label htmlFor="cfgPct" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Qué % de la facturación te llevas</label>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <input className="inp" type="number" min="0" max="100" step="0.5" aria-label="Porcentaje del conductor" style={{ ...inp, flex: 1 }} value={cfg.pctConductor} onChange={(e) => set("pctConductor", e.target.value)} />
+              <input className="inp" type="number" min="0" max="100" step="0.5" id="cfgPct" aria-label="Porcentaje del conductor" style={{ ...inp, flex: 1 }} value={cfg.pctConductor} onChange={(e) => set("pctConductor", e.target.value)} />
               <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
             </div>
           </div>
@@ -320,15 +320,15 @@ function TXpro() {
               ); })}
             </div>
             {cfg.incentivo === "ninguno" ? <div style={{ fontSize: 12, color: C.t3 }}>Tu empresa no te da ningún extra por facturación.</div> : <>
-              <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>A partir de cuánto facturado al mes (€)</label>
-              <input className="inp" type="number" min="0" step="50" aria-label="Umbral de facturación" placeholder="0" style={{ ...inp, marginBottom: 12 }} value={cfg.umbral} onChange={(e) => set("umbral", e.target.value)} />
+              <label htmlFor="cfgUmbral" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>A partir de cuánto facturado al mes (€)</label>
+              <input className="inp" type="number" min="0" step="50" id="cfgUmbral" aria-label="Umbral de facturación" placeholder="0" style={{ ...inp, marginBottom: 12 }} value={cfg.umbral} onChange={(e) => set("umbral", e.target.value)} />
               {cfg.incentivo === "bono" ? <>
-                <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te dan de bono (€)</label>
-                <input className="inp" type="number" min="0" step="5" aria-label="Importe del bono" placeholder="0" style={inp} value={cfg.bonoImporte} onChange={(e) => set("bonoImporte", e.target.value)} />
+                <label htmlFor="cfgBono" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te dan de bono (€)</label>
+                <input className="inp" type="number" min="0" step="5" id="cfgBono" aria-label="Importe del bono" placeholder="0" style={inp} value={cfg.bonoImporte} onChange={(e) => set("bonoImporte", e.target.value)} />
               </> : <>
-                <label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te pagan este % del combustible</label>
+                <label htmlFor="cfgPctComb" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Te pagan este % del combustible</label>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <input className="inp" type="number" min="0" max="100" step="1" aria-label="Porcentaje del combustible" placeholder="0" style={{ ...inp, flex: 1 }} value={cfg.pctCombustible} onChange={(e) => set("pctCombustible", e.target.value)} />
+                  <input className="inp" type="number" min="0" max="100" step="1" id="cfgPctComb" aria-label="Porcentaje del combustible" placeholder="0" style={{ ...inp, flex: 1 }} value={cfg.pctCombustible} onChange={(e) => set("pctCombustible", e.target.value)} />
                   <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
                 </div>
               </>}
@@ -372,8 +372,8 @@ function TXpro() {
               ); })}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div style={{ minWidth: 0 }}><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>
-              <div style={{ minWidth: 0 }}><label style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Hasta</label><input type="date" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} /></div>
+              <div style={{ minWidth: 0 }}><label htmlFor="rangoDesde" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" id="rangoDesde" aria-label="Desde" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>
+              <div style={{ minWidth: 0 }}><label htmlFor="rangoHasta" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Hasta</label><input type="date" id="rangoHasta" aria-label="Hasta" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} /></div>
             </div>
           </div>
           {(() => { const largo = daysBetween(lo, hi).length; const mover = (n) => { setRangeFrom(shiftDays(lo, n * largo)); setRangeTo(shiftDays(hi, n * largo)); }; const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }; return (

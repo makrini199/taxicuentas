@@ -33,6 +33,22 @@ npm run build
 versión de `package.json` en `app.js` y en el nombre de la caché del service
 worker.
 
+## Comprobar antes de publicar
+
+```bash
+npm run build
+python3 -m http.server 8080    # en otra terminal
+npm run qa
+```
+
+`test/qa.js` recorre la app entera en un navegador de verdad: mete un día y
+comprueba las cifras, añade un repostaje, cambia el acuerdo, exporta y restaura
+una copia de seguridad, y verifica que todo sigue funcionando con la red
+cortada. Falla con código 1 si algo no cuadra.
+
+Si Playwright no encuentra navegador, se le puede indicar uno con
+`CHROMIUM_PATH=/ruta/al/chromium npm run qa`.
+
 ## Publicar una versión
 
 1. Subir el número de `version` en `package.json`.

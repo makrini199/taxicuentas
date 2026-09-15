@@ -4,10 +4,12 @@
   "private": true,
   "description": "Liquidaciones diarias y mensuales para conductores de taxi y VTC",
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "qa": "node test/qa.js"
   },
   "devDependencies": {
-    "esbuild": "0.24.0"
+    "esbuild": "0.24.0",
+    "playwright": "1.56.1"
   },
   "dependencies": {
     "react": "18.3.1",
