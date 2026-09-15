@@ -22,6 +22,7 @@ apuntas se queda en el navegador del propio móvil.
 | `.nojekyll` | Desactiva Jekyll, que si no se saltaría la carpeta `.well-known/`. |
 | `.well-known/` | Verificación del dominio para la app de Android. |
 | `scripts/` | Utilidades sueltas que no forman parte de la app. |
+| `store/` | Material gráfico de la ficha de Play Store. |
 
 Los archivos generados se suben al repositorio a propósito, para que GitHub
 Pages sirva la app sin necesidad de compilar nada en el servidor.
@@ -87,6 +88,15 @@ npm run assetlinks -- HUELLA_DE_SUBIDA HUELLA_DE_PLAY
 Escribe `.well-known/assetlinks.json` con las huellas SHA-256 de firma. Hacen
 falta las dos: la del `signing.keystore` y la que Google genera al volver a
 firmar la app. El detalle completo está en `PLAY_STORE.md`.
+
+## Capturas de la ficha
+
+```bash
+npm run capturas
+```
+
+Rehace las siete capturas de `store/screenshots/` a partir de la app servida en
+local, con datos de ejemplo inventados. Hay que tener el servidor levantado.
 
 ## Datos
 

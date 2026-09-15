@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node build.mjs",
     "qa": "node test/qa.js",
-    "assetlinks": "node scripts/assetlinks.mjs"
+    "assetlinks": "node scripts/assetlinks.mjs",
+    "capturas": "node scripts/capturas.mjs"
   },
   "devDependencies": {
     "esbuild": "0.24.0",
