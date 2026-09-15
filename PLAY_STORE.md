@@ -19,6 +19,31 @@ ficha de Play.
 
 ---
 
+## 0 bis. El nombre, ya comprobado
+
+Comprobado el 15 de septiembre de 2026, antes de fijar nada:
+
+| Dónde | Qué se buscó | Resultado |
+| --- | --- | --- |
+| Google Play | «TXpro» | Existe una app «Tx Pro» de **alarmas y seguridad**, otra categoría. Sin conflicto de los que Play rechaza. |
+| OEPM (España) | «TX pro» | Sin resultados. |
+| EUIPO (Unión Europea) | «TX Pro» | Marca **registrada** nº 015118805, pero en **clases 17 y 19**: aislantes y materiales de construcción. No alcanza al software. |
+
+Una marca protege los productos y servicios de las clases en que se registra.
+Una app es **clase 9** (software descargable) y, si algún día hay servicio en la
+nube, **clase 42**. Ninguna de las dos está tomada por esa marca.
+
+El nombre anterior, *TaxiCuentas*, se descartó porque ya hay una app publicada
+en Play con ese nombre exacto, la misma función y el mismo público. No estaba
+registrada como marca, pero esa coincidencia basta para que Play rechace la
+publicación, y además habría dejado la marca fuera del alcance: alguien llevaba
+usándola públicamente desde 2016.
+
+> **Si la app crece, conviene registrar TXpro en clase 9** (del orden de 150 €
+> por clase en la OEPM). Que exista esa marca en las clases 17 y 19 no lo impide.
+
+---
+
 ## 1. Cuenta de desarrollador
 
 - Alta en <https://play.google.com/console>: **25 $ una sola vez**.
