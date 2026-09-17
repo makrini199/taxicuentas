@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.txpro.cuentas",
+      "sha256_cert_fingerprints": [
+        "2C:BE:31:03:64:4C:92:E4:F8:E8:37:D3:9D:91:E7:7E:DE:0D:56:9F:E9:E2:13:04:E3:7E:21:67:D5:6C:2E:F4"
+      ]
+    }
+  }
+]
