@@ -7,7 +7,8 @@
       "namespace": "android_app",
       "package_name": "com.txpro.cuentas",
       "sha256_cert_fingerprints": [
-        "2C:BE:31:03:64:4C:92:E4:F8:E8:37:D3:9D:91:E7:7E:DE:0D:56:9F:E9:E2:13:04:E3:7E:21:67:D5:6C:2E:F4"
+        "2C:BE:31:03:64:4C:92:E4:F8:E8:37:D3:9D:91:E7:7E:DE:0D:56:9F:E9:E2:13:04:E3:7E:21:67:D5:6C:2E:F4",
+        "C6:7A:19:39:DF:7A:60:BF:5F:7B:5A:4C:02:AA:EF:26:82:2A:84:7D:59:38:8A:55:E4:CA:4B:80:46:CE:8C:63"
       ]
     }
   }
