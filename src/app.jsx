@@ -143,6 +143,28 @@ const EVENTOS_HORAS = 12;              // cada cuánto se vuelve a mirar
 const EVENTOS_MAX = 400;
 const EVENTOS_DIAS_MAX = 15;           // lo que dura una feria larga
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const ES_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+// "salida" es la ventana en que sale la gente, que es cuando hay trabajo:
+// "23:00-00:00", o solo "01:00" para decir "desde la una". "hora" es cuándo
+// empieza, para cuando no se sabe más.
+const leerSalida = (v) => {
+  if (typeof v !== "string") return null;
+  const [desde, hasta] = v.split(/\s*[-–]\s*/);
+  if (!ES_HORA.test(desde || "")) return null;
+  return { desde, hasta: ES_HORA.test(hasta || "") ? hasta : "" };
+};
+// Cada evento va en la noche en que pasa, así que lo de antes de las seis ya
+// es madrugada del día siguiente y se ordena detrás de lo de las 23:00.
+const minutosNoche = (h) => { const [hh, mm] = h.split(":").map(Number); return (hh < 6 ? hh + 24 : hh) * 60 + mm; };
+const ordenDelDia = (e) => { const h = (e.salida && e.salida.desde) || e.hora; return h ? minutosNoche(h) : -1; };
+const aLas = (h) => (h.startsWith("01:") ? "a la " : "a las ") + h;
+const textoHoras = (e) => {
+  const partes = [];
+  if (e.salida) partes.push(e.salida.hasta ? `Salida ${e.salida.desde} – ${e.salida.hasta}` : `Salida desde ${aLas(e.salida.desde).slice(2)}`);
+  if (e.hora) partes.push(`Empieza ${aLas(e.hora)}`);
+  if (e.salida && minutosNoche(e.salida.desde) >= 24 * 60) partes.push("ya de madrugada");
+  return partes.join(" · ");
+};
 // El archivo es nuestro, pero se lee como si no lo fuera: si algún día sale
 // mal generado, la app tiene que seguir abriendo igual y sin días inventados.
 const limpiarEventos = (crudo) => {
@@ -152,7 +174,7 @@ const limpiarEventos = (crudo) => {
     if (!e || typeof e !== "object") continue;
     if (!ES_FECHA.test(e.fecha) || typeof e.titulo !== "string" || !e.titulo.trim()) continue;
     const hasta = ES_FECHA.test(e.hasta) && e.hasta >= e.fecha ? e.hasta : e.fecha;
-    out.push({ fecha: e.fecha, hasta, titulo: String(e.titulo).slice(0, 60), lugar: e.lugar ? String(e.lugar).slice(0, 40) : "", nota: e.nota ? String(e.nota).slice(0, 160) : "" });
+    out.push({ fecha: e.fecha, hasta, titulo: String(e.titulo).slice(0, 60), lugar: e.lugar ? String(e.lugar).slice(0, 40) : "", nota: e.nota ? String(e.nota).slice(0, 160) : "", hora: ES_HORA.test(e.hora || "") ? e.hora : "", salida: leerSalida(e.salida) });
     if (out.length >= EVENTOS_MAX) break;
   }
   return { actualizado: ES_FECHA.test(crudo.actualizado) ? crudo.actualizado : "", eventos: out };
@@ -167,6 +189,7 @@ const indexarEventos = (lista) => {
       f = shiftDays(f, 1);
     }
   }
+  for (const f in mapa) mapa[f].sort((a, b) => ordenDelDia(a) - ordenDelDia(b));
   return mapa;
 };
 const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8b5cf6", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
@@ -272,7 +295,10 @@ function TXpro() {
         const limpio = limpiarEventos(crudo);
         if (!limpio || !vivo) return;
         setEventos(limpio);
-        try { localStorage.setItem(EVENTOS_KEY, JSON.stringify(limpio)); localStorage.setItem(EVENTOS_KEY + "_visto", JSON.stringify(Date.now())); } catch {}
+        // Se guarda tal cual llegó, no ya limpio: al abrir se vuelve a pasar por
+        // limpiarEventos, y lo limpio no sobrevive a una segunda limpieza (las
+        // horas dejan de ser texto y se perderían a partir del segundo día).
+        try { localStorage.setItem(EVENTOS_KEY, JSON.stringify(crudo)); localStorage.setItem(EVENTOS_KEY + "_visto", JSON.stringify(Date.now())); } catch {}
       })
       .catch(() => {});
     return () => { vivo = false; };
@@ -565,6 +591,7 @@ function TXpro() {
                   <div key={i} style={{ background: `${C.evento}12`, border: `1px solid ${C.evento}33`, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{e.titulo}</div>
                     {e.lugar && <div style={{ fontSize: 11.5, color: C.evento, fontWeight: 700, marginTop: 2 }}>{e.lugar}</div>}
+                    {(e.salida || e.hora) && <div style={{ fontSize: 12.5, color: C.t1, fontWeight: 800, marginTop: 4 }}>{textoHoras(e)}</div>}
                     {e.nota && <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.45, marginTop: 4 }}>{e.nota}</div>}
                   </div>
                 ))}
@@ -575,7 +602,7 @@ function TXpro() {
             )}
 
             {(() => {
-              const delMesEv = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha));
+              const delMesEv = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b));
               if (!delMesEv.length) return null;
               return (
                 <div style={{ ...card, padding: 16, marginBottom: 12 }}>
@@ -585,7 +612,7 @@ function TXpro() {
                       <div style={{ fontSize: 12.5, fontWeight: 800, color: C.evento, minWidth: 38, flexShrink: 0 }}>{dayMonth(e.fecha)}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, color: C.t1, fontWeight: 700 }}>{e.titulo}</div>
-                        {e.lugar && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 1 }}>{e.lugar}</div>}
+                        {(e.lugar || e.salida || e.hora) && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 1 }}>{[e.lugar, e.salida ? `salida ${e.salida.desde}` : e.hora ? `a las ${e.hora}` : ""].filter(Boolean).join(" · ")}</div>}
                       </div>
                     </div>
                   ))}

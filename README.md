@@ -110,7 +110,7 @@ app de Play carga esta web por dentro, el cambio le llega a todo el mundo sin
 pasar por Google ni generar un `.aab` nuevo.
 
 ```json
-{ "fecha": "2026-11-21", "titulo": "Real Madrid · Celta", "lugar": "Bernabéu", "tipo": "futbol", "nota": "21:00. Salidas a partir de las 23:00." }
+{ "fecha": "2026-10-01", "titulo": "Placebo", "lugar": "Movistar Arena", "tipo": "concierto", "salida": "23:45-00:45" }
 ```
 
 | campo | |
@@ -120,7 +120,18 @@ pasar por Google ni generar un `.aab` nuevo.
 | `hasta` | opcional; para ferias y puentes marca todos los días del rango |
 | `lugar` | opcional, máx. 40 |
 | `tipo` | `fiesta`, `futbol`, `concierto`, `feria`, `ocio`, `deporte` |
-| `nota` | opcional, máx. 160; lo útil va aquí (hora, por dónde salen) |
+| `salida` | opcional; cuándo sale la gente, que es cuando hay trabajo: `23:00-00:00`, o solo `01:00` para «desde la una» |
+| `hora` | opcional; cuándo empieza, para cuando no se sabe la salida: `21:00` |
+| `nota` | opcional, máx. 160; lo útil que no cabe en lo demás (por dónde salen, cortes) |
+
+**Cada evento va en la noche en que pasa.** Un concierto que termina a las
+00:30 se apunta el día que empezó, con `"salida": "00:00-01:00"`, y la app
+avisa sola de que es de madrugada. Ojo al copiarlo de otras apps que lo fechan
+por la hora de salida: si allí pone «viernes 00:00», aquí va el **jueves**. Si
+no, el compañero mira el viernes y se presenta con un día de retraso.
+
+Dentro de cada día sale primero lo que dura todo el día (un puente, una tanda
+de conciertos) y luego lo que tiene hora, con lo de madrugada al final.
 
 Antes de subirlo:
 

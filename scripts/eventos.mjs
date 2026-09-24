@@ -6,6 +6,8 @@ import { readFile } from "node:fs/promises";
 
 const TIPOS = ["fiesta", "futbol", "concierto", "feria", "ocio", "deporte"];
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+const SALIDA = /^([01]\d|2[0-3]):[0-5]\d(\s*[-–]\s*([01]\d|2[0-3]):[0-5]\d)?$/;
 const MAX_DIAS = 15;   // lo que dura una feria larga; más es una errata
 const D = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
 
@@ -37,6 +39,8 @@ datos.eventos.forEach((e, i) => {
   if (e.titulo.length > 60) falla(i, `título de ${e.titulo.length} caracteres, no caben más de 60`);
   if (e.tipo !== undefined && !TIPOS.includes(e.tipo)) falla(i, `tipo "${e.tipo}" desconocido (${TIPOS.join(", ")})`);
   if (e.nota !== undefined && String(e.nota).length > 160) falla(i, "nota de más de 160 caracteres");
+  if (e.hora !== undefined && !HORA.test(e.hora)) falla(i, `hora "${e.hora}" inválida; va como 21:00`);
+  if (e.salida !== undefined && !SALIDA.test(e.salida)) falla(i, `salida "${e.salida}" inválida; va como 23:00-00:00, o solo 01:00`);
   if (e.hasta !== undefined) {
     if (!real(e.hasta)) return falla(i, `"hasta" inválido: ${JSON.stringify(e.hasta)}`);
     if (e.hasta < e.fecha) return falla(i, '"hasta" es anterior a "fecha"');
@@ -49,7 +53,7 @@ datos.eventos.forEach((e, i) => {
 });
 
 const hoy = new Date().toISOString().slice(0, 10);
-const futuros = datos.eventos.filter((e) => real(e?.fecha) && (e.hasta || e.fecha) >= hoy);
+const futuros = datos.eventos.filter((e) => real(e?.fecha) && (e.hasta || e.fecha) >= hoy).sort((a, b) => a.fecha.localeCompare(b.fecha));
 if (!futuros.length) avisos.push("no queda ningún evento por venir: el calendario ya no le dice nada a nadie");
 const ultimo = datos.eventos.map((e) => e?.hasta || e?.fecha).filter(real).sort().pop();
 if (ultimo && (Date.parse(ultimo) - Date.parse(hoy)) / 86400000 < 30) avisos.push(`el último evento es el ${ultimo}: quedan menos de 30 días de calendario`);
@@ -62,6 +66,7 @@ if (fallos.length) {
 console.log(`eventos.json · ${datos.eventos.length} eventos, ${futuros.length} por venir · actualizado el ${datos.actualizado}`);
 for (const e of futuros.slice(0, 40)) {
   const rango = e.hasta && e.hasta !== e.fecha ? ` → ${e.hasta}` : "";
-  console.log(`  ${e.fecha}${rango}  ${diaSemana(e.fecha).padEnd(10)} ${e.titulo}`);
+  const horas = e.salida ? `  · salida ${e.salida}` : e.hora ? `  · a las ${e.hora}` : "";
+  console.log(`  ${e.fecha}${rango}  ${diaSemana(e.fecha).padEnd(10)} ${e.titulo}${horas}`);
 }
 for (const a of avisos) console.log("\naviso: " + a);
