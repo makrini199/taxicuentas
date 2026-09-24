@@ -130,7 +130,46 @@ const enAppInstalada = () => {
 const esAndroid = () => { try { return /Android/i.test(navigator.userAgent || ""); } catch { return false; } };
 const avisoPlaySilenciado = () => { const t = loadStorage(AVISO_PLAY_KEY, 0); return typeof t === "number" && Date.now() - t < AVISO_PLAY_DIAS * 86400000; };
 const tocaAvisarDePlay = () => esAndroid() && !enAppInstalada() && !avisoPlaySilenciado();
-const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
+
+// LOS DÍAS FUERTES DE MADRID
+//
+// eventos.json va en el mismo sitio que la app, así que no hay API, ni clave
+// que se pueda robar del código, ni servidor que pagar, y sin cobertura sigue
+// valiendo lo último que se bajó. Para cambiar el calendario basta con subir
+// el archivo: como la app de Play carga esta web por dentro, le llega a todo
+// el mundo sin pasar por Google.
+const EVENTOS_KEY = "tc_eventos";
+const EVENTOS_HORAS = 12;              // cada cuánto se vuelve a mirar
+const EVENTOS_MAX = 400;
+const EVENTOS_DIAS_MAX = 15;           // lo que dura una feria larga
+const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+// El archivo es nuestro, pero se lee como si no lo fuera: si algún día sale
+// mal generado, la app tiene que seguir abriendo igual y sin días inventados.
+const limpiarEventos = (crudo) => {
+  if (!crudo || !Array.isArray(crudo.eventos)) return null;
+  const out = [];
+  for (const e of crudo.eventos) {
+    if (!e || typeof e !== "object") continue;
+    if (!ES_FECHA.test(e.fecha) || typeof e.titulo !== "string" || !e.titulo.trim()) continue;
+    const hasta = ES_FECHA.test(e.hasta) && e.hasta >= e.fecha ? e.hasta : e.fecha;
+    out.push({ fecha: e.fecha, hasta, titulo: String(e.titulo).slice(0, 60), lugar: e.lugar ? String(e.lugar).slice(0, 40) : "", nota: e.nota ? String(e.nota).slice(0, 160) : "" });
+    if (out.length >= EVENTOS_MAX) break;
+  }
+  return { actualizado: ES_FECHA.test(crudo.actualizado) ? crudo.actualizado : "", eventos: out };
+};
+// Un día puede tener varias cosas, y una feria ocupa varios días seguidos.
+const indexarEventos = (lista) => {
+  const mapa = {};
+  for (const e of lista) {
+    let f = e.fecha;
+    for (let i = 0; i < EVENTOS_DIAS_MAX && f <= e.hasta; i++) {
+      (mapa[f] = mapa[f] || []).push(e);
+      f = shiftDays(f, 1);
+    }
+  }
+  return mapa;
+};
+const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8b5cf6", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
 const Mono = ({ color }) => (
@@ -220,6 +259,25 @@ function TXpro() {
   const [copiaMsg, setCopiaMsg] = useState("");
   const [hayUpdate, setHayUpdate] = useState(false);
   const [avisarPlay, setAvisarPlay] = useState(tocaAvisarDePlay);
+  const [eventos, setEventos] = useState(() => limpiarEventos(loadStorage(EVENTOS_KEY, null)) || { actualizado: "", eventos: [] });
+  // Lo guardado se pinta ya; la red solo sirve para refrescarlo. Si falla, no
+  // pasa nada: el conductor sigue viendo el último calendario que le llegó.
+  useEffect(() => {
+    const visto = loadStorage(EVENTOS_KEY + "_visto", 0);
+    if (typeof visto === "number" && Date.now() - visto < EVENTOS_HORAS * 3600000) return;
+    let vivo = true;
+    fetch("./eventos.json", { cache: "no-cache" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((crudo) => {
+        const limpio = limpiarEventos(crudo);
+        if (!limpio || !vivo) return;
+        setEventos(limpio);
+        try { localStorage.setItem(EVENTOS_KEY, JSON.stringify(limpio)); localStorage.setItem(EVENTOS_KEY + "_visto", JSON.stringify(Date.now())); } catch {}
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  const eventosPorDia = useMemo(() => indexarEventos(eventos.eventos), [eventos]);
   const cerrarAvisoPlay = () => { setAvisarPlay(false); try { localStorage.setItem(AVISO_PLAY_KEY, JSON.stringify(Date.now())); } catch {} };
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
@@ -479,7 +537,7 @@ function TXpro() {
                   const elegido = f === sel;
                   const intensidad = fact > 0 ? 0.18 + 0.55 * (fact / tope) : 0;
                   return (
-                    <button key={f} className="nb" onClick={() => setCalDia(f)} aria-label={`${f}${fact > 0 ? `, ${fmt(fact)}` : ", sin datos"}`} style={{
+                    <button key={f} className="nb" onClick={() => setCalDia(f)} aria-label={`${f}${fact > 0 ? `, ${fmt(fact)}` : ", sin datos"}${eventosPorDia[f] ? `, ${eventosPorDia[f].map((e) => e.titulo).join(", ")}` : ""}`} style={{
                       aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", padding: 2,
                       border: elegido ? `2px solid ${C.accDim}` : esHoy ? `1.5px solid ${C.acc}` : `1px solid ${C.border}`,
                       background: fact > 0 ? `rgba(240,192,64,${intensidad})` : C.surf,
@@ -488,6 +546,7 @@ function TXpro() {
                       <span style={{ fontSize: 12.5, fontWeight: esHoy || elegido ? 900 : 600, color: fact > 0 ? C.t1 : C.t3 }}>{Number(f.slice(8))}</span>
                       {fact > 0 && <span style={{ fontSize: 8.5, fontWeight: 700, color: C.accDim, lineHeight: 1 }}>{Math.round(fact)}</span>}
                       {notas[f] && <span style={{ position: "absolute", top: 3, right: 3, width: 5, height: 5, borderRadius: "50%", background: C.blue }} />}
+                      {eventosPorDia[f] && <span style={{ position: "absolute", top: 3, left: 3, width: 5, height: 5, borderRadius: "50%", background: C.evento }} />}
                     </button>
                   );
                 })}
@@ -502,12 +561,37 @@ function TXpro() {
                     : <div style={{ fontSize: 12.5, color: C.t3 }}>Sin datos</div>}
                 </div>
                 {datosSel && <div style={{ fontSize: 12.5, color: C.t2, marginBottom: 12 }}>{pct}% para ti: <strong style={{ color: C.t1 }}>{fmt(datosSel.conductor50)}</strong> · efectivo: <strong style={{ color: C.blue }}>{fmt(datosSel.facturacion - datosSel.cobradoEmpresa)}</strong></div>}
+                {(eventosPorDia[sel] || []).map((e, i) => (
+                  <div key={i} style={{ background: `${C.evento}12`, border: `1px solid ${C.evento}33`, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{e.titulo}</div>
+                    {e.lugar && <div style={{ fontSize: 11.5, color: C.evento, fontWeight: 700, marginTop: 2 }}>{e.lugar}</div>}
+                    {e.nota && <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.45, marginTop: 4 }}>{e.nota}</div>}
+                  </div>
+                ))}
                 <label htmlFor="calNota" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Nota del día</label>
                 <input id="calNota" aria-label="Nota del día" className="inp" type="text" maxLength="120" placeholder="Concierto, feria, día libre…" style={{ ...inp, fontSize: 14, fontWeight: 500, marginBottom: 12 }} value={notas[sel] || ""} onChange={(e) => ponerNota(sel, e.target.value)} />
                 <button className="saveBtn" onClick={() => { changeDate(sel); setView("diario"); }} style={{ width: "100%", padding: 11, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{datosSel ? "Editar este día" : "Apuntar este día"}</button>
               </div>
             )}
 
+            {(() => {
+              const delMesEv = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha));
+              if (!delMesEv.length) return null;
+              return (
+                <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Días fuertes del mes</div>
+                  {delMesEv.map((e, i) => (
+                    <div key={i} onClick={() => { setCalDia(e.fecha); if (monthKey(e.fecha) !== calMes) setCalMes(monthKey(e.fecha)); }} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i === delMesEv.length - 1 ? "none" : `1px solid ${C.border}44`, cursor: "pointer" }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: C.evento, minWidth: 38, flexShrink: 0 }}>{dayMonth(e.fecha)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: C.t1, fontWeight: 700 }}>{e.titulo}</div>
+                        {e.lugar && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 1 }}>{e.lugar}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             {(() => { const conNota = Object.keys(notas).filter((f) => monthKey(f) === calMes).sort(); if (!conNota.length) return null; return (
               <div style={{ ...card, padding: 16, marginBottom: 20 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Notas del mes</div>

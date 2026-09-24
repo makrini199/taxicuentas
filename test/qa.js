@@ -181,6 +181,71 @@ const { chromium } = require('playwright');
   comprobar('política accesible sin red', polOk === 'Política de privacidad');
   await ctx.setOffline(false);
 
+  console.log('\n— DÍAS FUERTES DE MADRID —');
+  await p.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await p.waitForSelector('text=INGRESOS DEL DÍA');
+  await p.getByRole('button', { name: /Calendario/ }).click();
+  await p.waitForTimeout(800);
+  // El calendario arranca en el mes de hoy; hay que plantarse en diciembre.
+  const irAlMes = async (ym) => {
+    for (let i = 0; i < 24; i++) {
+      const cab = await p.locator('body').innerText();
+      if (new RegExp(ym, 'i').test(cab)) return true;
+      await p.getByLabel('Mes siguiente').click();
+      await p.waitForTimeout(200);
+    }
+    return false;
+  };
+  comprobar('se llega a diciembre', await irAlMes('diciembre de 2026'));
+  const dic = await p.locator('body').innerText();
+  comprobar('lista los días fuertes del mes', /d[ÍI]as fuertes del mes/i.test(dic));
+  comprobar('sale Nochevieja', dic.includes('Nochevieja'));
+  comprobar('sale el puente de diciembre', /Puente de la Constituci/.test(dic));
+  await p.getByText('Nochevieja').first().click();
+  await p.waitForTimeout(400);
+  comprobar('al pulsarlo cuenta lo que hay', (await p.locator('body').innerText()).includes('La noche del año'));
+
+  // Una feria ocupa varios días: el puente va del 5 al 8, y el 7 no está escrito
+  // en ninguna parte del archivo, sale de abrir el rango.
+  await p.getByRole('button', { name: /^2026-12-07/ }).click();
+  await p.waitForTimeout(400);
+  comprobar('un rango marca también los días de en medio', (await p.locator('body').innerText()).includes('Puente de la Constitución'));
+
+  const guardado = await p.evaluate(() => localStorage.getItem('tc_eventos'));
+  comprobar('el calendario queda guardado en el móvil', !!guardado && guardado.includes('Nochevieja'));
+
+  console.log('\n— EL CALENDARIO NUNCA PUEDE TIRAR LA APP —');
+  // Si algún día se sube un eventos.json mal hecho, la app tiene que abrir
+  // igual y sin inventarse días. Se prueba sirviendo basura a propósito.
+  const roto = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES' });
+  await roto.route('**/eventos.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ eventos: [{ fecha: 'mañana', titulo: 7 }, { titulo: 'sin fecha' }, 'ni siquiera es un objeto', null] }) }));
+  const pr = await roto.newPage();
+  const errRoto = [];
+  pr.on('pageerror', (e) => errRoto.push(e.message));
+  await pr.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  const abreRoto = await pr.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('la app abre con el calendario roto', abreRoto);
+  await pr.getByRole('button', { name: /Calendario/ }).click();
+  await pr.waitForTimeout(600);
+  comprobar('y no se inventa ningún día', !/d[ÍI]as fuertes del mes/i.test(await pr.locator('body').innerText()));
+  comprobar('sin reventar por dentro', errRoto.length === 0, errRoto.join(' | '));
+  await roto.close();
+
+  // Y si no hay red, vale lo último que se bajó.
+  const sinRed = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES' });
+  const ps = await sinRed.newPage();
+  await ps.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await ps.waitForSelector('text=INGRESOS DEL DÍA');
+  await ps.waitForTimeout(1200);
+  await sinRed.setOffline(true);
+  await ps.reload({ waitUntil: 'load' });
+  await ps.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 });
+  await ps.getByRole('button', { name: /Calendario/ }).click();
+  await ps.waitForTimeout(600);
+  for (let i = 0; i < 24 && !/diciembre de 2026/i.test(await ps.locator('body').innerText()); i++) { await ps.getByLabel('Mes siguiente').click(); await ps.waitForTimeout(150); }
+  comprobar('los días fuertes siguen ahí sin cobertura', (await ps.locator('body').innerText()).includes('Nochevieja'));
+  await sinRed.close();
+
   console.log('\n— AVISO DE INSTALAR LA APP —');
   // Solo debe salir a quien esté en la web desde Android. Ni en la app ya
   // instalada, ni en iPhone (allí no hay nada que bajar de Play Store).

@@ -1,0 +1,21 @@
+{
+  "actualizado": "2026-09-24",
+  "aviso": "Días fuertes en Madrid. Se actualiza subiendo este archivo: a todo el mundo le llega solo, sin pasar por Google. Comprobar el formato con: npm run eventos",
+  "eventos": [
+    { "fecha": "2026-10-10", "hasta": "2026-10-12", "titulo": "Puente del Pilar", "lugar": "Madrid", "tipo": "fiesta", "nota": "Tres días. El lunes 12 es festivo nacional." },
+    { "fecha": "2026-10-31", "titulo": "Halloween", "lugar": "Madrid", "tipo": "ocio", "nota": "Cae en sábado. Noche larga: salidas del centro y de las discotecas de la periferia hasta la madrugada." },
+
+    { "fecha": "2026-11-01", "titulo": "Todos los Santos", "lugar": "Madrid", "tipo": "fiesta", "nota": "Domingo. Mañana de cementerios, tarde floja." },
+    { "fecha": "2026-11-09", "titulo": "La Almudena, patrona de Madrid", "lugar": "Madrid capital", "tipo": "fiesta", "nota": "Festivo solo en la ciudad de Madrid: los de fuera trabajan y entran a la capital." },
+    { "fecha": "2026-11-27", "titulo": "Black Friday", "lugar": "Madrid", "tipo": "ocio", "nota": "Viernes. Centro y centros comerciales cargados todo el día." },
+
+    { "fecha": "2026-12-05", "hasta": "2026-12-08", "titulo": "Puente de la Constitución y la Inmaculada", "lugar": "Madrid", "tipo": "fiesta", "nota": "Cuatro días seguidos. Festivos el domingo 6 y el martes 8." },
+    { "fecha": "2026-12-24", "titulo": "Nochebuena", "lugar": "Madrid", "tipo": "fiesta", "nota": "Jueves. Fuerte de 19:00 a 22:00 y otra vez de madrugada. Muchos compañeros libran." },
+    { "fecha": "2026-12-25", "titulo": "Navidad", "lugar": "Madrid", "tipo": "fiesta", "nota": "Viernes. Comidas al mediodía." },
+    { "fecha": "2026-12-31", "titulo": "Nochevieja", "lugar": "Madrid", "tipo": "fiesta", "nota": "Jueves. La noche del año. Sol se corta antes de las campanadas; el grueso entra a partir de la 01:00." },
+
+    { "fecha": "2027-01-01", "titulo": "Año Nuevo", "lugar": "Madrid", "tipo": "fiesta", "nota": "Viernes. La madrugada es la buena; el día, muerto." },
+    { "fecha": "2027-01-05", "titulo": "Cabalgata de Reyes", "lugar": "Centro de Madrid", "tipo": "fiesta", "nota": "Martes. Cortes de calles en el centro desde la tarde." },
+    { "fecha": "2027-01-06", "titulo": "Reyes", "lugar": "Madrid", "tipo": "fiesta", "nota": "Miércoles. Comidas familiares al mediodía." }
+  ]
+}

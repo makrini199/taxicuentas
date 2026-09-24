@@ -10,6 +10,7 @@ const SHELL = [
   "./vendor/react.production.min.js",
   "./vendor/react-dom.production.min.js",
   "./manifest.webmanifest",
+  "./eventos.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
@@ -53,6 +54,24 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
         .catch(() => caches.match(request).then((hit) => hit || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  // El calendario de días fuertes cambia sin que cambie la versión de la app,
+  // así que aquí la caché va detrás: primero la red, y lo guardado solo como
+  // red de seguridad para el que esté sin cobertura.
+  if (new URL(request.url).pathname.endsWith("/eventos.json")) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(request).then((hit) => hit || Response.json({ eventos: [] })))
     );
     return;
   }
