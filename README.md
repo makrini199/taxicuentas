@@ -98,6 +98,72 @@ npm run capturas
 Rehace las siete capturas de `store/screenshots/` a partir de la app servida en
 local, con datos de ejemplo inventados. Hay que tener el servidor levantado.
 
+## Los días fuertes de Madrid
+
+`eventos.json` marca en el Calendario los días en que se hace caja: puentes,
+Nochevieja, Reyes, partidos, ferias, conciertos. No hay API ni servidor: el
+archivo se sirve desde el mismo sitio que la app, así que no hay clave que
+robar y sin cobertura sigue valiendo lo último que se bajó.
+
+**Para añadir fechas basta con editar el archivo y subirlo a `main`.** Como la
+app de Play carga esta web por dentro, el cambio le llega a todo el mundo sin
+pasar por Google ni generar un `.aab` nuevo.
+
+```json
+{ "fecha": "2026-10-01", "titulo": "Placebo", "lugar": "Movistar Arena", "tipo": "concierto", "salida": "23:45-00:45" }
+```
+
+| campo | |
+|---|---|
+| `fecha` | `AAAA-MM-DD`, obligatoria |
+| `titulo` | máx. 60 caracteres, obligatorio |
+| `hasta` | opcional; para ferias y puentes marca todos los días del rango |
+| `lugar` | opcional, máx. 40 |
+| `tipo` | `fiesta`, `futbol`, `concierto`, `feria`, `ocio`, `deporte` |
+| `salida` | opcional; cuándo sale la gente, que es cuando hay trabajo: `23:00-00:00`, o solo `01:00` para «desde la una» |
+| `hora` | opcional; cuándo empieza, para cuando no se sabe la salida: `21:00` |
+| `nota` | opcional, máx. 160; lo útil que no cabe en lo demás (por dónde salen, cortes) |
+
+**Cada evento va en la noche en que pasa.** Un concierto que termina a las
+00:30 se apunta el día que empezó, con `"salida": "00:00-01:00"`, y la app
+avisa sola de que es de madrugada. Ojo al copiarlo de otras apps que lo fechan
+por la hora de salida: si allí pone «viernes 00:00», aquí va el **jueves**. Si
+no, el compañero mira el viernes y se presenta con un día de retraso.
+
+Dentro de cada día sale primero lo que dura todo el día (un puente, una tanda
+de conciertos) y luego lo que tiene hora, con lo de madrugada al final.
+
+Antes de subirlo:
+
+```
+npm run eventos
+```
+
+Comprueba las fechas, los rangos absurdos, los repetidos y los campos que se
+pasan de largo, e imprime el calendario con el día de la semana de cada fecha
+para cazar el típico «el partido es el sábado» cuando cae en jueves. Avisa
+también cuando quedan menos de 30 días de calendario por delante.
+
+### De dónde salen las fechas
+
+Las que hay ahora son las que no dependen de nadie: festivos, puentes, La
+Almudena, Black Friday, la Navidad y Reyes. Las demás hay que mirarlas en la
+fuente y apuntarlas a mano:
+
+| | dónde |
+|---|---|
+| Real Madrid | realmadrid.com · calendario del primer equipo |
+| Atlético | atleticodemadrid.com |
+| Rayo, Getafe, Leganés | web de cada club |
+| Baloncesto y conciertos | movistararena.es · calendario |
+| Ferias | ifema.es/calendario |
+| Carreras | hipodromodelazarzuela.es |
+| Fabrik | fabrikoficial.com |
+| Fiestas de los pueblos | web del ayuntamiento de cada municipio |
+
+**No inventes una fecha que no hayas comprobado.** Un conductor que se planta
+en el Bernabéu porque la app decía que había partido no vuelve a fiarse.
+
 ## Datos
 
 Todo se guarda en `localStorage` del navegador:

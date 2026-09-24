@@ -1,13 +1,14 @@
 {
   "name": "txpro",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "private": true,
   "description": "Liquidaciones diarias y mensuales para conductores de taxi y VTC",
   "scripts": {
     "build": "node build.mjs",
     "qa": "node test/qa.js",
     "assetlinks": "node scripts/assetlinks.mjs",
-    "capturas": "node scripts/capturas.mjs"
+    "capturas": "node scripts/capturas.mjs",
+    "eventos": "node scripts/eventos.mjs"
   },
   "devDependencies": {
     "esbuild": "0.24.0",

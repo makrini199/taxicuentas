@@ -181,6 +181,121 @@ const { chromium } = require('playwright');
   comprobar('política accesible sin red', polOk === 'Política de privacidad');
   await ctx.setOffline(false);
 
+  console.log('\n— DÍAS FUERTES DE MADRID —');
+  await p.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await p.waitForSelector('text=INGRESOS DEL DÍA');
+  await p.getByRole('button', { name: /Calendario/ }).click();
+  await p.waitForTimeout(800);
+  // El calendario arranca en el mes de hoy; hay que plantarse en diciembre.
+  const irAlMes = async (ym) => {
+    for (let i = 0; i < 24; i++) {
+      const cab = await p.locator('body').innerText();
+      if (new RegExp(ym, 'i').test(cab)) return true;
+      await p.getByLabel('Mes siguiente').click();
+      await p.waitForTimeout(200);
+    }
+    return false;
+  };
+  comprobar('se llega a diciembre', await irAlMes('diciembre de 2026'));
+  const dic = await p.locator('body').innerText();
+  comprobar('lista los días fuertes del mes', /d[ÍI]as fuertes del mes/i.test(dic));
+  comprobar('sale Nochevieja', dic.includes('Nochevieja'));
+  comprobar('sale el puente de diciembre', /Puente de la Constituci/.test(dic));
+  await p.getByText('Nochevieja').first().click();
+  await p.waitForTimeout(400);
+  comprobar('al pulsarlo cuenta lo que hay', (await p.locator('body').innerText()).includes('La noche del año'));
+
+  // Una feria ocupa varios días: el puente va del 5 al 8, y el 7 no está escrito
+  // en ninguna parte del archivo, sale de abrir el rango.
+  await p.getByRole('button', { name: /^2026-12-07/ }).click();
+  await p.waitForTimeout(400);
+  comprobar('un rango marca también los días de en medio', (await p.locator('body').innerText()).includes('Puente de la Constitución'));
+
+  // Las horas: lo que importa es cuándo sale la gente. Y lo de pasada la
+  // medianoche se apunta la noche en que pasa, así que el jueves 1 tiene que
+  // enseñar primero Placebo (23:45) y luego Grupo Niche (00:00, de madrugada).
+  await p.getByLabel('Mes anterior').click(); await p.waitForTimeout(150);
+  await p.getByLabel('Mes anterior').click(); await p.waitForTimeout(150);
+  comprobar('se vuelve a octubre', /octubre de 2026/i.test(await p.locator('body').innerText()));
+  await p.getByRole('button', { name: /^2026-10-01/ }).click();
+  await p.waitForTimeout(400);
+  const jue = await p.locator('body').innerText();
+  comprobar('enseña la salida', jue.includes('Salida 23:45 – 00:45'));
+  comprobar('avisa de que es de madrugada', /Salida 00:00 – 01:00 · ya de madrugada/.test(jue));
+  comprobar('lo de las 00:00 va detrás de lo de las 23:45', jue.indexOf('Placebo') > -1 && jue.indexOf('Placebo') < jue.indexOf('Grupo Niche'));
+  // Un fin de semana de Shakira y un concierto el mismo viernes: primero lo
+  // que dura todo el fin de semana, luego lo que tiene hora.
+  await p.getByRole('button', { name: /^2026-10-02/ }).click();
+  await p.waitForTimeout(400);
+  const vie = await p.locator('body').innerText();
+  comprobar('lo de todo el día va primero', vie.indexOf('Shakira') > -1 && vie.indexOf('Shakira') < vie.indexOf('Evanescence'));
+
+  const guardado = await p.evaluate(() => localStorage.getItem('tc_eventos'));
+  comprobar('el calendario queda guardado en el móvil', !!guardado && guardado.includes('Nochevieja'));
+
+  console.log('\n— EL CALENDARIO NUNCA PUEDE TIRAR LA APP —');
+  // Si algún día se sube un eventos.json mal hecho, la app tiene que abrir
+  // igual y sin inventarse días. Se prueba sirviendo basura a propósito.
+  const roto = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES' });
+  await roto.route('**/eventos.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ eventos: [{ fecha: 'mañana', titulo: 7 }, { titulo: 'sin fecha' }, 'ni siquiera es un objeto', null] }) }));
+  const pr = await roto.newPage();
+  const errRoto = [];
+  pr.on('pageerror', (e) => errRoto.push(e.message));
+  await pr.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  const abreRoto = await pr.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('la app abre con el calendario roto', abreRoto);
+  await pr.getByRole('button', { name: /Calendario/ }).click();
+  await pr.waitForTimeout(600);
+  comprobar('y no se inventa ningún día', !/d[ÍI]as fuertes del mes/i.test(await pr.locator('body').innerText()));
+  comprobar('sin reventar por dentro', errRoto.length === 0, errRoto.join(' | '));
+  await roto.close();
+
+  // El orden dentro del día no puede depender de cómo esté escrito el archivo:
+  // se sirve al revés y aun así tiene que salir 23:45 antes que 00:00.
+  const reves = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES' });
+  await reves.route('**/eventos.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ actualizado: '2026-09-24', eventos: [
+    { fecha: '2026-10-01', titulo: 'Madrugada', salida: '00:30-01:30' },
+    { fecha: '2026-10-01', titulo: 'Noche', salida: '23:15-00:15' },
+    { fecha: '2026-10-01', titulo: 'Tarde', hora: '18:00' },
+    { fecha: '2026-10-01', titulo: 'Todo el día' },
+  ] }) }));
+  const pv = await reves.newPage();
+  const abrirJueves = async () => {
+    await pv.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+    await pv.waitForSelector('text=INGRESOS DEL DÍA');
+    await pv.waitForTimeout(700);
+    await pv.getByRole('button', { name: /Calendario/ }).click();
+    await pv.waitForTimeout(400);
+    for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pv.locator('body').innerText()); i++) { await pv.getByLabel('Mes siguiente').click(); await pv.waitForTimeout(120); }
+    await pv.getByRole('button', { name: /^2026-10-01/ }).click();
+    await pv.waitForTimeout(400);
+    return pv.locator('body').innerText();
+  };
+  const orden = (t) => ['Todo el día', 'Tarde', 'Noche', 'Madrugada'].map((x) => t.indexOf(x));
+  const enOrden = (t) => { const o = orden(t); return o.every((v) => v > -1) && o.every((v, i) => i === 0 || o[i - 1] < v); };
+  const primera = await abrirJueves();
+  comprobar('ordena por hora aunque el archivo venga al revés', enOrden(primera), orden(primera).join(' '));
+  comprobar('"hora" sola dice cuándo empieza', primera.includes('Empieza a las 18:00'));
+  // Segunda apertura: ya no hay descarga, sale de lo guardado en el móvil.
+  const segunda = await abrirJueves();
+  comprobar('las horas siguen al volver a abrir', segunda.includes('Salida 00:30 – 01:30 · ya de madrugada') && enOrden(segunda));
+  await reves.close();
+
+  // Y si no hay red, vale lo último que se bajó.
+  const sinRed = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES' });
+  const ps = await sinRed.newPage();
+  await ps.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await ps.waitForSelector('text=INGRESOS DEL DÍA');
+  await ps.waitForTimeout(1200);
+  await sinRed.setOffline(true);
+  await ps.reload({ waitUntil: 'load' });
+  await ps.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 });
+  await ps.getByRole('button', { name: /Calendario/ }).click();
+  await ps.waitForTimeout(600);
+  for (let i = 0; i < 24 && !/diciembre de 2026/i.test(await ps.locator('body').innerText()); i++) { await ps.getByLabel('Mes siguiente').click(); await ps.waitForTimeout(150); }
+  comprobar('los días fuertes siguen ahí sin cobertura', (await ps.locator('body').innerText()).includes('Nochevieja'));
+  await sinRed.close();
+
   console.log('\n— AVISO DE INSTALAR LA APP —');
   // Solo debe salir a quien esté en la web desde Android. Ni en la app ya
   // instalada, ni en iPhone (allí no hay nada que bajar de Play Store).
