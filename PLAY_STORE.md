@@ -374,6 +374,33 @@ cada cambio de la aplicación.
 
 ---
 
+## 8. El aviso para que instalen la app
+
+La web enseña un recuadro azul, *"Estás usando la versión web"*, con un botón
+que lleva a Play Store. Está para la gente que llega por el enlace de WhatsApp:
+WhatsApp abre las páginas en un navegador suyo, así que se quedan usando la web
+y nunca llegan a instalarse nada.
+
+Solo se pinta en Android, solo fuera de la app ya instalada, y al darle a
+"Más tarde" se calla siete días. Vive en `src/app.jsx`, en `PLAY_URL` y en las
+cuatro funciones que hay justo encima de esa constante.
+
+**Al pasar a producción hay que cambiar `PLAY_URL`.** Ahora apunta al alta de
+probadores, porque durante la prueba cerrada nadie puede instalar la app desde
+la ficha de la tienda sin haber aceptado antes la invitación:
+
+```js
+// durante la prueba cerrada
+const PLAY_URL = "https://play.google.com/apps/testing/com.txpro.cuentas";
+// cuando la app sea pública
+const PLAY_URL = "https://play.google.com/store/apps/details?id=com.txpro.cuentas";
+```
+
+El repaso de `npm run qa` comprueba las cuatro situaciones (web en Android, app
+instalada, iPhone y el "Más tarde"), así que si se rompe, salta.
+
+---
+
 ## Antes de darle a publicar
 
 - [ ] Identidad verificada en Play Console.

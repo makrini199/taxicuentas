@@ -181,6 +181,43 @@ const { chromium } = require('playwright');
   comprobar('política accesible sin red', polOk === 'Política de privacidad');
   await ctx.setOffline(false);
 
+  console.log('\n— AVISO DE INSTALAR LA APP —');
+  // Solo debe salir a quien esté en la web desde Android. Ni en la app ya
+  // instalada, ni en iPhone (allí no hay nada que bajar de Play Store).
+  const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+  const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const abrirComo = async (userAgent, initScript) => {
+    const c = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES', userAgent });
+    if (initScript) await c.addInitScript(initScript);
+    const pg = await c.newPage();
+    await pg.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+    await pg.waitForSelector('text=INGRESOS DEL DÍA');
+    return { c, pg };
+  };
+  const seVe = (pg) => pg.getByText('Estás usando la versión web').count().then((n) => n > 0);
+
+  const web = await abrirComo(ANDROID_UA);
+  comprobar('sale en la web desde Android', await seVe(web.pg));
+  const destino = await web.pg.getByRole('link', { name: 'Instalar la app' }).getAttribute('href');
+  comprobar('lleva al alta de probadores', destino === 'https://play.google.com/apps/testing/com.txpro.cuentas', destino);
+  await web.pg.getByRole('button', { name: 'Más tarde' }).click();
+  await web.pg.waitForTimeout(300);
+  comprobar('"Más tarde" lo cierra', !(await seVe(web.pg)));
+  await web.pg.reload({ waitUntil: 'load' });
+  await web.pg.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('y no vuelve al recargar', !(await seVe(web.pg)));
+  await web.c.close();
+
+  // La app instalada carga esta misma web por dentro: allí nunca debe salir.
+  const standalone = 'window.matchMedia = (q) => ({ matches: /display-mode: standalone/.test(q), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });';
+  const app = await abrirComo(ANDROID_UA, standalone);
+  comprobar('no sale dentro de la app instalada', !(await seVe(app.pg)));
+  await app.c.close();
+
+  const iphone = await abrirComo(IPHONE_UA);
+  comprobar('no sale en iPhone', !(await seVe(iphone.pg)));
+  await iphone.c.close();
+
   console.log('\n— RESULTADO —');
   console.log('errores de consola:', errores.length ? errores : 'ninguno');
   console.log('comprobaciones fallidas:', fallos.length ? fallos : 'ninguna');

@@ -102,6 +102,34 @@ const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(ke
 const hasData = (d) => !!d && typeof d === "object" && Object.values(d).some((v) => (Number(v) || 0) !== 0);
 const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob] of EFEC_TRIOS) { if (out[efec] === undefined) { const total = Number(out[fact]) || 0; const cobrado = out[oldCob] === undefined ? total : Number(out[oldCob]) || 0; out[efec] = Math.max(0, total - cobrado); } delete out[oldCob]; } return out; };
 const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
+
+// Mucha gente llega por el enlace que corre por WhatsApp y se queda usando la
+// web dentro del navegador que WhatsApp abre por su cuenta: sin icono en el
+// móvil y sin contar como instalación en Play Console. El aviso de abajo los
+// empuja a instalarse la app, y solo se pinta cuando toca.
+//
+// Mientras la app esté en prueba cerrada este enlace tiene que ser el de
+// alta de probadores: desde la ficha de la tienda no la pueden instalar si
+// antes no han aceptado la invitación. Al pasar a producción, cambiar por
+// https://play.google.com/store/apps/details?id=com.txpro.cuentas
+const PLAY_URL = "https://play.google.com/apps/testing/com.txpro.cuentas";
+const AVISO_PLAY_KEY = "tc_aviso_play";
+const AVISO_PLAY_DIAS = 7;
+// La app instalada carga esta misma web por dentro, así que hay que mirar tres
+// cosas: el modo de ventana (PWA y TWA), el standalone de Safari y el referrer
+// que Android pone al arrancar la app. Si cualquiera dice que sí, no es la web.
+const enAppInstalada = () => {
+  try {
+    if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+    if (window.navigator.standalone === true) return true;
+    if (typeof document.referrer === "string" && document.referrer.startsWith("android-app://")) return true;
+  } catch {}
+  return false;
+};
+// Solo en Android: en iPhone no hay nada que instalar desde Play Store.
+const esAndroid = () => { try { return /Android/i.test(navigator.userAgent || ""); } catch { return false; } };
+const avisoPlaySilenciado = () => { const t = loadStorage(AVISO_PLAY_KEY, 0); return typeof t === "number" && Date.now() - t < AVISO_PLAY_DIAS * 86400000; };
+const tocaAvisarDePlay = () => esAndroid() && !enAppInstalada() && !avisoPlaySilenciado();
 const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
@@ -191,6 +219,8 @@ function TXpro() {
   const [copia, setCopia] = useState(null);
   const [copiaMsg, setCopiaMsg] = useState("");
   const [hayUpdate, setHayUpdate] = useState(false);
+  const [avisarPlay, setAvisarPlay] = useState(tocaAvisarDePlay);
+  const cerrarAvisoPlay = () => { setAvisarPlay(false); try { localStorage.setItem(AVISO_PLAY_KEY, JSON.stringify(Date.now())); } catch {} };
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
   const marcarCfgOk = () => { setCfgOk(true); try { localStorage.setItem("tc_cfg_ok", "true"); } catch {} };
@@ -292,6 +322,14 @@ function TXpro() {
           <button className="nb" onClick={() => setView(view === "ajustes" ? "diario" : "ajustes")} aria-label="Ajustes" style={{ background: view === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${view === "ajustes" ? C.acc : C.border}`, borderRadius: 12, width: 40, height: 40, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: view === "ajustes" ? C.accDim : C.t2 }}><Icono name="ajustes" size={20} /></button>
         </div>
       </div>
+      {avisarPlay && <div style={{ margin: "16px 16px 0", background: `${C.blue}0f`, border: `1.5px solid ${C.blue}44`, borderRadius: 14, padding: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: C.t1, marginBottom: 4 }}>Estás usando la versión web</div>
+        <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Instálate la app y la tendrás con su icono en el móvil, sin la barra del navegador encima y disponible aunque te quedes sin cobertura.</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <a className="saveBtn" href={PLAY_URL} target="_blank" rel="noopener noreferrer" style={{ flex: 1, padding: 10, borderRadius: 10, background: C.blue, color: "#fff", fontWeight: 800, fontSize: 13, fontFamily: "inherit", textAlign: "center", textDecoration: "none" }}>Instalar la app</a>
+          <button className="nb" onClick={cerrarAvisoPlay} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Más tarde</button>
+        </div>
+      </div>}
       {hayUpdate && <div style={{ margin: "16px 16px 0", background: `${C.green}14`, border: `1.5px solid ${C.green}44`, borderRadius: 14, padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: C.t1 }}>Hay una versión nueva</div><div style={{ fontSize: 11.5, color: C.t2, marginTop: 2 }}>Guarda lo que tengas a medias antes de actualizar.</div></div>
         <button className="saveBtn" onClick={() => window.tcApplyUpdate && window.tcApplyUpdate()} style={{ padding: "9px 14px", borderRadius: 10, border: "none", background: C.green, color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>Actualizar</button>
