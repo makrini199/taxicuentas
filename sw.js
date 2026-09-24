@@ -1,6 +1,6 @@
 // TXpro service worker. The cache name carries the app version, so a new
 // release fetches everything fresh and the old cache is dropped on activate.
-const VERSION = "1.7.2";
+const VERSION = "1.8.0";
 const CACHE = `txpro-${VERSION}`;
 const SHELL = [
   "./",
