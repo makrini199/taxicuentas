@@ -1,4 +1,4 @@
-const { useState, useMemo, useEffect } = React;
+const { useState, useMemo, useEffect, useRef } = React;
 const APP_VERSION = "__APP_VERSION__";
 const fmt = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -68,7 +68,7 @@ const sumarGastos = (lista, desde, hasta) => lista.reduce((a, g) => {
   return a;
 }, { total: 0, reembolsable: 0, combustible: 0 });
 const finDeMes = (ym) => ym + "-31";
-const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
+const DEFAULT_CFG = { objetivos: { dia: "", semana: "", mes: "" }, pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
 // Deja la lista siempre completa y en orden: las cuatro de serie primero, con el
 // interruptor que tuviera cada una, y detrás las que haya añadido el conductor.
 // Quien nunca haya pasado por Ajustes las tiene las cuatro encendidas, que es
@@ -90,16 +90,33 @@ const normPlataformas = (lista) => {
   return [...deSerie, ...propias];
 };
 const nuevaPlataforma = (nombre, tipo) => { const key = "p" + Date.now().toString(36); return { key, cobKey: key + "b", nombre: nombre.trim().slice(0, 24), tipo: tipo === "cobrado" ? "cobrado" : "efectivo", base: false, activa: true }; };
-const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas) }; };
+// Objetivos de facturación de cada día, semana y mes. Se guardan con el acuerdo,
+// así que viajan en la copia de seguridad.
+const normObjetivos = (o) => Object.fromEntries(["dia", "semana", "mes"].map((k) => { const n = Number(o && o[k]); return [k, Number.isFinite(n) && n > 0 ? String(Math.round(n * 100) / 100) : ""]; }));
+const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas), objetivos: normObjetivos(g && g.objetivos) }; };
 const num = (v) => Number(v) || 0;
 const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
-const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
+const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; const jornada = { min: 0, diasConHoras: 0, ganadoConHoras: 0, carreras: 0, factConCarreras: 0, propinas: 0 };
+  entries.forEach(([, d], i) => { const s = rows[i].s; const min = minutosJornada(d); const prop = propinasDe(d); const car = carrerasDe(d); jornada.propinas += prop; if (car) { jornada.carreras += car; jornada.factConCarreras += s.facturacion; } if (min) { jornada.min += min; jornada.diasConHoras++; jornada.ganadoConHoras += s.conductor50 + prop; } });
+  return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0, jornada }; };
 const clavesDia = (plats) => ["taximetro", "visa", ...plats.flatMap((p) => [p.key, p.cobKey])];
 const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
 const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
 const today = todayStr();
 const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
-const hasData = (d) => !!d && typeof d === "object" && Object.values(d).some((v) => (Number(v) || 0) !== 0);
+// Cada casilla de dinero es una calculadora: "10,65+8,40" son 19,05. Así el que
+// apunta viaje a viaje va sumando sobre la marcha y el que mete el total del día
+// lo mete sin más. Acepta coma o punto, y un "-" para corregir un viaje mal puesto.
+const evalSuma = (v) => {
+  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
+  if (typeof v !== "string") return 0;
+  const partes = v.replace(/\s/g, "").replace(/,/g, ".").match(/[+-]?[^+-]+/g) || [];
+  const total = partes.reduce((a, t) => a + (parseFloat(t) || 0), 0);
+  return Math.round(total * 100) / 100;
+};
+const viajesDe = (v) => (String(v).replace(/\s/g, "").match(/[+-]?[^+-]+/g) || []).map((t, i) => { const menos = t[0] === "-"; const n = t.replace(/^[+-]/, "").replace(/\./g, ","); return i === 0 ? (menos ? `−${n}` : n) : `${menos ? "−" : "+"} ${n}`; }).join(" ");
+const limpiarCasilla = (v) => String(v).replace(/[^\d.,+\-]/g, "");
+const hasData = (d) => !!d && typeof d === "object" && (Object.values(d).some((v) => (Number(v) || 0) !== 0) || minutosJornada(d) > 0);
 const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob] of EFEC_TRIOS) { if (out[efec] === undefined) { const total = Number(out[fact]) || 0; const cobrado = out[oldCob] === undefined ? total : Number(out[oldCob]) || 0; out[efec] = Math.max(0, total - cobrado); } delete out[oldCob]; } return out; };
 const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
 
@@ -177,7 +194,18 @@ const limpiarEventos = (crudo) => {
     out.push({ fecha: e.fecha, hasta, titulo: String(e.titulo).slice(0, 60), lugar: e.lugar ? String(e.lugar).slice(0, 40) : "", nota: e.nota ? String(e.nota).slice(0, 160) : "", hora: ES_HORA.test(e.hora || "") ? e.hora : "", salida: leerSalida(e.salida) });
     if (out.length >= EVENTOS_MAX) break;
   }
-  return { actualizado: ES_FECHA.test(crudo.actualizado) ? crudo.actualizado : "", eventos: out };
+  return { actualizado: ES_FECHA.test(crudo.actualizado) ? crudo.actualizado : "", eventos: out, lugares: limpiarLugares(crudo.lugares) };
+};
+// Dónde está cada recinto, para el mapa. Lo que no cae dentro de la Comunidad
+// de Madrid (una errata, latitud y longitud al revés) se descarta sin más.
+const limpiarLugares = (l) => {
+  const out = {};
+  if (!l || typeof l !== "object" || Array.isArray(l)) return out;
+  for (const [n, c] of Object.entries(l)) {
+    if (Array.isArray(c) && c.length === 2 && c.every(Number.isFinite) && c[0] > 39.85 && c[0] < 41.2 && c[1] > -4.6 && c[1] < -3.0) out[String(n).slice(0, 40)] = [c[0], c[1]];
+    if (Object.keys(out).length >= 300) break;
+  }
+  return out;
 };
 // Un día puede tener varias cosas, y una feria ocupa varios días seguidos.
 const indexarEventos = (lista) => {
@@ -192,7 +220,29 @@ const indexarEventos = (lista) => {
   for (const f in mapa) mapa[f].sort((a, b) => ordenDelDia(a) - ordenDelDia(b));
   return mapa;
 };
-const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8b5cf6", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
+
+// LA JORNADA: a qué hora empieza y termina, cuántas carreras y las propinas.
+// Las propinas son del conductor enteras: no entran en la facturación ni en el
+// reparto con la empresa, así que calcDay no las ve y ningún balance cambia.
+const minutosDe = (h) => { const [hh, mm] = h.split(":").map(Number); return hh * 60 + mm; };
+// Si termina a una hora anterior a la de empezar es que pasó la medianoche: de
+// 18:00 a 04:00 son 10 horas, que en el taxi es lo más normal del mundo.
+const minutosJornada = (d) => {
+  if (!d || !ES_HORA.test(d.inicio || "") || !ES_HORA.test(d.fin || "")) return 0;
+  const m = minutosDe(d.fin) - minutosDe(d.inicio);
+  return m > 0 ? m : m < 0 ? m + 1440 : 0;
+};
+const duracion = (min) => { const h = Math.floor(min / 60); const m = min % 60; return m ? `${h} h ${m} min` : `${h} h`; };
+const propinasDe = (d) => Math.max(0, evalSuma(d && d.propinas));
+const carrerasDe = (d) => Math.max(0, Math.round(evalSuma(d && d.carreras)));
+// evento: el oro oscuro de la marca. Era morado y recordaba a Cabify; además
+// el número blanco de los puntos del mapa se quedaba en 4,2:1 y así va a 5,1:1.
+// No es el rojo del logo porque el rojo en la app es "debes a la empresa".
+// El rojo de la banda del logo. Solo para el puntito de "hay evento" en la
+// cuadrícula del calendario: a 5 px el dorado se perdía sobre las casillas que
+// la facturación tiñe de ámbar. El resto de los eventos sigue en dorado.
+const ROJO_TX = "#D8232A";
+const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8a6a17", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
 const Mono = ({ color }) => (
@@ -220,6 +270,7 @@ const TRAZOS = {
   calendario: <><rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" /><path d="M3.6 10h16.8" /><path d="M8.2 3.4v3.4M15.8 3.4v3.4" /><path d="M7.6 13.6h2.2M12 13.6h2.2M7.6 17h2.2M12 17h2.2" /></>,
   gastos: <><path d="M4.4 20.4V5.2a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v15.2" /><path d="M3.2 20.4h11.2" /><path d="M6.9 8h3.8" /><path d="M13.2 9.4h2.6a1.8 1.8 0 0 1 1.8 1.8v4.4a1.6 1.6 0 0 0 3.2 0V9.2l-2.4-2.4" /></>,
   mensual: <><path d="M4 20.4h16" /><rect x="6.2" y="12.4" width="3.4" height="5.6" rx="1.1" /><rect x="11.3" y="8.4" width="3.4" height="9.6" rx="1.1" /><rect x="16.4" y="5" width="3.4" height="13" rx="1.1" /></>,
+  objetivos: <><circle cx="12" cy="12" r="8.6" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" /></>,
   periodo: <><path d="M4 12h16" /><circle cx="7" cy="12" r="2.6" /><circle cx="17" cy="12" r="2.6" /><path d="M7 6.4v2.6M17 15v2.6" /></>,
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
 };
@@ -231,6 +282,139 @@ const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
     <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
   </svg>
 );
+
+// LOS ANILLOS DE OBJETIVOS. Mes fuera, semana en medio, hoy dentro, siempre en
+// el mismo sitio y con el mismo color aunque falte alguno, para que el color
+// diga siempre lo mismo. Colores comprobados con el validador para daltonismo
+// (oro, azul y rosa: el verde es de "la empresa te debe" y el violeta no se
+// distingue del azul). La parte vacía es un tono claro del mismo color; lo que
+// pasa del 100 % da una segunda vuelta más oscura.
+const ANILLOS = {
+  mes: { c: "#b8860b", osc: "#7a5907" },
+  semana: { c: "#2f6fe0", osc: "#1c47a0" },
+  dia: { c: "#d6457a", osc: "#9c2552" },
+};
+const Anillos = ({ datos, marcaMes, centro }) => {
+  const [montado, setMontado] = useState(false);
+  useEffect(() => { const id = requestAnimationFrame(() => setMontado(true)); return () => cancelAnimationFrame(id); }, []);
+  const G = 17, cx = 120, cy = 120;
+  const radios = { mes: 109, semana: 87, dia: 65 };
+  const arco = (r, v, color, key) => {
+    const L = 2 * Math.PI * r;
+    return <circle key={key} cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={G} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}
+      strokeDasharray={`${montado ? L * v : 0} ${L}`} style={{ transition: "stroke-dasharray 0.9s cubic-bezier(.2,.8,.2,1)" }} />;
+  };
+  let marca = null;
+  if (marcaMes != null && datos.mes) { const t = marcaMes * 2 * Math.PI; marca = <circle cx={cx + radios.mes * Math.sin(t)} cy={cy - radios.mes * Math.cos(t)} r={6} fill={C.t1} stroke="#fff" strokeWidth={2.5} />; }
+  return (
+    <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "0 auto" }}>
+      <svg viewBox="0 0 240 240" style={{ width: "100%", display: "block" }} aria-hidden="true">
+        {["mes", "semana", "dia"].map((k) => {
+          const r = radios[k]; const { c, osc } = ANILLOS[k]; const d = datos[k];
+          return (
+            <g key={k}>
+              <circle cx={cx} cy={cy} r={r} fill="none" stroke={d ? `${c}26` : "#eef0f6"} strokeWidth={G} />
+              {d && d.frac > 0 && arco(r, Math.min(d.frac, 1), c, "a")}
+              {d && d.frac > 1 && arco(r, Math.min(d.frac - 1, 1), osc, "b")}
+            </g>
+          );
+        })}
+        {marca}
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", pointerEvents: "none" }}>{centro}</div>
+    </div>
+  );
+};
+
+// EL MAPA DE LOS EVENTOS. Dibujado aquí con los contornos del IGN que trae
+// mapa-madrid.json: sin servidores de mapas de fuera, funciona sin cobertura y
+// no le cuenta a nadie qué se mira. Sin calles: municipios, sus nombres y los
+// puntos. Dos vistas: Madrid y alrededores, donde está casi todo, y la
+// Comunidad entera. Los puntos son HTML encima del dibujo para que el número y
+// el tamaño no cambien con el zoom.
+const ZONA_MADRID = { lat: [40.30, 40.50], lon: [-3.84, -3.54] };
+const MapaEventos = ({ mapa, puntos, vista, setVista, marcado, setMarcado }) => {
+  const ref = useRef(null);
+  const [ancho, setAncho] = useState(300);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const medir = () => setAncho(el.clientWidth || 300);
+    medir();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(medir); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const { lat0, lon0, k, cos } = mapa.proy;
+  const P = (lat, lon) => [(lon - lon0) * cos * k, (lat0 - lat) * k];
+  const vb = vista === "zona"
+    ? (() => { const [x1, y1] = P(ZONA_MADRID.lat[1], ZONA_MADRID.lon[0]); const [x2, y2] = P(ZONA_MADRID.lat[0], ZONA_MADRID.lon[1]); return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }; })()
+    : { x: mapa.caja[0] - 10, y: mapa.caja[1] - 10, w: mapa.caja[2] + 20, h: mapa.caja[3] + 20 };
+  const esc = ancho / vb.w;
+  const aPx = ([x, y]) => [(x - vb.x) * esc, (y - vb.y) * esc];
+  const dentro = ([x, y]) => x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h;
+  const alto = vb.h * esc;
+  const marcas = puntos.map((p, i) => ({ ...p, n: i + 1, s: aPx(P(p.lat, p.lon)), en: dentro(P(p.lat, p.lon)) })).filter((m) => m.en);
+  // Toda la Comunidad: lo que cae junto se agrupa, y al tocarlo se va a Madrid.
+  // Madrid y alrededores: lo que se pisa se aparta un poco, con una raya hasta
+  // su sitio de verdad.
+  const D = 24;
+  let grupos = [];
+  if (vista === "comunidad") {
+    for (const m of marcas) { const g = grupos.find((g) => Math.hypot(g.s[0] - m.s[0], g.s[1] - m.s[1]) < D); if (g) g.miembros.push(m); else grupos.push({ s: [...m.s], miembros: [m] }); }
+  } else {
+    const pos = marcas.map((m) => [...m.s]);
+    for (let it = 0; it < 40; it++) for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) {
+      let dx = pos[j][0] - pos[i][0], dy = pos[j][1] - pos[i][1]; let d = Math.hypot(dx, dy);
+      if (d >= D) continue;
+      if (d < 0.01) { dx = Math.cos(i + j); dy = Math.sin(i + j); d = 1; }
+      const f = (D - d) / 2 / d; pos[i][0] -= dx * f; pos[i][1] -= dy * f; pos[j][0] += dx * f; pos[j][1] += dy * f;
+    }
+    grupos = marcas.map((m, i) => ({ s: [Math.min(ancho - 13, Math.max(13, pos[i][0])), Math.min(alto - 13, Math.max(13, pos[i][1]))], real: m.s, miembros: [m] }));
+  }
+  // Nombres de municipios por orden de importancia (el del archivo): cada uno se
+  // queda solo si no pisa a un punto ni a un nombre ya puesto, y el que se sale
+  // por el borde se mete hacia dentro en vez de cortarse.
+  const ocupado = grupos.map((g) => ({ x: g.s[0] - 16, y: g.s[1] - 16, w: 32, h: 32 }));
+  const choca = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const etiquetas = [];
+  for (const n of mapa.nombres) {
+    if (!(n.en === "ambas" || n.en === vista) || !dentro([n.x, n.y])) continue;
+    const [sx, sy] = aPx([n.x, n.y]); const w = n.n.length * 5.9 + 6, h = 14;
+    const x = Math.min(Math.max(sx, w / 2 + 3), ancho - w / 2 - 3), y = Math.min(Math.max(sy, h / 2 + 3), alto - h / 2 - 3);
+    const caja = { x: x - w / 2, y: y - h / 2, w, h };
+    if (ocupado.some((o) => choca(o, caja))) continue;
+    ocupado.push(caja); etiquetas.push({ ...n, s: [x, y] });
+  }
+  return (
+    <div ref={ref} style={{ position: "relative", width: "100%", height: alto, borderRadius: 12, overflow: "hidden", background: "#e8ebf2" }}>
+      <svg viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} aria-hidden="true">
+        <path d={mapa.tierra} fill="#ffffff" stroke="#b6bccb" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+        <path d={mapa.capital} fill={`${C.acc}24`} />
+        <path d={mapa.bordes} fill="none" stroke="#d6dae4" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+      </svg>
+      {grupos.filter((g) => g.real && Math.hypot(g.real[0] - g.s[0], g.real[1] - g.s[1]) > 3).map((g) => (
+        <svg key={`r${g.miembros[0].n}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} aria-hidden="true">
+          <line x1={g.real[0]} y1={g.real[1]} x2={g.s[0]} y2={g.s[1]} stroke={C.t2} strokeWidth={1} />
+          <circle cx={g.real[0]} cy={g.real[1]} r={2.5} fill={C.t1} />
+        </svg>
+      ))}
+      {etiquetas.map((n) => (
+        <span key={n.n} style={{ position: "absolute", left: n.s[0], top: n.s[1], transform: "translate(-50%,-50%)", fontSize: 10, fontWeight: 700, color: C.t3, whiteSpace: "nowrap", textShadow: "0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff", pointerEvents: "none" }}>{n.n}</span>
+      ))}
+      {grupos.map((g) => {
+        if (g.miembros.length > 1) return (
+          <button key={`g${g.miembros[0].n}`} className="nb" onClick={() => setVista("zona")} aria-label={`${g.miembros.length} sitios juntos: ver Madrid de cerca`}
+            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: "translate(-50%,-50%)", minWidth: 32, height: 32, padding: "0 6px", borderRadius: 16, border: "2px solid #fff", background: C.t1, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)" }}>{g.miembros.length}</button>
+        );
+        const m = g.miembros[0]; const on = marcado === m.lugar;
+        return (
+          <button key={`m${m.n}`} className="nb" onClick={() => setMarcado(on ? null : m.lugar)} aria-label={`${m.n}. ${m.lugar}`} aria-pressed={on}
+            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.2 : 1})`, width: 26, height: 26, borderRadius: 13, border: `2px solid ${on ? C.t1 : "#fff"}`, background: C.evento, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s", padding: 0 }}>{m.n}</button>
+        );
+      })}
+    </div>
+  );
+};
 
 const Hero = ({ total, conductor, pct }) => (
   <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
@@ -249,6 +433,28 @@ const StatCard = ({ title, items, children }) => (
     {children}
   </div>
 );
+// Horas, carreras y propinas del mes o del periodo. Solo sale si hay algo
+// apuntado: a quien no lleva la jornada no se le llena la pantalla de ceros.
+const JornadaResumen = ({ j, pct }) => {
+  if (!j || (!j.min && !j.carreras && !j.propinas)) return null;
+  const filas = [];
+  if (j.min) filas.push({ label: `Horas trabajadas (${j.diasConHoras} ${j.diasConHoras === 1 ? "día" : "días"})`, val: duracion(j.min) });
+  if (j.carreras) filas.push({ label: "Carreras", val: String(j.carreras) });
+  if (j.propinas) filas.push({ label: "Propinas (enteras para ti)", val: fmt(j.propinas), color: C.green });
+  if (j.min) filas.push({ label: "Ganas por hora", val: `${fmt(j.ganadoConHoras / (j.min / 60))}/h`, color: C.accDim, bold: true });
+  if (j.carreras) filas.push({ label: "Media por carrera", val: fmt(j.factConCarreras / j.carreras) });
+  return (
+    <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+      <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu jornada</div>
+      {filas.map(({ label, val, color, bold }, i) => (
+        <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < filas.length - 1 ? `1px solid ${C.border}` : "none" }}>
+          <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color: color || C.t1 }}>{val}</span>
+        </div>
+      ))}
+      {j.min > 0 && <div style={{ fontSize: 11, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Por hora: tu {pct}% más las propinas, entre las horas de los días en que apuntaste la jornada.</div>}
+    </div>
+  );
+};
 const Balance = ({ value, sub }) => { const neg = value <= 0; return (
   <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
     <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}><><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: neg ? C.green : C.red, marginRight: 7, verticalAlign: "middle" }} />{neg ? "Empresa debe al conductor" : "Conductor debe a empresa"}</></div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
@@ -269,7 +475,12 @@ function TXpro() {
   const [days, setDays] = useState(loadDays);
   const [view, setView] = useState("diario");
   const [editDate, setEditDate] = useState(today);
-  const [form, setForm] = useState(() => { const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
+  // Lo que se escribe y no se ha guardado todavía, por fecha. Quien apunta viaje a
+  // viaje no va a darle a "Guardar día" tras cada carrera: si se le cierra la app
+  // o se reinicia el móvil, lo apuntado tiene que seguir ahí.
+  const [borradores, setBorradores] = useState(() => { const b = loadStorage("tc_borradores", {}); return b && typeof b === "object" && !Array.isArray(b) ? Object.fromEntries(Object.entries(b).filter(([f, v]) => /^\d{4}-\d{2}-\d{2}$/.test(f) && v && typeof v === "object")) : {}; });
+  const [form, setForm] = useState(() => { const b = loadStorage("tc_borradores", {}); if (b && b[today] && typeof b[today] === "object") return { ...b[today] }; const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
+  const [enfoque, setEnfoque] = useState(null);
   const [saved, setSaved] = useState(false);
   const [notas, setNotas] = useState(() => { const n = loadStorage("tc_notas", {}); return n && typeof n === "object" ? n : {}; });
   const [calMes, setCalMes] = useState(monthKey(today));
@@ -282,7 +493,7 @@ function TXpro() {
   const [copiaMsg, setCopiaMsg] = useState("");
   const [hayUpdate, setHayUpdate] = useState(false);
   const [avisarPlay, setAvisarPlay] = useState(tocaAvisarDePlay);
-  const [eventos, setEventos] = useState(() => limpiarEventos(loadStorage(EVENTOS_KEY, null)) || { actualizado: "", eventos: [] });
+  const [eventos, setEventos] = useState(() => limpiarEventos(loadStorage(EVENTOS_KEY, null)) || { actualizado: "", eventos: [], lugares: {} });
   // Lo guardado se pinta ya; la red solo sirve para refrescarlo. Si falla, no
   // pasa nada: el conductor sigue viendo el último calendario que le llegó.
   useEffect(() => {
@@ -304,6 +515,16 @@ function TXpro() {
     return () => { vivo = false; };
   }, []);
   const eventosPorDia = useMemo(() => indexarEventos(eventos.eventos), [eventos]);
+  const [mapa, setMapa] = useState(null);
+  const [vistaMapa, setVistaMapa] = useState("zona");
+  const [alcanceMapa, setAlcanceMapa] = useState(null);   // null: el día si tiene algo, si no el mes
+  const [lugarMarcado, setLugarMarcado] = useState(null);
+  useEffect(() => {
+    if (view !== "calendario" || mapa) return;
+    let vivo = true;
+    fetch("./mapa-madrid.json").then((r) => (r.ok ? r.json() : null)).then((m) => { if (vivo && m && m.tierra && m.proy && Array.isArray(m.caja)) setMapa(m); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [view, mapa]);
   const cerrarAvisoPlay = () => { setAvisarPlay(false); try { localStorage.setItem(AVISO_PLAY_KEY, JSON.stringify(Date.now())); } catch {} };
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
@@ -324,13 +545,42 @@ function TXpro() {
   const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
   const [rangeTo, setRangeTo] = useState(today);
   useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
+  useEffect(() => { try { const limite = shiftDays(today, -60); localStorage.setItem("tc_borradores", JSON.stringify(Object.fromEntries(Object.entries(borradores).filter(([f]) => f >= limite)))); } catch {} }, [borradores]);
   useEffect(() => { try { localStorage.setItem("tc_gastos", JSON.stringify(gastos)); } catch {} }, [gastos]);
   useEffect(() => { try { localStorage.setItem("tc_notas", JSON.stringify(notas)); } catch {} }, [notas]);
   const ponerNota = (fecha, texto) => setNotas((prev) => { const next = { ...prev }; if (texto.trim()) next[fecha] = texto.slice(0, 120); else delete next[fecha]; return next; });
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
-  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
-  const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
-  const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw, pct, plats); }, [form, pct, plats]);
+  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = Math.max(0, evalSuma(form[k]));
+    const prop = propinasDe(form); if (prop) parsed.propinas = prop;
+    const car = carrerasDe(form); if (car) parsed.carreras = car;
+    if (ES_HORA.test(form.inicio || "")) parsed.inicio = form.inicio;
+    if (ES_HORA.test(form.fin || "")) parsed.fin = form.fin;
+    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setForm(vacio ? { ...EMPTY } : { ...parsed }); quitarBorrador(editDate); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
+  const quitarBorrador = (f) => setBorradores((b) => { if (!b[f]) return b; const n = { ...b }; delete n[f]; return n; });
+  const descartarBorrador = () => { if (!window.confirm("¿Descartar lo que has apuntado sin guardar en este día?")) return; quitarBorrador(editDate); setForm(days[editDate] ? { ...days[editDate] } : { ...EMPTY }); };
+  // Todo lo que teclea el conductor pasa por aquí, para que quede en el borrador.
+  const editar = (k, val) => { const n = { ...form, [k]: val }; setForm(n); setBorradores((b) => ({ ...b, [editDate]: n })); };
+  // Al salir de la casilla se hace la cuenta y queda solo el total.
+  const cerrarCasilla = (k) => { setEnfoque(null); const raw = form[k]; if (typeof raw !== "string" || !/[+\-,]/.test(raw)) return; const t = Math.max(0, evalSuma(raw)); editar(k, t > 0 ? String(t) : ""); };
+  const sumarOtro = (k) => {
+    const raw = String(form[k] ?? "").trim();
+    if (raw && !/[+-]$/.test(raw)) editar(k, raw + "+");
+    requestAnimationFrame(() => { const el = document.querySelector(`[data-casilla="${k}"]`); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} } });
+  };
+  const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? { ...days[d] } : { ...EMPTY }); };
+  const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
+  const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(form[k])); return calcDay(raw, pct, plats); }, [form, pct, plats]);
+  // Facturación de cada día contando lo guardado, lo apuntado sin guardar y lo que
+  // se está escribiendo ahora mismo: los anillos se llenan viaje a viaje.
+  const factVivo = useMemo(() => {
+    const factDe = (d) => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(d && d[k])); return calcDay(raw, pct, plats).facturacion; };
+    const mapa = {};
+    for (const [f, d] of Object.entries(days)) mapa[f] = factDe(d);
+    for (const [f, d] of Object.entries(borradores)) mapa[f] = factDe(d);
+    mapa[editDate] = dayStats.facturacion;
+    return mapa;
+  }, [days, borradores, editDate, dayStats, pct, plats]);
+  const ponerObjetivo = (k, v) => setCfg((c) => ({ ...c, objetivos: { ...(c.objetivos || {}), [k]: v } }));
   const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
   const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
   const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
@@ -381,12 +631,40 @@ function TXpro() {
     setDays(limpios);
     setGastos(gastosCopia);
     setNotas(datos.notas && typeof datos.notas === "object" ? datos.notas : {});
-    if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg, plataformas: normPlataformas(datos.cfg.plataformas) }); marcarCfgOk(); }
+    if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg, plataformas: normPlataformas(datos.cfg.plataformas), objetivos: normObjetivos(datos.cfg.objetivos) }); marcarCfgOk(); }
+    setBorradores({});
     setForm(limpios[editDate] ? { ...limpios[editDate] } : { ...EMPTY });
     setCopia(null);
     setCopiaMsg(`Restaurados ${Object.keys(limpios).length} días.`);
   };
   const ANCHO = 84;
+  // Casilla de dinero con calculadora. Texto y no number: el campo numérico del
+  // navegador no deja escribir "+" ni coma. Enter hace la cuenta, como el "=".
+  const casilla = (k, etiqueta, estilo) => (
+    <input className="inp" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" placeholder="0.00" data-casilla={k} aria-label={etiqueta}
+      style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", ...estilo }}
+      value={form[k] || ""} onFocus={() => setEnfoque(k)} onBlur={() => cerrarCasilla(k)}
+      onChange={(e) => editar(k, limpiarCasilla(e.target.value))}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+  );
+  // Debajo de la casilla que se está escribiendo: el botón de sumar otro viaje
+  // (no todos los teclados numéricos tienen "+") y la cuenta en vivo. El
+  // onMouseDown evita que el botón le quite el foco a la casilla y cierre el teclado.
+  const ayudaSuma = (k) => {
+    const raw = String(form[k] ?? "");
+    const hayCuenta = /\d[+-]\d/.test(raw.replace(/,/g, "."));
+    return (
+      <div style={{ padding: "0 0 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => sumarOtro(k)} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+ Sumar otro viaje</button>
+        <span style={{ flex: 1, textAlign: "right", fontSize: 13, fontWeight: 800, color: C.accDim }}>{hayCuenta ? `= ${fmt(Math.max(0, evalSuma(raw)))}` : ""}</span>
+        </div>
+        {/* La casilla es estrecha y solo enseña el final de la cuenta: aquí van todos
+            los viajes, para poder repasar si falta o sobra alguno. */}
+        {hayCuenta && <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5, wordBreak: "break-word" }}>{viajesDe(raw)}</div>}
+      </div>
+    );
+  };
   // Una fila por concepto: el nombre a la izquierda y las casillas a la derecha,
   // todas alineadas en columna. Sin distintivos de las plataformas: el nombre en
   // texto dice de qué es la casilla y las marcas son de quien son.
@@ -438,7 +716,8 @@ function TXpro() {
               <div style={{ ...colHead, width: ANCHO, color: C.blue }}>Efectivo</div>
             </div>
             {filas.map((f) => (
-              <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 7, borderTop: "1px solid #eef0f6", padding: "10px 0" }}>
+              <React.Fragment key={f.key}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, borderTop: "1px solid #eef0f6", padding: "10px 0" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     {f.oro && <TaxiLogo size={18} color={C.acc} />}
@@ -446,11 +725,13 @@ function TXpro() {
                   </div>
                   {f.cobrado && <div style={{ fontSize: 9.5, fontWeight: 700, color: C.green, marginTop: 3 }}>2ª casilla: ya cobrado</div>}
                 </div>
-                <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={f.nombre} style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right" }} value={form[f.key] || ""} onChange={(e) => setForm((v) => ({ ...v, [f.key]: e.target.value }))} />
+                {casilla(f.key, f.nombre)}
                 {f.cobKey
-                  ? <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={`${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`} style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` }} value={form[f.cobKey] || ""} onChange={(e) => setForm((v) => ({ ...v, [f.cobKey]: e.target.value }))} />
+                  ? casilla(f.cobKey, `${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`, { background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` })
                   : <div style={{ width: ANCHO, flexShrink: 0 }} />}
               </div>
+              {(enfoque === f.key || enfoque === f.cobKey) && ayudaSuma(enfoque)}
+              </React.Fragment>
             ))}
             <div style={{ borderTop: "1px solid #eef0f6", paddingTop: 10, fontSize: 10.5, color: C.t3, lineHeight: 1.45 }}>
               ¿Trabajas con otras aplicaciones? Enciende las que uses o añade la tuya en <button className="nb" onClick={() => setView("ajustes")} style={{ background: "none", border: "none", padding: 0, font: "inherit", color: C.accDim, fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>Ajustes</button>.
@@ -474,8 +755,107 @@ function TXpro() {
               <div style={{ fontSize: 26, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(dayStats.diferencia))}</div>
             </div>
           ); })()}
+          {(() => {
+            const etiqueta = { fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" };
+            const campo = { ...inp, padding: "10px 11px", fontSize: 15 };
+            const porHora = jornadaHoy.min ? (dayStats.conductor50 + jornadaHoy.propinas) / (jornadaHoy.min / 60) : 0;
+            const datos = [
+              jornadaHoy.min ? `${duracion(jornadaHoy.min)}${jornadaHoy.cruza ? " (pasas la medianoche)" : ""}` : null,
+              porHora > 0 ? `ganas ${fmt(porHora)}/h` : null,
+              jornadaHoy.carreras && dayStats.facturacion > 0 ? `${fmt(dayStats.facturacion / jornadaHoy.carreras)} por carrera` : null,
+            ].filter(Boolean);
+            return (
+              <div style={{ ...card, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu jornada</div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Empiezas</span><input className="inp" type="time" aria-label="Hora de empezar" style={campo} value={form.inicio || ""} onChange={(e) => editar("inicio", e.target.value)} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Terminas</span><input className="inp" type="time" aria-label="Hora de terminar" style={campo} value={form.fin || ""} onChange={(e) => editar("fin", e.target.value)} /></label>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Carreras</span><input className="inp" type="number" min="0" step="1" inputMode="numeric" placeholder="0" aria-label="Número de carreras" style={{ ...campo, textAlign: "right" }} value={form.carreras || ""} onFocus={() => setEnfoque("carreras")} onBlur={() => setEnfoque(null)} onChange={(e) => editar("carreras", e.target.value.replace(/\D/g, ""))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Propinas</span>{casilla("propinas", "Propinas", { width: "100%", padding: "10px 11px", fontSize: 15 })}</label>
+                </div>
+                {enfoque === "propinas" && <div style={{ marginTop: 8 }}>{ayudaSuma("propinas")}</div>}
+                {enfoque === "carreras" && <div style={{ marginTop: 8, paddingBottom: 2 }}><button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => editar("carreras", String(carrerasDe(form) + 1))} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+1 carrera</button></div>}
+                <div style={{ fontSize: 11, color: C.t3, marginTop: 9, lineHeight: 1.45 }}>Las propinas son tuyas enteras: no entran en la facturación ni en el reparto con la empresa.</div>
+                {datos.length > 0 && <div style={{ marginTop: 10, background: `${C.acc}10`, border: `1px solid ${C.acc}33`, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700, color: C.t1, lineHeight: 1.5 }}>{datos.join(" · ")}</div>}
+              </div>
+            );
+          })()}
+          {borradores[editDate] && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8, fontSize: 12, color: C.t2 }}>
+            <span><span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: C.acc, marginRight: 6, verticalAlign: "middle" }} />Apuntado pero sin guardar: se queda aunque cierres la app</span>
+            <button className="nb" onClick={descartarBorrador} style={{ background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.red, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>Descartar</button>
+          </div>}
           <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar día</button>
         </>}
+        {view === "objetivos" && (() => {
+          const obj = cfg.objetivos || {};
+          const ws = weekStart(today); const we = shiftDays(ws, 6); const mk = monthKey(today);
+          const suma = (ok) => Object.entries(factVivo).reduce((a, [f, v]) => (ok(f) ? a + v : a), 0);
+          const hecho = { dia: factVivo[today] || 0, semana: suma((f) => f >= ws && f <= we), mes: suma((f) => monthKey(f) === mk) };
+          const total = diasEnMes(mk); const diaMes = Number(today.slice(8));
+          const quedanMes = total - diaMes + 1;            // contando hoy
+          const quedanSemana = 7 - WD.indexOf(weekday(today));  // contando hoy; la semana empieza en lunes
+          const nombres = { dia: "Hoy", semana: "Esta semana", mes: capitalizar(monthLabel(mk).split(" ")[0]) };
+          const datos = {};
+          for (const k of ["mes", "semana", "dia"]) { const meta = num(obj[k]); if (meta > 0) datos[k] = { meta, hecho: hecho[k], frac: hecho[k] / meta }; }
+          const lider = datos.mes ? "mes" : datos.semana ? "semana" : datos.dia ? "dia" : null;
+          const ritmo = datos.mes ? datos.mes.meta * (diaMes / total) : 0;
+          const mesPasado = Object.entries(days).filter(([f]) => monthKey(f) === mesVecino(mk, -1)).reduce((a, [, d]) => a + calcDay(d, pct, plats).facturacion, 0);
+          const umbralBono = cfg.incentivo === "bono" ? num(cfg.umbral) : 0;
+          const lineaPie = (k) => {
+            const d = datos[k]; const falta = d.meta - d.hecho;
+            if (falta <= 0) return <span style={{ color: C.green, fontWeight: 800 }}>✓ Superado por {fmt(-falta)}</span>;
+            if (k === "mes") return quedanMes === 1
+              ? <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> y hoy es el último día del mes</>
+              : <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong>: {fmt(falta / quedanMes)} al día en los {quedanMes} días que quedan</>;
+            if (k === "semana") return <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> en {quedanSemana} {quedanSemana === 1 ? "día" : "días"}</>;
+            return <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> para hoy</>;
+          };
+          const etiqueta = { fontSize: 13, color: C.t1, fontWeight: 700 };
+          return (<>
+            <div style={{ ...card, padding: "18px 16px 14px", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Tus objetivos</div>
+              <Anillos datos={datos} marcaMes={datos.mes ? diaMes / total : null} centro={lider
+                ? <><div style={{ fontSize: 46, fontWeight: 900, color: C.t1, lineHeight: 1, letterSpacing: -1.5 }}>{Math.round(datos[lider].frac * 100)}%</div><div style={{ fontSize: 12, color: C.t2, marginTop: 5, fontWeight: 600 }}>{lider === "mes" ? "del mes" : lider === "semana" ? "de la semana" : "de hoy"}</div></>
+                : <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.4, maxWidth: 120, fontWeight: 600 }}>Ponte un objetivo abajo y mira cómo se llena</div>} />
+              {lider && <div style={{ marginTop: 16 }}>
+                {["mes", "semana", "dia"].filter((k) => datos[k]).map((k, i, arr) => (
+                  <div key={k} style={{ padding: "10px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: ANILLOS[k].c, flexShrink: 0 }} />
+                      <span style={{ ...etiqueta, flex: 1 }}>{nombres[k]}</span>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: C.t1 }}>{Math.round(datos[k].frac * 100)}%</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: C.t1, fontWeight: 600, marginTop: 3, paddingLeft: 18 }}>{fmt(datos[k].hecho)} <span style={{ color: C.t2, fontWeight: 500 }}>de {fmt0(datos[k].meta)}</span></div>
+                    <div style={{ fontSize: 12, color: C.t2, marginTop: 4, paddingLeft: 18, lineHeight: 1.45 }}>{lineaPie(k)}</div>
+                    {k === "mes" && datos.mes.hecho < datos.mes.meta && quedanMes > 1 && <div style={{ fontSize: 12, color: C.t2, marginTop: 3, paddingLeft: 18, lineHeight: 1.45 }}>
+                      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: C.t1, marginRight: 5, verticalAlign: "middle" }} />
+                      El punto negro es donde deberías ir al acabar hoy: {datos.mes.hecho >= ritmo ? <>vas <strong style={{ color: C.t1 }}>{fmt(datos.mes.hecho - ritmo)} por delante</strong></> : <>vas <strong style={{ color: C.t1 }}>{fmt(ritmo - datos.mes.hecho)} por detrás</strong></>}.
+                    </div>}
+                  </div>
+                ))}
+              </div>}
+            </div>
+
+            <div style={{ ...card, padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Cuánto quieres facturar</div>
+              <div style={{ fontSize: 11.5, color: C.t3, marginBottom: 12, lineHeight: 1.45 }}>Taxímetro más apps, como en Mensual. Deja vacío el que no quieras usar.</div>
+              {[["dia", "Cada día"], ["semana", "Cada semana"], ["mes", "Cada mes"]].map(([k, lb]) => (
+                <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
+                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: ANILLOS[k].c, flexShrink: 0 }} />
+                  <label htmlFor={`obj-${k}`} style={{ ...etiqueta, flex: 1 }}>{lb}</label>
+                  <input id={`obj-${k}`} className="inp" type="number" min="0" step="1" inputMode="decimal" placeholder="—" aria-label={`Objetivo ${lb.toLowerCase()}`} style={{ ...inp, width: 110, textAlign: "right", padding: "9px 10px" }} value={obj[k] || ""} onChange={(e) => ponerObjetivo(k, e.target.value)} />
+                  <span style={{ fontSize: 13, color: C.t2, fontWeight: 700 }}>€</span>
+                </div>
+              ))}
+              {(mesPasado > 0 || (umbralBono > 0 && !num(obj.mes))) && <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 10, fontSize: 12, color: C.t2, lineHeight: 1.5 }}>
+                {mesPasado > 0 && <div>El mes pasado facturaste <strong style={{ color: C.t1 }}>{fmt(mesPasado)}</strong>.</div>}
+                {umbralBono > 0 && !num(obj.mes) && <button className="nb" onClick={() => ponerObjetivo("mes", String(umbralBono))} style={{ marginTop: 8, padding: "8px 12px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Usar el de tu bono ({fmt0(umbralBono)} al mes)</button>}
+              </div>}
+            </div>
+          </>);
+        })()}
         {view === "gastos" && (() => { const mesActual = monthKey(today); const ordenados = [...gastos].sort((a, b) => b.date.localeCompare(a.date)); const meses = [...new Set(ordenados.map((g) => monthKey(g.date)))]; return (<>
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Gastos</div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Lo que pagas tú de tu bolsillo. Marca los que te devuelve la empresa y se descontarán de lo que le debes.</div>
@@ -563,7 +943,7 @@ function TXpro() {
                   const elegido = f === sel;
                   const intensidad = fact > 0 ? 0.18 + 0.55 * (fact / tope) : 0;
                   return (
-                    <button key={f} className="nb" onClick={() => setCalDia(f)} aria-label={`${f}${fact > 0 ? `, ${fmt(fact)}` : ", sin datos"}${eventosPorDia[f] ? `, ${eventosPorDia[f].map((e) => e.titulo).join(", ")}` : ""}`} style={{
+                    <button key={f} className="nb" onClick={() => { setCalDia(f); setAlcanceMapa(null); setLugarMarcado(null); }} aria-label={`${f}${fact > 0 ? `, ${fmt(fact)}` : ", sin datos"}${eventosPorDia[f] ? `, ${eventosPorDia[f].map((e) => e.titulo).join(", ")}` : ""}`} style={{
                       aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", padding: 2,
                       border: elegido ? `2px solid ${C.accDim}` : esHoy ? `1.5px solid ${C.acc}` : `1px solid ${C.border}`,
                       background: fact > 0 ? `rgba(240,192,64,${intensidad})` : C.surf,
@@ -572,7 +952,7 @@ function TXpro() {
                       <span style={{ fontSize: 12.5, fontWeight: esHoy || elegido ? 900 : 600, color: fact > 0 ? C.t1 : C.t3 }}>{Number(f.slice(8))}</span>
                       {fact > 0 && <span style={{ fontSize: 8.5, fontWeight: 700, color: C.accDim, lineHeight: 1 }}>{Math.round(fact)}</span>}
                       {notas[f] && <span style={{ position: "absolute", top: 3, right: 3, width: 5, height: 5, borderRadius: "50%", background: C.blue }} />}
-                      {eventosPorDia[f] && <span style={{ position: "absolute", top: 3, left: 3, width: 5, height: 5, borderRadius: "50%", background: C.evento }} />}
+                      {eventosPorDia[f] && <span style={{ position: "absolute", top: 3, left: 3, width: 5, height: 5, borderRadius: "50%", background: ROJO_TX }} />}
                     </button>
                   );
                 })}
@@ -601,6 +981,62 @@ function TXpro() {
               </div>
             )}
 
+            {mapa && (() => {
+              const lugares = eventos.lugares || {};
+              const delMes = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes);
+              const delDia = sel ? (eventosPorDia[sel] || []) : [];
+              const conPunto = (lista) => lista.filter((e) => lugares[e.lugar]);
+              const alcance = alcanceMapa === "mes" || !sel ? "mes" : alcanceMapa === "dia" ? "dia" : conPunto(delDia).length ? "dia" : "mes";
+              const lista = alcance === "dia" ? delDia : delMes;
+              // Un punto por recinto, en el orden en que pasan las cosas.
+              const porLugar = new Map();
+              for (const e of [...conPunto(lista)].sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b))) {
+                if (!porLugar.has(e.lugar)) porLugar.set(e.lugar, { lugar: e.lugar, lat: lugares[e.lugar][0], lon: lugares[e.lugar][1], eventos: [] });
+                porLugar.get(e.lugar).eventos.push(e);
+              }
+              const puntos = [...porLugar.values()];
+              const generales = lista.filter((e) => !lugares[e.lugar]);
+              const enZona = (p) => p.lat >= ZONA_MADRID.lat[0] && p.lat <= ZONA_MADRID.lat[1] && p.lon >= ZONA_MADRID.lon[0] && p.lon <= ZONA_MADRID.lon[1];
+              const fuera = vistaMapa === "zona" ? puntos.filter((p) => !enZona(p)) : [];
+              const chip = (on) => ({ padding: "6px 10px", borderRadius: 8, border: `1px solid ${on ? C.evento : C.border}`, background: on ? `${C.evento}14` : C.surf, color: on ? C.t1 : C.t2, fontWeight: on ? 800 : 600, fontSize: 12, cursor: "pointer", fontFamily: "inherit" });
+              const visibles = lugarMarcado && porLugar.has(lugarMarcado) ? [porLugar.get(lugarMarcado)] : puntos;
+              return (
+                <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Dónde es</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="nb" disabled={!sel} onClick={() => { setAlcanceMapa("dia"); setLugarMarcado(null); }} style={{ ...chip(alcance === "dia"), opacity: sel ? 1 : 0.5 }}>{sel ? `${capitalizar(weekday(sel))} ${Number(sel.slice(8))}` : "Este día"}</button>
+                      <button className="nb" onClick={() => { setAlcanceMapa("mes"); setLugarMarcado(null); }} style={chip(alcance === "mes")}>Todo el mes</button>
+                    </div>
+                  </div>
+                  <MapaEventos mapa={mapa} puntos={puntos} vista={vistaMapa} setVista={setVistaMapa} marcado={lugarMarcado} setMarcado={setLugarMarcado} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="nb" onClick={() => setVistaMapa("zona")} style={chip(vistaMapa === "zona")}>Madrid</button>
+                      <button className="nb" onClick={() => setVistaMapa("comunidad")} style={chip(vistaMapa === "comunidad")}>Toda la Comunidad</button>
+                    </div>
+                    <span style={{ fontSize: 10, color: C.t3 }}>{mapa.fuente}</span>
+                  </div>
+                  {fuera.length > 0 && <button className="nb" onClick={() => setVistaMapa("comunidad")} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, cursor: "pointer", textAlign: "left" }}>Fuera de este mapa: <strong style={{ color: C.t1 }}>{fuera.map((p) => p.lugar).join(", ")}</strong> · <span style={{ textDecoration: "underline", fontWeight: 700, color: C.t1 }}>ver toda la Comunidad</span></button>}
+                  {puntos.length === 0 && <div style={{ fontSize: 12.5, color: C.t2, marginTop: 10 }}>{alcance === "dia" ? "Este día no hay nada con sitio concreto." : "Este mes no hay nada con sitio concreto."}</div>}
+                  {visibles.map((p) => { const n = puntos.indexOf(p) + 1; return (
+                    <div key={p.lugar} onClick={() => setLugarMarcado(lugarMarcado === p.lugar ? null : p.lugar)} style={{ display: "flex", gap: 10, padding: "10px 0 2px", borderTop: `1px solid ${C.border}66`, marginTop: 8, cursor: "pointer" }}>
+                      <span style={{ width: 22, height: 22, borderRadius: 11, background: C.evento, color: "#fff", fontWeight: 900, fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{n}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{p.lugar}</div>
+                        {alcance === "dia"
+                          ? p.eventos.map((e, i) => <div key={i} style={{ fontSize: 12, color: C.t2, marginTop: 2 }}>{e.titulo}{(e.salida || e.hora) ? ` · ${textoHoras(e)}` : ""}</div>)
+                          : <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>{p.eventos.map((e, i) => (
+                              <button key={i} className="nb" onClick={(ev) => { ev.stopPropagation(); setCalDia(e.fecha); setAlcanceMapa("dia"); setLugarMarcado(null); }} title={e.titulo} style={{ padding: "3px 7px", borderRadius: 6, border: `1px solid ${C.border}`, background: "#f6f7fb", fontSize: 11.5, fontWeight: 700, color: C.t1, cursor: "pointer", fontFamily: "inherit" }}>{capitalizar(weekday(e.fecha))} {Number(e.fecha.slice(8))}</button>
+                            ))}</div>}
+                      </div>
+                    </div>
+                  ); })}
+                  {lugarMarcado && porLugar.has(lugarMarcado) && puntos.length > 1 && <button className="nb" onClick={() => setLugarMarcado(null)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, textDecoration: "underline", cursor: "pointer" }}>Ver todos los sitios</button>}
+                  {alcance === "dia" && generales.length > 0 && <div style={{ fontSize: 12, color: C.t2, marginTop: 10 }}>En toda Madrid: <strong style={{ color: C.t1 }}>{generales.map((e) => e.titulo).join(", ")}</strong></div>}
+                </div>
+              );
+            })()}
             {(() => {
               const delMesEv = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b));
               if (!delMesEv.length) return null;
@@ -660,6 +1096,7 @@ function TXpro() {
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                 </StatCard>
+                <JornadaResumen j={selectedData.jornada} pct={pct} />
                 <Balance value={diferenciaMes} sub={gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
                 <DayTable rows={rows} pct={pct} />
               </div>
@@ -796,13 +1233,14 @@ function TXpro() {
               </div>
             ); })()}
             <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosPeriodo.total > 0 ? [{ label: "Gastos del periodo", val: gastosPeriodo.total, color: C.red, neg: true }] : []), ...(gastosPeriodo.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosPeriodo.reembolsable, color: C.green }] : [])]} />
+            <JornadaResumen j={rangeData.jornada} pct={pct} />
             <Balance value={diferenciaMes} sub={gastosPeriodo.reembolsable > 0 ? "Balance del periodo · incluye los gastos a devolver" : "Balance del periodo seleccionado"} />
             <DayTable rows={rows} pct={pct} />
           </>}
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "Diario"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
+        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
           <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
             <Icono name={v} />{lb}
           </button>

@@ -42,6 +42,25 @@ const { chromium } = require('playwright');
   comprobar('50% del conductor', calc.includes('166,38'));
   comprobar('cobrado por empresa', calc.includes('212,10'));
   comprobar('efectivo del conductor', calc.includes('120,65'));
+
+  console.log('\n— TU JORNADA —');
+  // De 18:00 a 04:00: pasa la medianoche y son 10 horas, no -14.
+  await p.getByLabel('Hora de empezar').fill('18:00');
+  await p.getByLabel('Hora de terminar').fill('04:00');
+  await set('Número de carreras', '20');
+  await set('Propinas', '12.50');
+  await p.waitForTimeout(400);
+  // Las propinas son del conductor: ni facturación, ni 50%, ni lo que cobra la
+  // empresa pueden moverse un céntimo.
+  const calc2 = await p.getByText('Cálculo del día').locator('..').innerText();
+  comprobar('las propinas no entran en la facturación', (await p.getByText('Total facturación día').locator('../..').innerText()).includes('332,75'));
+  comprobar('ni en el 50% ni en lo cobrado', calc2.includes('166,38') && calc2.includes('212,10') && calc2.includes('120,65'));
+  const jor = await p.getByText('Tu jornada').first().locator('..').innerText();
+  comprobar('jornada que pasa la medianoche', jor.includes('10 h (pasas la medianoche)'), jor.split('\n').pop());
+  // (166,375 de tu 50% + 12,50 de propinas) / 10 h = 17,8875
+  comprobar('lo que ganas por hora', /ganas 17,89\s€\/h/.test(jor));
+  // 332,75 / 20 carreras = 16,6375
+  comprobar('media por carrera', /16,64\s€ por carrera/.test(jor));
   await p.getByRole('button', { name: 'Guardar día' }).click();
   await p.waitForTimeout(500);
   comprobar('aviso de guardado', await p.getByText('Día guardado').count() > 0);
@@ -73,6 +92,10 @@ const { chromium } = require('playwright');
   // más los 45 del pinchazo a devolver → 90,73
   comprobar('balance con los gastos a devolver', mes.includes('90,73'));
   comprobar('media diaria presente', /Media diaria \(1 día\)/.test(mes));
+  comprobar('horas del mes', /Horas trabajadas \(1 día\)\s+10 h/.test(mes));
+  comprobar('carreras del mes', /Carreras\s+20/.test(mes));
+  comprobar('propinas del mes', /Propinas \(enteras para ti\)\s+12,50/.test(mes));
+  comprobar('por hora en el mes', /Ganas por hora\s+17,89\s€\/h/.test(mes));
   comprobar('sin incentivo por defecto', !/[Bb]ono/.test(mes), 'no debe inventar acuerdos');
 
   console.log('\n— PERIODO —');
@@ -122,7 +145,9 @@ const { chromium } = require('playwright');
   comprobar('acuerdo restaurado', rest.includes('45%'));
   await p.getByRole('button', { name: /Mensual/ }).click();
   await p.waitForTimeout(600);
-  comprobar('datos restaurados', (await p.locator('body').innerText()).includes('332,75'));
+  const tras = await p.locator('body').innerText();
+  comprobar('datos restaurados', tras.includes('332,75'));
+  comprobar('la jornada viaja en la copia', /Propinas \(enteras para ti\)\s+12,50/.test(tras) && /Horas trabajadas/.test(tras));
 
   console.log('\n— CON QUÉ APLICACIONES TRABAJA CADA UNO —');
   // Lo delicado de esto no es que la casilla aparezca o desaparezca, es que
@@ -294,7 +319,162 @@ const { chromium } = require('playwright');
   await ps.waitForTimeout(600);
   for (let i = 0; i < 24 && !/diciembre de 2026/i.test(await ps.locator('body').innerText()); i++) { await ps.getByLabel('Mes siguiente').click(); await ps.waitForTimeout(150); }
   comprobar('los días fuertes siguen ahí sin cobertura', (await ps.locator('body').innerText()).includes('Nochevieja'));
+  comprobar('y el mapa también', (await ps.getByText('Dónde es').count()) > 0);
   await sinRed.close();
+
+  console.log('\n— VIAJE A VIAJE —');
+  // Cada casilla es una calculadora: el que quiera va sumando viaje a viaje, y al
+  // salir de la casilla queda solo el total.
+  const vv = await b.newContext({ viewport: { width: 360, height: 800 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  const pc = await vv.newPage();
+  const errVV = [];
+  pc.on('pageerror', (e) => errVV.push(e.message));
+  await pc.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pc.waitForSelector('text=INGRESOS DEL DÍA');
+  const taxi = pc.locator('input[aria-label="Taxímetro"]');
+  await taxi.fill('10,65+8.40');           // con coma y con punto, las dos valen
+  await pc.waitForTimeout(300);
+  comprobar('la cuenta sale en vivo', (await pc.locator('body').innerText()).includes('= 19,05'));
+  comprobar('y la facturación ya la cuenta', (await pc.getByText('Total facturación día').locator('../..').innerText()).includes('19,05'));
+  await taxi.press('Enter');
+  await pc.waitForTimeout(200);
+  comprobar('al salir queda solo el total', (await taxi.inputValue()) === '19.05', await taxi.inputValue());
+
+  // Sin tecla "+": el botón la pone, y la casilla no pierde el foco (el teclado
+  // del móvil no se cierra entre viaje y viaje).
+  await taxi.click();
+  await pc.getByRole('button', { name: '+ Sumar otro viaje' }).click();
+  comprobar('el botón pone el "+"', (await taxi.inputValue()) === '19.05+', await taxi.inputValue());
+  comprobar('sin cerrar el teclado', (await pc.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'Taxímetro');
+  await pc.keyboard.type('5');
+  await taxi.press('Enter');
+  await pc.waitForTimeout(200);
+  comprobar('viaje sumado', (await taxi.inputValue()) === '24.05', await taxi.inputValue());
+  const tarjeta = pc.locator('input[aria-label="Tarjeta"]');
+  await tarjeta.fill('abc7');
+  comprobar('lo que no es número no entra', (await tarjeta.inputValue()) === '7', await tarjeta.inputValue());
+  await tarjeta.fill('');
+
+  // Lo apuntado sin guardar sobrevive a cerrar la app...
+  await pc.reload({ waitUntil: 'load' });
+  await pc.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('sigue ahí tras cerrar la app', (await taxi.inputValue()) === '24.05', await taxi.inputValue());
+  comprobar('y avisa de que falta guardar', (await pc.locator('body').innerText()).includes('sin guardar'));
+  // ...y a mirar otro día y volver.
+  const fecha = pc.locator('input[type="date"]');
+  const hoy = await fecha.inputValue();
+  const ayer = await pc.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await fecha.fill(ayer);
+  await pc.waitForTimeout(300);
+  comprobar('el otro día sale limpio', (await taxi.inputValue()) === '');
+  await fecha.fill(hoy);
+  await pc.waitForTimeout(300);
+  comprobar('y al volver sigue lo apuntado', (await taxi.inputValue()) === '24.05');
+
+  // Propinas con calculadora y carreras de una en una.
+  const propinas = pc.locator('input[aria-label="Propinas"]');
+  await propinas.fill('2+1,5');
+  await propinas.press('Enter');
+  await pc.waitForTimeout(200);
+  comprobar('propinas sumadas', (await propinas.inputValue()) === '3.5', await propinas.inputValue());
+  const carreras = pc.locator('input[aria-label="Número de carreras"]');
+  await carreras.click();
+  await pc.getByRole('button', { name: '+1 carrera' }).click();
+  await pc.getByRole('button', { name: '+1 carrera' }).click();
+  comprobar('+1 carrera dos veces', (await carreras.inputValue()) === '2', await carreras.inputValue());
+
+  // Guardar deja el día limpio y sin aviso.
+  await pc.getByRole('button', { name: 'Guardar día' }).click();
+  await pc.waitForTimeout(500);
+  comprobar('al guardar se va el aviso', !(await pc.locator('body').innerText()).includes('sin guardar'));
+  await pc.reload({ waitUntil: 'load' });
+  await pc.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('el día guardado queda en 24,05', (await taxi.inputValue()) === '24.05');
+  const diasVV = await pc.evaluate(() => JSON.parse(localStorage.getItem('tc_days') || '{}'));
+  const elDia = Object.values(diasVV)[0] || {};
+  comprobar('se guarda el número, no la cuenta', elDia.taximetro === 24.05 && elDia.propinas === 3.5 && elDia.carreras === 2, JSON.stringify(elDia).slice(0, 90));
+  comprobar('viaje a viaje sin errores', errVV.length === 0, errVV.join(' | '));
+  await vv.close();
+
+  console.log('\n— MAPA DE LOS EVENTOS —');
+  const mp = await b.newContext({ viewport: { width: 320, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  const pm = await mp.newPage();
+  const errMp = [];
+  pm.on('pageerror', (e) => errMp.push(e.message));
+  await pm.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pm.waitForSelector('text=INGRESOS DEL DÍA');
+  await pm.waitForTimeout(700);
+  await pm.getByRole('button', { name: /Calendario/ }).click();
+  await pm.waitForTimeout(500);
+  for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pm.locator('body').innerText()); i++) { await pm.getByLabel('Mes siguiente').click(); await pm.waitForTimeout(120); }
+  await pm.getByRole('button', { name: /^2026-10-02/ }).click();
+  await pm.waitForTimeout(500);
+  const marcas = () => pm.locator('button[aria-label^="1. "], button[aria-label^="2. "], button[aria-label^="3. "], button[aria-label^="4. "], button[aria-label^="5. "]').count();
+  comprobar('el mapa sale en el calendario', (await pm.getByText('Dónde es').count()) > 0);
+  // Viernes 2: Shakira, Las Ventas, Vistalegre y Movistar en Madrid; el Warner fuera.
+  comprobar('un punto por sitio en Madrid', (await marcas()) === 4, String(await marcas()));
+  comprobar('avisa de lo que queda fuera', (await pm.locator('body').innerText()).includes('Fuera de este mapa: Parque Warner'));
+  await pm.getByRole('button', { name: 'Toda la Comunidad', exact: true }).click();
+  await pm.waitForTimeout(300);
+  comprobar('en la Comunidad sale el Warner', (await pm.locator('button[aria-label^="5. Parque Warner"]').count()) === 1);
+  comprobar('y lo de Madrid se agrupa', (await pm.locator('button[aria-label*="sitios juntos"]').count()) === 1);
+  await pm.locator('button[aria-label*="sitios juntos"]').click();
+  await pm.waitForTimeout(300);
+  comprobar('el grupo lleva a Madrid de cerca', (await marcas()) === 4);
+  // Tocar un punto deja en la lista solo ese sitio.
+  await pm.locator('button[aria-label^="2. Las Ventas"]').click();
+  await pm.waitForTimeout(200);
+  let lm = await pm.getByText('Dónde es').locator('../..').innerText();
+  comprobar('tocar un punto enseña solo ese sitio', lm.includes('Corrida · Feria de Otoño') && !lm.includes('Guitarricadelafuente'));
+  // Todo el mes, y de ahí a un día.
+  await pm.getByRole('button', { name: 'Todo el mes' }).click();
+  await pm.waitForTimeout(300);
+  lm = await pm.getByText('Dónde es').locator('../..').innerText();
+  comprobar('todo el mes: los días de cada sitio', lm.includes('Las Ventas') && lm.includes('Lun 12'));
+  await pm.getByRole('button', { name: 'Lun 12', exact: true }).first().click();
+  await pm.waitForTimeout(400);
+  comprobar('y un día lleva a ese día', (await pm.getByText('Dónde es').locator('../..').innerText()).includes('Corrida de la Hispanidad'));
+  comprobar('el mapa no se sale en 320 px', (await pm.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) === 0);
+  comprobar('mapa sin errores', errMp.length === 0, errMp.join(' | '));
+  await mp.close();
+
+  console.log('\n— OBJETIVOS —');
+  const ob = await b.newContext({ viewport: { width: 360, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  const po = await ob.newPage();
+  const errOb = [];
+  po.on('pageerror', (e) => errOb.push(e.message));
+  await po.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await po.waitForSelector('text=INGRESOS DEL DÍA');
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  await po.waitForTimeout(500);
+  comprobar('sin objetivos invita a ponerlos', (await po.locator('body').innerText()).includes('Ponte un objetivo'));
+  await po.getByRole('button', { name: /Diario/ }).click();
+  await po.locator('input[aria-label="Taxímetro"]').fill('150');
+  await po.getByRole('button', { name: 'Guardar día' }).click();
+  await po.waitForTimeout(400);
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  await po.locator('#obj-dia').fill('100');
+  await po.locator('#obj-semana').fill('300');
+  await po.locator('#obj-mes').fill('1000');
+  await po.waitForTimeout(1200);
+  let ot = await po.locator('body').innerText();
+  comprobar('el centro dice el % del mes', /15%\s+del mes/.test(ot));
+  comprobar('hoy superado', /Hoy\s+150%/.test(ot) && ot.includes('Superado por 50,00'));
+  comprobar('lo que falta de la semana', /Esta semana\s+50%/.test(ot) && ot.includes('Te faltan 150,00'));
+  // Se llena viaje a viaje: lo apuntado sin guardar también cuenta.
+  await po.getByRole('button', { name: /Diario/ }).click();
+  await po.locator('input[aria-label="Taxímetro"]').fill('150+50');
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  await po.waitForTimeout(1200);
+  ot = await po.locator('body').innerText();
+  comprobar('se llena en directo sin guardar', /20%\s+del mes/.test(ot) && /Esta semana\s+67%/.test(ot));
+  comprobar('los anillos se pintan', (await po.locator('svg circle').count()) >= 6);
+  await po.reload({ waitUntil: 'load' });
+  await po.waitForSelector('text=INGRESOS DEL DÍA');
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  comprobar('los objetivos se quedan guardados', (await po.locator('#obj-mes').inputValue()) === '1000');
+  comprobar('objetivos sin errores', errOb.length === 0, errOb.join(' | '));
+  await ob.close();
 
   console.log('\n— AVISO DE INSTALAR LA APP —');
   // Solo debe salir a quien esté en la web desde Android. Ni en la app ya

@@ -144,6 +144,29 @@ pasan de largo, e imprime el calendario con el día de la semana de cada fecha
 para cazar el típico «el partido es el sábado» cuando cae en jueves. Avisa
 también cuando quedan menos de 30 días de calendario por delante.
 
+### El mapa
+
+Cada recinto sale en el mapa del Calendario si está en `"lugares"`, arriba del
+todo de `eventos.json`, con su `[latitud, longitud]`:
+
+```json
+"lugares": {
+  "Bernabéu": [40.4531, -3.6883]
+}
+```
+
+El nombre tiene que ser **exactamente** el mismo que el `lugar` de los eventos.
+`npm run eventos` avisa de los recintos que se han quedado sin punto y para si
+una coordenada cae fuera de la Comunidad (lo típico: latitud y longitud al
+revés). Las coordenadas se sacan de Google Maps: botón derecho sobre el sitio y
+el primer número es la latitud.
+
+El dibujo del mapa es `mapa-madrid.json`, hecho con `npm run mapa` a partir de
+los contornos del Instituto Geográfico Nacional (paquete `es-atlas`, licencia
+CC BY 4.0: la app lo cita debajo del mapa). Va dentro de la app: no se llama a
+ningún servidor de mapas, funciona sin cobertura y nadie sabe qué se mira. Solo
+hay que volver a generarlo para cambiar qué municipios llevan nombre.
+
 ### De dónde salen las fechas
 
 Las que hay ahora son las que no dependen de nadie: festivos, puentes, La

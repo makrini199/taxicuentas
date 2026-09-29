@@ -52,6 +52,21 @@ datos.eventos.forEach((e, i) => {
   else vistos.set(clave, i);
 });
 
+// Dónde está cada recinto, para el mapa: [latitud, longitud]. Un par dado la
+// vuelta o con una errata cae fuera de la Comunidad, y eso aquí salta.
+const GENERICOS = ["Madrid", "Madrid capital"];
+const lugares = datos.lugares && typeof datos.lugares === "object" ? datos.lugares : {};
+for (const [n, c] of Object.entries(lugares)) {
+  if (!Array.isArray(c) || c.length !== 2 || !c.every(Number.isFinite)) { fallos.push(`lugar "${n}": va como [latitud, longitud]`); continue; }
+  const [lat, lon] = c;
+  if (lat < 39.85 || lat > 41.2 || lon < -4.6 || lon > -3.0) fallos.push(`lugar "${n}": [${lat}, ${lon}] cae fuera de la Comunidad de Madrid (¿latitud y longitud al revés?)`);
+}
+// Todo evento con un sitio concreto tiene que salir en el mapa: si su recinto
+// no tiene coordenadas, no se publica. Lo que es de toda Madrid (un festivo,
+// un puente) va con lugar "Madrid" o sin lugar, y no lleva punto.
+const sinPunto = [...new Set(datos.eventos.map((e) => e && e.lugar).filter((l) => l && !GENERICOS.includes(l) && !lugares[l]))];
+for (const l of sinPunto) fallos.push(`"${l}" no tiene punto en el mapa: añade en "lugares" su [latitud, longitud], o pon lugar "Madrid" si es de toda la ciudad`);
+
 const hoy = new Date().toISOString().slice(0, 10);
 const futuros = datos.eventos.filter((e) => real(e?.fecha) && (e.hasta || e.fecha) >= hoy).sort((a, b) => a.fecha.localeCompare(b.fecha));
 if (!futuros.length) avisos.push("no queda ningún evento por venir: el calendario ya no le dice nada a nadie");
