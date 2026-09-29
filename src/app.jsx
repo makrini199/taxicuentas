@@ -68,7 +68,7 @@ const sumarGastos = (lista, desde, hasta) => lista.reduce((a, g) => {
   return a;
 }, { total: 0, reembolsable: 0, combustible: 0 });
 const finDeMes = (ym) => ym + "-31";
-const DEFAULT_CFG = { pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
+const DEFAULT_CFG = { objetivos: { dia: "", semana: "", mes: "" }, pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
 // Deja la lista siempre completa y en orden: las cuatro de serie primero, con el
 // interruptor que tuviera cada una, y detrás las que haya añadido el conductor.
 // Quien nunca haya pasado por Ajustes las tiene las cuatro encendidas, que es
@@ -90,7 +90,10 @@ const normPlataformas = (lista) => {
   return [...deSerie, ...propias];
 };
 const nuevaPlataforma = (nombre, tipo) => { const key = "p" + Date.now().toString(36); return { key, cobKey: key + "b", nombre: nombre.trim().slice(0, 24), tipo: tipo === "cobrado" ? "cobrado" : "efectivo", base: false, activa: true }; };
-const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas) }; };
+// Objetivos de facturación de cada día, semana y mes. Se guardan con el acuerdo,
+// así que viajan en la copia de seguridad.
+const normObjetivos = (o) => Object.fromEntries(["dia", "semana", "mes"].map((k) => { const n = Number(o && o[k]); return [k, Number.isFinite(n) && n > 0 ? String(Math.round(n * 100) / 100) : ""]; }));
+const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas), objetivos: normObjetivos(g && g.objetivos) }; };
 const num = (v) => Number(v) || 0;
 const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
 const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; const jornada = { min: 0, diasConHoras: 0, ganadoConHoras: 0, carreras: 0, factConCarreras: 0, propinas: 0 };
@@ -249,6 +252,7 @@ const TRAZOS = {
   calendario: <><rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" /><path d="M3.6 10h16.8" /><path d="M8.2 3.4v3.4M15.8 3.4v3.4" /><path d="M7.6 13.6h2.2M12 13.6h2.2M7.6 17h2.2M12 17h2.2" /></>,
   gastos: <><path d="M4.4 20.4V5.2a2 2 0 0 1 2-2h4.8a2 2 0 0 1 2 2v15.2" /><path d="M3.2 20.4h11.2" /><path d="M6.9 8h3.8" /><path d="M13.2 9.4h2.6a1.8 1.8 0 0 1 1.8 1.8v4.4a1.6 1.6 0 0 0 3.2 0V9.2l-2.4-2.4" /></>,
   mensual: <><path d="M4 20.4h16" /><rect x="6.2" y="12.4" width="3.4" height="5.6" rx="1.1" /><rect x="11.3" y="8.4" width="3.4" height="9.6" rx="1.1" /><rect x="16.4" y="5" width="3.4" height="13" rx="1.1" /></>,
+  objetivos: <><circle cx="12" cy="12" r="8.6" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" /></>,
   periodo: <><path d="M4 12h16" /><circle cx="7" cy="12" r="2.6" /><circle cx="17" cy="12" r="2.6" /><path d="M7 6.4v2.6M17 15v2.6" /></>,
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
 };
@@ -260,6 +264,49 @@ const TaxiLogo = ({ size = 26, color = "#0d0f14" }) => (
     <path d="M18.92 6c-.2-.58-.76-1-1.42-1h-11c-.66 0-1.21.42-1.42 1L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-6zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
   </svg>
 );
+
+// LOS ANILLOS DE OBJETIVOS. Mes fuera, semana en medio, hoy dentro, siempre en
+// el mismo sitio y con el mismo color aunque falte alguno, para que el color
+// diga siempre lo mismo. Colores comprobados con el validador para daltonismo
+// (oro, azul y rosa: el verde es de "la empresa te debe" y el violeta no se
+// distingue del azul). La parte vacía es un tono claro del mismo color; lo que
+// pasa del 100 % da una segunda vuelta más oscura.
+const ANILLOS = {
+  mes: { c: "#b8860b", osc: "#7a5907" },
+  semana: { c: "#2f6fe0", osc: "#1c47a0" },
+  dia: { c: "#d6457a", osc: "#9c2552" },
+};
+const Anillos = ({ datos, marcaMes, centro }) => {
+  const [montado, setMontado] = useState(false);
+  useEffect(() => { const id = requestAnimationFrame(() => setMontado(true)); return () => cancelAnimationFrame(id); }, []);
+  const G = 17, cx = 120, cy = 120;
+  const radios = { mes: 109, semana: 87, dia: 65 };
+  const arco = (r, v, color, key) => {
+    const L = 2 * Math.PI * r;
+    return <circle key={key} cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={G} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}
+      strokeDasharray={`${montado ? L * v : 0} ${L}`} style={{ transition: "stroke-dasharray 0.9s cubic-bezier(.2,.8,.2,1)" }} />;
+  };
+  let marca = null;
+  if (marcaMes != null && datos.mes) { const t = marcaMes * 2 * Math.PI; marca = <circle cx={cx + radios.mes * Math.sin(t)} cy={cy - radios.mes * Math.cos(t)} r={6} fill={C.t1} stroke="#fff" strokeWidth={2.5} />; }
+  return (
+    <div style={{ position: "relative", width: "100%", maxWidth: 240, margin: "0 auto" }}>
+      <svg viewBox="0 0 240 240" style={{ width: "100%", display: "block" }} aria-hidden="true">
+        {["mes", "semana", "dia"].map((k) => {
+          const r = radios[k]; const { c, osc } = ANILLOS[k]; const d = datos[k];
+          return (
+            <g key={k}>
+              <circle cx={cx} cy={cy} r={r} fill="none" stroke={d ? `${c}26` : "#eef0f6"} strokeWidth={G} />
+              {d && d.frac > 0 && arco(r, Math.min(d.frac, 1), c, "a")}
+              {d && d.frac > 1 && arco(r, Math.min(d.frac - 1, 1), osc, "b")}
+            </g>
+          );
+        })}
+        {marca}
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", pointerEvents: "none" }}>{centro}</div>
+    </div>
+  );
+};
 
 const Hero = ({ total, conductor, pct }) => (
   <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
@@ -405,6 +452,17 @@ function TXpro() {
   const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? { ...days[d] } : { ...EMPTY }); };
   const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
   const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(form[k])); return calcDay(raw, pct, plats); }, [form, pct, plats]);
+  // Facturación de cada día contando lo guardado, lo apuntado sin guardar y lo que
+  // se está escribiendo ahora mismo: los anillos se llenan viaje a viaje.
+  const factVivo = useMemo(() => {
+    const factDe = (d) => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(d && d[k])); return calcDay(raw, pct, plats).facturacion; };
+    const mapa = {};
+    for (const [f, d] of Object.entries(days)) mapa[f] = factDe(d);
+    for (const [f, d] of Object.entries(borradores)) mapa[f] = factDe(d);
+    mapa[editDate] = dayStats.facturacion;
+    return mapa;
+  }, [days, borradores, editDate, dayStats, pct, plats]);
+  const ponerObjetivo = (k, v) => setCfg((c) => ({ ...c, objetivos: { ...(c.objetivos || {}), [k]: v } }));
   const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
   const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
   const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
@@ -455,7 +513,7 @@ function TXpro() {
     setDays(limpios);
     setGastos(gastosCopia);
     setNotas(datos.notas && typeof datos.notas === "object" ? datos.notas : {});
-    if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg, plataformas: normPlataformas(datos.cfg.plataformas) }); marcarCfgOk(); }
+    if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg, plataformas: normPlataformas(datos.cfg.plataformas), objetivos: normObjetivos(datos.cfg.objetivos) }); marcarCfgOk(); }
     setBorradores({});
     setForm(limpios[editDate] ? { ...limpios[editDate] } : { ...EMPTY });
     setCopia(null);
@@ -612,6 +670,74 @@ function TXpro() {
           </div>}
           <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar día</button>
         </>}
+        {view === "objetivos" && (() => {
+          const obj = cfg.objetivos || {};
+          const ws = weekStart(today); const we = shiftDays(ws, 6); const mk = monthKey(today);
+          const suma = (ok) => Object.entries(factVivo).reduce((a, [f, v]) => (ok(f) ? a + v : a), 0);
+          const hecho = { dia: factVivo[today] || 0, semana: suma((f) => f >= ws && f <= we), mes: suma((f) => monthKey(f) === mk) };
+          const total = diasEnMes(mk); const diaMes = Number(today.slice(8));
+          const quedanMes = total - diaMes + 1;            // contando hoy
+          const quedanSemana = 7 - WD.indexOf(weekday(today));  // contando hoy; la semana empieza en lunes
+          const nombres = { dia: "Hoy", semana: "Esta semana", mes: capitalizar(monthLabel(mk).split(" ")[0]) };
+          const datos = {};
+          for (const k of ["mes", "semana", "dia"]) { const meta = num(obj[k]); if (meta > 0) datos[k] = { meta, hecho: hecho[k], frac: hecho[k] / meta }; }
+          const lider = datos.mes ? "mes" : datos.semana ? "semana" : datos.dia ? "dia" : null;
+          const ritmo = datos.mes ? datos.mes.meta * (diaMes / total) : 0;
+          const mesPasado = Object.entries(days).filter(([f]) => monthKey(f) === mesVecino(mk, -1)).reduce((a, [, d]) => a + calcDay(d, pct, plats).facturacion, 0);
+          const umbralBono = cfg.incentivo === "bono" ? num(cfg.umbral) : 0;
+          const lineaPie = (k) => {
+            const d = datos[k]; const falta = d.meta - d.hecho;
+            if (falta <= 0) return <span style={{ color: C.green, fontWeight: 800 }}>✓ Superado por {fmt(-falta)}</span>;
+            if (k === "mes") return quedanMes === 1
+              ? <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> y hoy es el último día del mes</>
+              : <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong>: {fmt(falta / quedanMes)} al día en los {quedanMes} días que quedan</>;
+            if (k === "semana") return <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> en {quedanSemana} {quedanSemana === 1 ? "día" : "días"}</>;
+            return <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> para hoy</>;
+          };
+          const etiqueta = { fontSize: 13, color: C.t1, fontWeight: 700 };
+          return (<>
+            <div style={{ ...card, padding: "18px 16px 14px", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Tus objetivos</div>
+              <Anillos datos={datos} marcaMes={datos.mes ? diaMes / total : null} centro={lider
+                ? <><div style={{ fontSize: 46, fontWeight: 900, color: C.t1, lineHeight: 1, letterSpacing: -1.5 }}>{Math.round(datos[lider].frac * 100)}%</div><div style={{ fontSize: 12, color: C.t2, marginTop: 5, fontWeight: 600 }}>{lider === "mes" ? "del mes" : lider === "semana" ? "de la semana" : "de hoy"}</div></>
+                : <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.4, maxWidth: 120, fontWeight: 600 }}>Ponte un objetivo abajo y mira cómo se llena</div>} />
+              {lider && <div style={{ marginTop: 16 }}>
+                {["mes", "semana", "dia"].filter((k) => datos[k]).map((k, i, arr) => (
+                  <div key={k} style={{ padding: "10px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: ANILLOS[k].c, flexShrink: 0 }} />
+                      <span style={{ ...etiqueta, flex: 1 }}>{nombres[k]}</span>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: C.t1 }}>{Math.round(datos[k].frac * 100)}%</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: C.t1, fontWeight: 600, marginTop: 3, paddingLeft: 18 }}>{fmt(datos[k].hecho)} <span style={{ color: C.t2, fontWeight: 500 }}>de {fmt0(datos[k].meta)}</span></div>
+                    <div style={{ fontSize: 12, color: C.t2, marginTop: 4, paddingLeft: 18, lineHeight: 1.45 }}>{lineaPie(k)}</div>
+                    {k === "mes" && datos.mes.hecho < datos.mes.meta && quedanMes > 1 && <div style={{ fontSize: 12, color: C.t2, marginTop: 3, paddingLeft: 18, lineHeight: 1.45 }}>
+                      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: C.t1, marginRight: 5, verticalAlign: "middle" }} />
+                      El punto negro es donde deberías ir al acabar hoy: {datos.mes.hecho >= ritmo ? <>vas <strong style={{ color: C.t1 }}>{fmt(datos.mes.hecho - ritmo)} por delante</strong></> : <>vas <strong style={{ color: C.t1 }}>{fmt(ritmo - datos.mes.hecho)} por detrás</strong></>}.
+                    </div>}
+                  </div>
+                ))}
+              </div>}
+            </div>
+
+            <div style={{ ...card, padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Cuánto quieres facturar</div>
+              <div style={{ fontSize: 11.5, color: C.t3, marginBottom: 12, lineHeight: 1.45 }}>Taxímetro más apps, como en Mensual. Deja vacío el que no quieras usar.</div>
+              {[["dia", "Cada día"], ["semana", "Cada semana"], ["mes", "Cada mes"]].map(([k, lb]) => (
+                <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
+                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: ANILLOS[k].c, flexShrink: 0 }} />
+                  <label htmlFor={`obj-${k}`} style={{ ...etiqueta, flex: 1 }}>{lb}</label>
+                  <input id={`obj-${k}`} className="inp" type="number" min="0" step="1" inputMode="decimal" placeholder="—" aria-label={`Objetivo ${lb.toLowerCase()}`} style={{ ...inp, width: 110, textAlign: "right", padding: "9px 10px" }} value={obj[k] || ""} onChange={(e) => ponerObjetivo(k, e.target.value)} />
+                  <span style={{ fontSize: 13, color: C.t2, fontWeight: 700 }}>€</span>
+                </div>
+              ))}
+              {(mesPasado > 0 || (umbralBono > 0 && !num(obj.mes))) && <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 10, fontSize: 12, color: C.t2, lineHeight: 1.5 }}>
+                {mesPasado > 0 && <div>El mes pasado facturaste <strong style={{ color: C.t1 }}>{fmt(mesPasado)}</strong>.</div>}
+                {umbralBono > 0 && !num(obj.mes) && <button className="nb" onClick={() => ponerObjetivo("mes", String(umbralBono))} style={{ marginTop: 8, padding: "8px 12px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Usar el de tu bono ({fmt0(umbralBono)} al mes)</button>}
+              </div>}
+            </div>
+          </>);
+        })()}
         {view === "gastos" && (() => { const mesActual = monthKey(today); const ordenados = [...gastos].sort((a, b) => b.date.localeCompare(a.date)); const meses = [...new Set(ordenados.map((g) => monthKey(g.date)))]; return (<>
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Gastos</div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Lo que pagas tú de tu bolsillo. Marca los que te devuelve la empresa y se descontarán de lo que le debes.</div>
@@ -940,7 +1066,7 @@ function TXpro() {
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "Diario"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
+        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
           <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
             <Icono name={v} />{lb}
           </button>

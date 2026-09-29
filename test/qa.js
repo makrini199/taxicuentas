@@ -395,6 +395,44 @@ const { chromium } = require('playwright');
   comprobar('viaje a viaje sin errores', errVV.length === 0, errVV.join(' | '));
   await vv.close();
 
+  console.log('\n— OBJETIVOS —');
+  const ob = await b.newContext({ viewport: { width: 360, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  const po = await ob.newPage();
+  const errOb = [];
+  po.on('pageerror', (e) => errOb.push(e.message));
+  await po.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await po.waitForSelector('text=INGRESOS DEL DÍA');
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  await po.waitForTimeout(500);
+  comprobar('sin objetivos invita a ponerlos', (await po.locator('body').innerText()).includes('Ponte un objetivo'));
+  await po.getByRole('button', { name: /Diario/ }).click();
+  await po.locator('input[aria-label="Taxímetro"]').fill('150');
+  await po.getByRole('button', { name: 'Guardar día' }).click();
+  await po.waitForTimeout(400);
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  await po.locator('#obj-dia').fill('100');
+  await po.locator('#obj-semana').fill('300');
+  await po.locator('#obj-mes').fill('1000');
+  await po.waitForTimeout(1200);
+  let ot = await po.locator('body').innerText();
+  comprobar('el centro dice el % del mes', /15%\s+del mes/.test(ot));
+  comprobar('hoy superado', /Hoy\s+150%/.test(ot) && ot.includes('Superado por 50,00'));
+  comprobar('lo que falta de la semana', /Esta semana\s+50%/.test(ot) && ot.includes('Te faltan 150,00'));
+  // Se llena viaje a viaje: lo apuntado sin guardar también cuenta.
+  await po.getByRole('button', { name: /Diario/ }).click();
+  await po.locator('input[aria-label="Taxímetro"]').fill('150+50');
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  await po.waitForTimeout(1200);
+  ot = await po.locator('body').innerText();
+  comprobar('se llena en directo sin guardar', /20%\s+del mes/.test(ot) && /Esta semana\s+67%/.test(ot));
+  comprobar('los anillos se pintan', (await po.locator('svg circle').count()) >= 6);
+  await po.reload({ waitUntil: 'load' });
+  await po.waitForSelector('text=INGRESOS DEL DÍA');
+  await po.getByRole('button', { name: /Objetivos/ }).click();
+  comprobar('los objetivos se quedan guardados', (await po.locator('#obj-mes').inputValue()) === '1000');
+  comprobar('objetivos sin errores', errOb.length === 0, errOb.join(' | '));
+  await ob.close();
+
   console.log('\n— AVISO DE INSTALAR LA APP —');
   // Solo debe salir a quien esté en la web desde Android. Ni en la app ya
   // instalada, ni en iPhone (allí no hay nada que bajar de Play Store).
