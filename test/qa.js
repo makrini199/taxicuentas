@@ -42,6 +42,25 @@ const { chromium } = require('playwright');
   comprobar('50% del conductor', calc.includes('166,38'));
   comprobar('cobrado por empresa', calc.includes('212,10'));
   comprobar('efectivo del conductor', calc.includes('120,65'));
+
+  console.log('\n— TU JORNADA —');
+  // De 18:00 a 04:00: pasa la medianoche y son 10 horas, no -14.
+  await p.getByLabel('Hora de empezar').fill('18:00');
+  await p.getByLabel('Hora de terminar').fill('04:00');
+  await set('Número de carreras', '20');
+  await set('Propinas', '12.50');
+  await p.waitForTimeout(400);
+  // Las propinas son del conductor: ni facturación, ni 50%, ni lo que cobra la
+  // empresa pueden moverse un céntimo.
+  const calc2 = await p.getByText('Cálculo del día').locator('..').innerText();
+  comprobar('las propinas no entran en la facturación', (await p.getByText('Total facturación día').locator('../..').innerText()).includes('332,75'));
+  comprobar('ni en el 50% ni en lo cobrado', calc2.includes('166,38') && calc2.includes('212,10') && calc2.includes('120,65'));
+  const jor = await p.getByText('Tu jornada').first().locator('..').innerText();
+  comprobar('jornada que pasa la medianoche', jor.includes('10 h (pasas la medianoche)'), jor.split('\n').pop());
+  // (166,375 de tu 50% + 12,50 de propinas) / 10 h = 17,8875
+  comprobar('lo que ganas por hora', /ganas 17,89\s€\/h/.test(jor));
+  // 332,75 / 20 carreras = 16,6375
+  comprobar('media por carrera', /16,64\s€ por carrera/.test(jor));
   await p.getByRole('button', { name: 'Guardar día' }).click();
   await p.waitForTimeout(500);
   comprobar('aviso de guardado', await p.getByText('Día guardado').count() > 0);
@@ -73,6 +92,10 @@ const { chromium } = require('playwright');
   // más los 45 del pinchazo a devolver → 90,73
   comprobar('balance con los gastos a devolver', mes.includes('90,73'));
   comprobar('media diaria presente', /Media diaria \(1 día\)/.test(mes));
+  comprobar('horas del mes', /Horas trabajadas \(1 día\)\s+10 h/.test(mes));
+  comprobar('carreras del mes', /Carreras\s+20/.test(mes));
+  comprobar('propinas del mes', /Propinas \(enteras para ti\)\s+12,50/.test(mes));
+  comprobar('por hora en el mes', /Ganas por hora\s+17,89\s€\/h/.test(mes));
   comprobar('sin incentivo por defecto', !/[Bb]ono/.test(mes), 'no debe inventar acuerdos');
 
   console.log('\n— PERIODO —');
@@ -122,7 +145,9 @@ const { chromium } = require('playwright');
   comprobar('acuerdo restaurado', rest.includes('45%'));
   await p.getByRole('button', { name: /Mensual/ }).click();
   await p.waitForTimeout(600);
-  comprobar('datos restaurados', (await p.locator('body').innerText()).includes('332,75'));
+  const tras = await p.locator('body').innerText();
+  comprobar('datos restaurados', tras.includes('332,75'));
+  comprobar('la jornada viaja en la copia', /Propinas \(enteras para ti\)\s+12,50/.test(tras) && /Horas trabajadas/.test(tras));
 
   console.log('\n— CON QUÉ APLICACIONES TRABAJA CADA UNO —');
   // Lo delicado de esto no es que la casilla aparezca o desaparezca, es que

@@ -93,13 +93,15 @@ const nuevaPlataforma = (nombre, tipo) => { const key = "p" + Date.now().toStrin
 const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas) }; };
 const num = (v) => Number(v) || 0;
 const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
-const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0 }; };
+const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; const jornada = { min: 0, diasConHoras: 0, ganadoConHoras: 0, carreras: 0, factConCarreras: 0, propinas: 0 };
+  entries.forEach(([, d], i) => { const s = rows[i].s; const min = minutosJornada(d); const prop = propinasDe(d); const car = carrerasDe(d); jornada.propinas += prop; if (car) { jornada.carreras += car; jornada.factConCarreras += s.facturacion; } if (min) { jornada.min += min; jornada.diasConHoras++; jornada.ganadoConHoras += s.conductor50 + prop; } });
+  return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0, jornada }; };
 const clavesDia = (plats) => ["taximetro", "visa", ...plats.flatMap((p) => [p.key, p.cobKey])];
 const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
 const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
 const today = todayStr();
 const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
-const hasData = (d) => !!d && typeof d === "object" && Object.values(d).some((v) => (Number(v) || 0) !== 0);
+const hasData = (d) => !!d && typeof d === "object" && (Object.values(d).some((v) => (Number(v) || 0) !== 0) || minutosJornada(d) > 0);
 const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob] of EFEC_TRIOS) { if (out[efec] === undefined) { const total = Number(out[fact]) || 0; const cobrado = out[oldCob] === undefined ? total : Number(out[oldCob]) || 0; out[efec] = Math.max(0, total - cobrado); } delete out[oldCob]; } return out; };
 const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
 
@@ -192,6 +194,21 @@ const indexarEventos = (lista) => {
   for (const f in mapa) mapa[f].sort((a, b) => ordenDelDia(a) - ordenDelDia(b));
   return mapa;
 };
+
+// LA JORNADA: a qué hora empieza y termina, cuántas carreras y las propinas.
+// Las propinas son del conductor enteras: no entran en la facturación ni en el
+// reparto con la empresa, así que calcDay no las ve y ningún balance cambia.
+const minutosDe = (h) => { const [hh, mm] = h.split(":").map(Number); return hh * 60 + mm; };
+// Si termina a una hora anterior a la de empezar es que pasó la medianoche: de
+// 18:00 a 04:00 son 10 horas, que en el taxi es lo más normal del mundo.
+const minutosJornada = (d) => {
+  if (!d || !ES_HORA.test(d.inicio || "") || !ES_HORA.test(d.fin || "")) return 0;
+  const m = minutosDe(d.fin) - minutosDe(d.inicio);
+  return m > 0 ? m : m < 0 ? m + 1440 : 0;
+};
+const duracion = (min) => { const h = Math.floor(min / 60); const m = min % 60; return m ? `${h} h ${m} min` : `${h} h`; };
+const propinasDe = (d) => Math.max(0, Number(d && d.propinas) || 0);
+const carrerasDe = (d) => Math.max(0, Math.round(Number(d && d.carreras) || 0));
 const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8b5cf6", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
@@ -249,6 +266,28 @@ const StatCard = ({ title, items, children }) => (
     {children}
   </div>
 );
+// Horas, carreras y propinas del mes o del periodo. Solo sale si hay algo
+// apuntado: a quien no lleva la jornada no se le llena la pantalla de ceros.
+const JornadaResumen = ({ j, pct }) => {
+  if (!j || (!j.min && !j.carreras && !j.propinas)) return null;
+  const filas = [];
+  if (j.min) filas.push({ label: `Horas trabajadas (${j.diasConHoras} ${j.diasConHoras === 1 ? "día" : "días"})`, val: duracion(j.min) });
+  if (j.carreras) filas.push({ label: "Carreras", val: String(j.carreras) });
+  if (j.propinas) filas.push({ label: "Propinas (enteras para ti)", val: fmt(j.propinas), color: C.green });
+  if (j.min) filas.push({ label: "Ganas por hora", val: `${fmt(j.ganadoConHoras / (j.min / 60))}/h`, color: C.accDim, bold: true });
+  if (j.carreras) filas.push({ label: "Media por carrera", val: fmt(j.factConCarreras / j.carreras) });
+  return (
+    <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+      <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu jornada</div>
+      {filas.map(({ label, val, color, bold }, i) => (
+        <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < filas.length - 1 ? `1px solid ${C.border}` : "none" }}>
+          <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color: color || C.t1 }}>{val}</span>
+        </div>
+      ))}
+      {j.min > 0 && <div style={{ fontSize: 11, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Por hora: tu {pct}% más las propinas, entre las horas de los días en que apuntaste la jornada.</div>}
+    </div>
+  );
+};
 const Balance = ({ value, sub }) => { const neg = value <= 0; return (
   <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
     <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}><><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: neg ? C.green : C.red, marginRight: 7, verticalAlign: "middle" }} />{neg ? "Empresa debe al conductor" : "Conductor debe a empresa"}</></div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
@@ -328,8 +367,14 @@ function TXpro() {
   useEffect(() => { try { localStorage.setItem("tc_notas", JSON.stringify(notas)); } catch {} }, [notas]);
   const ponerNota = (fecha, texto) => setNotas((prev) => { const next = { ...prev }; if (texto.trim()) next[fecha] = texto.slice(0, 120); else delete next[fecha]; return next; });
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
-  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = parseFloat(form[k]) || 0; const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
+  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = parseFloat(form[k]) || 0;
+    const prop = propinasDe(form); if (prop) parsed.propinas = prop;
+    const car = carrerasDe(form); if (car) parsed.carreras = car;
+    if (ES_HORA.test(form.inicio || "")) parsed.inicio = form.inicio;
+    if (ES_HORA.test(form.fin || "")) parsed.fin = form.fin;
+    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
   const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
+  const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
   const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw, pct, plats); }, [form, pct, plats]);
   const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
   const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
@@ -474,6 +519,31 @@ function TXpro() {
               <div style={{ fontSize: 26, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(dayStats.diferencia))}</div>
             </div>
           ); })()}
+          {(() => {
+            const etiqueta = { fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" };
+            const campo = { ...inp, padding: "10px 11px", fontSize: 15 };
+            const porHora = jornadaHoy.min ? (dayStats.conductor50 + jornadaHoy.propinas) / (jornadaHoy.min / 60) : 0;
+            const datos = [
+              jornadaHoy.min ? `${duracion(jornadaHoy.min)}${jornadaHoy.cruza ? " (pasas la medianoche)" : ""}` : null,
+              porHora > 0 ? `ganas ${fmt(porHora)}/h` : null,
+              jornadaHoy.carreras && dayStats.facturacion > 0 ? `${fmt(dayStats.facturacion / jornadaHoy.carreras)} por carrera` : null,
+            ].filter(Boolean);
+            return (
+              <div style={{ ...card, padding: 16, marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu jornada</div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Empiezas</span><input className="inp" type="time" aria-label="Hora de empezar" style={campo} value={form.inicio || ""} onChange={(e) => setForm((v) => ({ ...v, inicio: e.target.value }))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Terminas</span><input className="inp" type="time" aria-label="Hora de terminar" style={campo} value={form.fin || ""} onChange={(e) => setForm((v) => ({ ...v, fin: e.target.value }))} /></label>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Carreras</span><input className="inp" type="number" min="0" step="1" inputMode="numeric" placeholder="0" aria-label="Número de carreras" style={{ ...campo, textAlign: "right" }} value={form.carreras || ""} onChange={(e) => setForm((v) => ({ ...v, carreras: e.target.value }))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Propinas</span><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label="Propinas" style={{ ...campo, textAlign: "right" }} value={form.propinas || ""} onChange={(e) => setForm((v) => ({ ...v, propinas: e.target.value }))} /></label>
+                </div>
+                <div style={{ fontSize: 11, color: C.t3, marginTop: 9, lineHeight: 1.45 }}>Las propinas son tuyas enteras: no entran en la facturación ni en el reparto con la empresa.</div>
+                {datos.length > 0 && <div style={{ marginTop: 10, background: `${C.acc}10`, border: `1px solid ${C.acc}33`, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700, color: C.t1, lineHeight: 1.5 }}>{datos.join(" · ")}</div>}
+              </div>
+            );
+          })()}
           <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar día</button>
         </>}
         {view === "gastos" && (() => { const mesActual = monthKey(today); const ordenados = [...gastos].sort((a, b) => b.date.localeCompare(a.date)); const meses = [...new Set(ordenados.map((g) => monthKey(g.date)))]; return (<>
@@ -660,6 +730,7 @@ function TXpro() {
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                 </StatCard>
+                <JornadaResumen j={selectedData.jornada} pct={pct} />
                 <Balance value={diferenciaMes} sub={gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
                 <DayTable rows={rows} pct={pct} />
               </div>
@@ -796,6 +867,7 @@ function TXpro() {
               </div>
             ); })()}
             <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosPeriodo.total > 0 ? [{ label: "Gastos del periodo", val: gastosPeriodo.total, color: C.red, neg: true }] : []), ...(gastosPeriodo.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosPeriodo.reembolsable, color: C.green }] : [])]} />
+            <JornadaResumen j={rangeData.jornada} pct={pct} />
             <Balance value={diferenciaMes} sub={gastosPeriodo.reembolsable > 0 ? "Balance del periodo · incluye los gastos a devolver" : "Balance del periodo seleccionado"} />
             <DayTable rows={rows} pct={pct} />
           </>}
