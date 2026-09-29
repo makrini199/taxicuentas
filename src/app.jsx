@@ -156,7 +156,6 @@ const tocaAvisarDePlay = () => esAndroid() && !enAppInstalada() && !avisoPlaySil
 // el archivo: como la app de Play carga esta web por dentro, le llega a todo
 // el mundo sin pasar por Google.
 const EVENTOS_KEY = "tc_eventos";
-const EVENTOS_HORAS = 12;              // cada cuánto se vuelve a mirar
 const EVENTOS_MAX = 400;
 const EVENTOS_DIAS_MAX = 15;           // lo que dura una feria larga
 const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -494,11 +493,12 @@ function TXpro() {
   const [hayUpdate, setHayUpdate] = useState(false);
   const [avisarPlay, setAvisarPlay] = useState(tocaAvisarDePlay);
   const [eventos, setEventos] = useState(() => limpiarEventos(loadStorage(EVENTOS_KEY, null)) || { actualizado: "", eventos: [], lugares: {} });
-  // Lo guardado se pinta ya; la red solo sirve para refrescarlo. Si falla, no
-  // pasa nada: el conductor sigue viendo el último calendario que le llegó.
+  // Lo guardado se pinta ya y la red lo refresca cada vez que se abre la app.
+  // Antes se miraba solo cada 12 horas, y eso dejó a los que actualizaron a la
+  // 1.9.0 con el calendario viejo, sin las coordenadas del mapa, hasta medio día
+  // después. El archivo es pequeño y el navegador pregunta si ha cambiado antes
+  // de bajarlo entero. Si no hay red, sigue valiendo el último que llegó.
   useEffect(() => {
-    const visto = loadStorage(EVENTOS_KEY + "_visto", 0);
-    if (typeof visto === "number" && Date.now() - visto < EVENTOS_HORAS * 3600000) return;
     let vivo = true;
     fetch("./eventos.json", { cache: "no-cache" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
@@ -509,7 +509,7 @@ function TXpro() {
         // Se guarda tal cual llegó, no ya limpio: al abrir se vuelve a pasar por
         // limpiarEventos, y lo limpio no sobrevive a una segunda limpieza (las
         // horas dejan de ser texto y se perderían a partir del segundo día).
-        try { localStorage.setItem(EVENTOS_KEY, JSON.stringify(crudo)); localStorage.setItem(EVENTOS_KEY + "_visto", JSON.stringify(Date.now())); } catch {}
+        try { localStorage.setItem(EVENTOS_KEY, JSON.stringify(crudo)); localStorage.removeItem(EVENTOS_KEY + "_visto"); } catch {}
       })
       .catch(() => {});
     return () => { vivo = false; };
