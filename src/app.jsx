@@ -235,7 +235,10 @@ const minutosJornada = (d) => {
 const duracion = (min) => { const h = Math.floor(min / 60); const m = min % 60; return m ? `${h} h ${m} min` : `${h} h`; };
 const propinasDe = (d) => Math.max(0, evalSuma(d && d.propinas));
 const carrerasDe = (d) => Math.max(0, Math.round(evalSuma(d && d.carreras)));
-const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8b5cf6", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
+// evento: el oro oscuro de la marca. Era morado y recordaba a Cabify; además
+// el número blanco de los puntos del mapa se quedaba en 4,2:1 y así va a 5,1:1.
+// No es el rojo del logo porque el rojo en la app es "debes a la empresa".
+const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8a6a17", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
 const Mono = ({ color }) => (
