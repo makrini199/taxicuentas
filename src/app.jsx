@@ -101,6 +101,18 @@ const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bo
 const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
 const today = todayStr();
 const loadStorage = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+// Cada casilla de dinero es una calculadora: "10,65+8,40" son 19,05. Así el que
+// apunta viaje a viaje va sumando sobre la marcha y el que mete el total del día
+// lo mete sin más. Acepta coma o punto, y un "-" para corregir un viaje mal puesto.
+const evalSuma = (v) => {
+  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
+  if (typeof v !== "string") return 0;
+  const partes = v.replace(/\s/g, "").replace(/,/g, ".").match(/[+-]?[^+-]+/g) || [];
+  const total = partes.reduce((a, t) => a + (parseFloat(t) || 0), 0);
+  return Math.round(total * 100) / 100;
+};
+const viajesDe = (v) => (String(v).replace(/\s/g, "").match(/[+-]?[^+-]+/g) || []).map((t, i) => { const menos = t[0] === "-"; const n = t.replace(/^[+-]/, "").replace(/\./g, ","); return i === 0 ? (menos ? `−${n}` : n) : `${menos ? "−" : "+"} ${n}`; }).join(" ");
+const limpiarCasilla = (v) => String(v).replace(/[^\d.,+\-]/g, "");
 const hasData = (d) => !!d && typeof d === "object" && (Object.values(d).some((v) => (Number(v) || 0) !== 0) || minutosJornada(d) > 0);
 const migrateDay = (d) => { const out = { ...d }; for (const [fact, efec, oldCob] of EFEC_TRIOS) { if (out[efec] === undefined) { const total = Number(out[fact]) || 0; const cobrado = out[oldCob] === undefined ? total : Number(out[oldCob]) || 0; out[efec] = Math.max(0, total - cobrado); } delete out[oldCob]; } return out; };
 const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", {})).filter(([, d]) => hasData(d)).map(([date, d]) => [date, migrateDay(d)]));
@@ -207,8 +219,8 @@ const minutosJornada = (d) => {
   return m > 0 ? m : m < 0 ? m + 1440 : 0;
 };
 const duracion = (min) => { const h = Math.floor(min / 60); const m = min % 60; return m ? `${h} h ${m} min` : `${h} h`; };
-const propinasDe = (d) => Math.max(0, Number(d && d.propinas) || 0);
-const carrerasDe = (d) => Math.max(0, Math.round(Number(d && d.carreras) || 0));
+const propinasDe = (d) => Math.max(0, evalSuma(d && d.propinas));
+const carrerasDe = (d) => Math.max(0, Math.round(evalSuma(d && d.carreras)));
 const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8b5cf6", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
@@ -308,7 +320,12 @@ function TXpro() {
   const [days, setDays] = useState(loadDays);
   const [view, setView] = useState("diario");
   const [editDate, setEditDate] = useState(today);
-  const [form, setForm] = useState(() => { const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
+  // Lo que se escribe y no se ha guardado todavía, por fecha. Quien apunta viaje a
+  // viaje no va a darle a "Guardar día" tras cada carrera: si se le cierra la app
+  // o se reinicia el móvil, lo apuntado tiene que seguir ahí.
+  const [borradores, setBorradores] = useState(() => { const b = loadStorage("tc_borradores", {}); return b && typeof b === "object" && !Array.isArray(b) ? Object.fromEntries(Object.entries(b).filter(([f, v]) => /^\d{4}-\d{2}-\d{2}$/.test(f) && v && typeof v === "object")) : {}; });
+  const [form, setForm] = useState(() => { const b = loadStorage("tc_borradores", {}); if (b && b[today] && typeof b[today] === "object") return { ...b[today] }; const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
+  const [enfoque, setEnfoque] = useState(null);
   const [saved, setSaved] = useState(false);
   const [notas, setNotas] = useState(() => { const n = loadStorage("tc_notas", {}); return n && typeof n === "object" ? n : {}; });
   const [calMes, setCalMes] = useState(monthKey(today));
@@ -363,19 +380,31 @@ function TXpro() {
   const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
   const [rangeTo, setRangeTo] = useState(today);
   useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
+  useEffect(() => { try { const limite = shiftDays(today, -60); localStorage.setItem("tc_borradores", JSON.stringify(Object.fromEntries(Object.entries(borradores).filter(([f]) => f >= limite)))); } catch {} }, [borradores]);
   useEffect(() => { try { localStorage.setItem("tc_gastos", JSON.stringify(gastos)); } catch {} }, [gastos]);
   useEffect(() => { try { localStorage.setItem("tc_notas", JSON.stringify(notas)); } catch {} }, [notas]);
   const ponerNota = (fecha, texto) => setNotas((prev) => { const next = { ...prev }; if (texto.trim()) next[fecha] = texto.slice(0, 120); else delete next[fecha]; return next; });
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
-  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = parseFloat(form[k]) || 0;
+  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = Math.max(0, evalSuma(form[k]));
     const prop = propinasDe(form); if (prop) parsed.propinas = prop;
     const car = carrerasDe(form); if (car) parsed.carreras = car;
     if (ES_HORA.test(form.inicio || "")) parsed.inicio = form.inicio;
     if (ES_HORA.test(form.fin || "")) parsed.fin = form.fin;
-    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
-  const changeDate = (d) => { setEditDate(d); setForm(days[d] ? { ...days[d] } : { ...EMPTY }); };
+    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setForm(vacio ? { ...EMPTY } : { ...parsed }); quitarBorrador(editDate); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
+  const quitarBorrador = (f) => setBorradores((b) => { if (!b[f]) return b; const n = { ...b }; delete n[f]; return n; });
+  const descartarBorrador = () => { if (!window.confirm("¿Descartar lo que has apuntado sin guardar en este día?")) return; quitarBorrador(editDate); setForm(days[editDate] ? { ...days[editDate] } : { ...EMPTY }); };
+  // Todo lo que teclea el conductor pasa por aquí, para que quede en el borrador.
+  const editar = (k, val) => { const n = { ...form, [k]: val }; setForm(n); setBorradores((b) => ({ ...b, [editDate]: n })); };
+  // Al salir de la casilla se hace la cuenta y queda solo el total.
+  const cerrarCasilla = (k) => { setEnfoque(null); const raw = form[k]; if (typeof raw !== "string" || !/[+\-,]/.test(raw)) return; const t = Math.max(0, evalSuma(raw)); editar(k, t > 0 ? String(t) : ""); };
+  const sumarOtro = (k) => {
+    const raw = String(form[k] ?? "").trim();
+    if (raw && !/[+-]$/.test(raw)) editar(k, raw + "+");
+    requestAnimationFrame(() => { const el = document.querySelector(`[data-casilla="${k}"]`); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} } });
+  };
+  const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? { ...days[d] } : { ...EMPTY }); };
   const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
-  const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = parseFloat(form[k]) || 0; return calcDay(raw, pct, plats); }, [form, pct, plats]);
+  const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(form[k])); return calcDay(raw, pct, plats); }, [form, pct, plats]);
   const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
   const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
   const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
@@ -427,11 +456,39 @@ function TXpro() {
     setGastos(gastosCopia);
     setNotas(datos.notas && typeof datos.notas === "object" ? datos.notas : {});
     if (datos.cfg && typeof datos.cfg === "object") { setCfg({ ...DEFAULT_CFG, ...datos.cfg, plataformas: normPlataformas(datos.cfg.plataformas) }); marcarCfgOk(); }
+    setBorradores({});
     setForm(limpios[editDate] ? { ...limpios[editDate] } : { ...EMPTY });
     setCopia(null);
     setCopiaMsg(`Restaurados ${Object.keys(limpios).length} días.`);
   };
   const ANCHO = 84;
+  // Casilla de dinero con calculadora. Texto y no number: el campo numérico del
+  // navegador no deja escribir "+" ni coma. Enter hace la cuenta, como el "=".
+  const casilla = (k, etiqueta, estilo) => (
+    <input className="inp" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" placeholder="0.00" data-casilla={k} aria-label={etiqueta}
+      style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", ...estilo }}
+      value={form[k] || ""} onFocus={() => setEnfoque(k)} onBlur={() => cerrarCasilla(k)}
+      onChange={(e) => editar(k, limpiarCasilla(e.target.value))}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+  );
+  // Debajo de la casilla que se está escribiendo: el botón de sumar otro viaje
+  // (no todos los teclados numéricos tienen "+") y la cuenta en vivo. El
+  // onMouseDown evita que el botón le quite el foco a la casilla y cierre el teclado.
+  const ayudaSuma = (k) => {
+    const raw = String(form[k] ?? "");
+    const hayCuenta = /\d[+-]\d/.test(raw.replace(/,/g, "."));
+    return (
+      <div style={{ padding: "0 0 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => sumarOtro(k)} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+ Sumar otro viaje</button>
+        <span style={{ flex: 1, textAlign: "right", fontSize: 13, fontWeight: 800, color: C.accDim }}>{hayCuenta ? `= ${fmt(Math.max(0, evalSuma(raw)))}` : ""}</span>
+        </div>
+        {/* La casilla es estrecha y solo enseña el final de la cuenta: aquí van todos
+            los viajes, para poder repasar si falta o sobra alguno. */}
+        {hayCuenta && <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5, wordBreak: "break-word" }}>{viajesDe(raw)}</div>}
+      </div>
+    );
+  };
   // Una fila por concepto: el nombre a la izquierda y las casillas a la derecha,
   // todas alineadas en columna. Sin distintivos de las plataformas: el nombre en
   // texto dice de qué es la casilla y las marcas son de quien son.
@@ -483,7 +540,8 @@ function TXpro() {
               <div style={{ ...colHead, width: ANCHO, color: C.blue }}>Efectivo</div>
             </div>
             {filas.map((f) => (
-              <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 7, borderTop: "1px solid #eef0f6", padding: "10px 0" }}>
+              <React.Fragment key={f.key}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, borderTop: "1px solid #eef0f6", padding: "10px 0" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     {f.oro && <TaxiLogo size={18} color={C.acc} />}
@@ -491,11 +549,13 @@ function TXpro() {
                   </div>
                   {f.cobrado && <div style={{ fontSize: 9.5, fontWeight: 700, color: C.green, marginTop: 3 }}>2ª casilla: ya cobrado</div>}
                 </div>
-                <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={f.nombre} style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right" }} value={form[f.key] || ""} onChange={(e) => setForm((v) => ({ ...v, [f.key]: e.target.value }))} />
+                {casilla(f.key, f.nombre)}
                 {f.cobKey
-                  ? <input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label={`${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`} style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` }} value={form[f.cobKey] || ""} onChange={(e) => setForm((v) => ({ ...v, [f.cobKey]: e.target.value }))} />
+                  ? casilla(f.cobKey, `${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`, { background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` })
                   : <div style={{ width: ANCHO, flexShrink: 0 }} />}
               </div>
+              {(enfoque === f.key || enfoque === f.cobKey) && ayudaSuma(enfoque)}
+              </React.Fragment>
             ))}
             <div style={{ borderTop: "1px solid #eef0f6", paddingTop: 10, fontSize: 10.5, color: C.t3, lineHeight: 1.45 }}>
               ¿Trabajas con otras aplicaciones? Enciende las que uses o añade la tuya en <button className="nb" onClick={() => setView("ajustes")} style={{ background: "none", border: "none", padding: 0, font: "inherit", color: C.accDim, fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>Ajustes</button>.
@@ -532,18 +592,24 @@ function TXpro() {
               <div style={{ ...card, padding: 16, marginBottom: 14 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu jornada</div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Empiezas</span><input className="inp" type="time" aria-label="Hora de empezar" style={campo} value={form.inicio || ""} onChange={(e) => setForm((v) => ({ ...v, inicio: e.target.value }))} /></label>
-                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Terminas</span><input className="inp" type="time" aria-label="Hora de terminar" style={campo} value={form.fin || ""} onChange={(e) => setForm((v) => ({ ...v, fin: e.target.value }))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Empiezas</span><input className="inp" type="time" aria-label="Hora de empezar" style={campo} value={form.inicio || ""} onChange={(e) => editar("inicio", e.target.value)} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Terminas</span><input className="inp" type="time" aria-label="Hora de terminar" style={campo} value={form.fin || ""} onChange={(e) => editar("fin", e.target.value)} /></label>
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
-                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Carreras</span><input className="inp" type="number" min="0" step="1" inputMode="numeric" placeholder="0" aria-label="Número de carreras" style={{ ...campo, textAlign: "right" }} value={form.carreras || ""} onChange={(e) => setForm((v) => ({ ...v, carreras: e.target.value }))} /></label>
-                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Propinas</span><input className="inp" type="number" min="0" step="0.01" placeholder="0.00" aria-label="Propinas" style={{ ...campo, textAlign: "right" }} value={form.propinas || ""} onChange={(e) => setForm((v) => ({ ...v, propinas: e.target.value }))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Carreras</span><input className="inp" type="number" min="0" step="1" inputMode="numeric" placeholder="0" aria-label="Número de carreras" style={{ ...campo, textAlign: "right" }} value={form.carreras || ""} onFocus={() => setEnfoque("carreras")} onBlur={() => setEnfoque(null)} onChange={(e) => editar("carreras", e.target.value.replace(/\D/g, ""))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Propinas</span>{casilla("propinas", "Propinas", { width: "100%", padding: "10px 11px", fontSize: 15 })}</label>
                 </div>
+                {enfoque === "propinas" && <div style={{ marginTop: 8 }}>{ayudaSuma("propinas")}</div>}
+                {enfoque === "carreras" && <div style={{ marginTop: 8, paddingBottom: 2 }}><button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => editar("carreras", String(carrerasDe(form) + 1))} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+1 carrera</button></div>}
                 <div style={{ fontSize: 11, color: C.t3, marginTop: 9, lineHeight: 1.45 }}>Las propinas son tuyas enteras: no entran en la facturación ni en el reparto con la empresa.</div>
                 {datos.length > 0 && <div style={{ marginTop: 10, background: `${C.acc}10`, border: `1px solid ${C.acc}33`, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700, color: C.t1, lineHeight: 1.5 }}>{datos.join(" · ")}</div>}
               </div>
             );
           })()}
+          {borradores[editDate] && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8, fontSize: 12, color: C.t2 }}>
+            <span><span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: C.acc, marginRight: 6, verticalAlign: "middle" }} />Apuntado pero sin guardar: se queda aunque cierres la app</span>
+            <button className="nb" onClick={descartarBorrador} style={{ background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.red, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>Descartar</button>
+          </div>}
           <button className="saveBtn" onClick={saveDay} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 16px ${C.acc}38` }}>Guardar día</button>
         </>}
         {view === "gastos" && (() => { const mesActual = monthKey(today); const ordenados = [...gastos].sort((a, b) => b.date.localeCompare(a.date)); const meses = [...new Set(ordenados.map((g) => monthKey(g.date)))]; return (<>

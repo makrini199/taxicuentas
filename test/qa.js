@@ -321,6 +321,80 @@ const { chromium } = require('playwright');
   comprobar('los días fuertes siguen ahí sin cobertura', (await ps.locator('body').innerText()).includes('Nochevieja'));
   await sinRed.close();
 
+  console.log('\n— VIAJE A VIAJE —');
+  // Cada casilla es una calculadora: el que quiera va sumando viaje a viaje, y al
+  // salir de la casilla queda solo el total.
+  const vv = await b.newContext({ viewport: { width: 360, height: 800 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  const pc = await vv.newPage();
+  const errVV = [];
+  pc.on('pageerror', (e) => errVV.push(e.message));
+  await pc.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pc.waitForSelector('text=INGRESOS DEL DÍA');
+  const taxi = pc.locator('input[aria-label="Taxímetro"]');
+  await taxi.fill('10,65+8.40');           // con coma y con punto, las dos valen
+  await pc.waitForTimeout(300);
+  comprobar('la cuenta sale en vivo', (await pc.locator('body').innerText()).includes('= 19,05'));
+  comprobar('y la facturación ya la cuenta', (await pc.getByText('Total facturación día').locator('../..').innerText()).includes('19,05'));
+  await taxi.press('Enter');
+  await pc.waitForTimeout(200);
+  comprobar('al salir queda solo el total', (await taxi.inputValue()) === '19.05', await taxi.inputValue());
+
+  // Sin tecla "+": el botón la pone, y la casilla no pierde el foco (el teclado
+  // del móvil no se cierra entre viaje y viaje).
+  await taxi.click();
+  await pc.getByRole('button', { name: '+ Sumar otro viaje' }).click();
+  comprobar('el botón pone el "+"', (await taxi.inputValue()) === '19.05+', await taxi.inputValue());
+  comprobar('sin cerrar el teclado', (await pc.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'Taxímetro');
+  await pc.keyboard.type('5');
+  await taxi.press('Enter');
+  await pc.waitForTimeout(200);
+  comprobar('viaje sumado', (await taxi.inputValue()) === '24.05', await taxi.inputValue());
+  const tarjeta = pc.locator('input[aria-label="Tarjeta"]');
+  await tarjeta.fill('abc7');
+  comprobar('lo que no es número no entra', (await tarjeta.inputValue()) === '7', await tarjeta.inputValue());
+  await tarjeta.fill('');
+
+  // Lo apuntado sin guardar sobrevive a cerrar la app...
+  await pc.reload({ waitUntil: 'load' });
+  await pc.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('sigue ahí tras cerrar la app', (await taxi.inputValue()) === '24.05', await taxi.inputValue());
+  comprobar('y avisa de que falta guardar', (await pc.locator('body').innerText()).includes('sin guardar'));
+  // ...y a mirar otro día y volver.
+  const fecha = pc.locator('input[type="date"]');
+  const hoy = await fecha.inputValue();
+  const ayer = await pc.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await fecha.fill(ayer);
+  await pc.waitForTimeout(300);
+  comprobar('el otro día sale limpio', (await taxi.inputValue()) === '');
+  await fecha.fill(hoy);
+  await pc.waitForTimeout(300);
+  comprobar('y al volver sigue lo apuntado', (await taxi.inputValue()) === '24.05');
+
+  // Propinas con calculadora y carreras de una en una.
+  const propinas = pc.locator('input[aria-label="Propinas"]');
+  await propinas.fill('2+1,5');
+  await propinas.press('Enter');
+  await pc.waitForTimeout(200);
+  comprobar('propinas sumadas', (await propinas.inputValue()) === '3.5', await propinas.inputValue());
+  const carreras = pc.locator('input[aria-label="Número de carreras"]');
+  await carreras.click();
+  await pc.getByRole('button', { name: '+1 carrera' }).click();
+  await pc.getByRole('button', { name: '+1 carrera' }).click();
+  comprobar('+1 carrera dos veces', (await carreras.inputValue()) === '2', await carreras.inputValue());
+
+  // Guardar deja el día limpio y sin aviso.
+  await pc.getByRole('button', { name: 'Guardar día' }).click();
+  await pc.waitForTimeout(500);
+  comprobar('al guardar se va el aviso', !(await pc.locator('body').innerText()).includes('sin guardar'));
+  await pc.reload({ waitUntil: 'load' });
+  await pc.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('el día guardado queda en 24,05', (await taxi.inputValue()) === '24.05');
+  const diasVV = await pc.evaluate(() => JSON.parse(localStorage.getItem('tc_days') || '{}'));
+  const elDia = Object.values(diasVV)[0] || {};
+  comprobar('se guarda el número, no la cuenta', elDia.taximetro === 24.05 && elDia.propinas === 3.5 && elDia.carreras === 2, JSON.stringify(elDia).slice(0, 90));
+  comprobar('viaje a viaje sin errores', errVV.length === 0, errVV.join(' | '));
+  await vv.close();
+
   console.log('\n— AVISO DE INSTALAR LA APP —');
   // Solo debe salir a quien esté en la web desde Android. Ni en la app ya
   // instalada, ni en iPhone (allí no hay nada que bajar de Play Store).
