@@ -1,6 +1,20 @@
 {
   "actualizado": "2026-09-24",
   "aviso": "Días fuertes en Madrid. Cada evento va en la NOCHE en que pasa: una salida de las 00:00 del viernes se apunta el jueves. Comprobar con: npm run eventos",
+  "lugares": {
+    "Bernabéu": [40.4531, -3.6883],
+    "Metropolitano": [40.4362, -3.5995],
+    "Estadio de Vallecas": [40.3919, -3.6586],
+    "Coliseum · Getafe": [40.3256, -3.7147],
+    "Butarque · Leganés": [40.3406, -3.7603],
+    "Las Ventas": [40.432, -3.6631],
+    "Movistar Arena": [40.4239, -3.6719],
+    "Palacio Vistalegre": [40.3893, -3.74],
+    "Estadio Nacional Complutense": [40.4467, -3.7305],
+    "Iberdrola Music · Villaverde": [40.344, -3.701],
+    "Parque Warner · San Martín de la Vega": [40.231, -3.593],
+    "Centro de Madrid": [40.4193, -3.6931]
+  },
   "eventos": [
     {"fecha": "2026-09-25", "hasta": "2026-09-27", "titulo": "Shakira", "lugar": "Iberdrola Music · Villaverde", "tipo": "concierto", "nota": "Uno cada noche. Punto de recogida de Uber: C. de San Ezequiel, 10."},
     {"fecha": "2026-09-25", "titulo": "Grupo Firme", "lugar": "Movistar Arena", "tipo": "concierto", "salida": "23:00-00:00"},

@@ -11,6 +11,7 @@ const SHELL = [
   "./vendor/react-dom.production.min.js",
   "./manifest.webmanifest",
   "./eventos.json",
+  "./mapa-madrid.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",

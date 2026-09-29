@@ -319,6 +319,7 @@ const { chromium } = require('playwright');
   await ps.waitForTimeout(600);
   for (let i = 0; i < 24 && !/diciembre de 2026/i.test(await ps.locator('body').innerText()); i++) { await ps.getByLabel('Mes siguiente').click(); await ps.waitForTimeout(150); }
   comprobar('los días fuertes siguen ahí sin cobertura', (await ps.locator('body').innerText()).includes('Nochevieja'));
+  comprobar('y el mapa también', (await ps.getByText('Dónde es').count()) > 0);
   await sinRed.close();
 
   console.log('\n— VIAJE A VIAJE —');
@@ -394,6 +395,48 @@ const { chromium } = require('playwright');
   comprobar('se guarda el número, no la cuenta', elDia.taximetro === 24.05 && elDia.propinas === 3.5 && elDia.carreras === 2, JSON.stringify(elDia).slice(0, 90));
   comprobar('viaje a viaje sin errores', errVV.length === 0, errVV.join(' | '));
   await vv.close();
+
+  console.log('\n— MAPA DE LOS EVENTOS —');
+  const mp = await b.newContext({ viewport: { width: 320, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  const pm = await mp.newPage();
+  const errMp = [];
+  pm.on('pageerror', (e) => errMp.push(e.message));
+  await pm.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pm.waitForSelector('text=INGRESOS DEL DÍA');
+  await pm.waitForTimeout(700);
+  await pm.getByRole('button', { name: /Calendario/ }).click();
+  await pm.waitForTimeout(500);
+  for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pm.locator('body').innerText()); i++) { await pm.getByLabel('Mes siguiente').click(); await pm.waitForTimeout(120); }
+  await pm.getByRole('button', { name: /^2026-10-02/ }).click();
+  await pm.waitForTimeout(500);
+  const marcas = () => pm.locator('button[aria-label^="1. "], button[aria-label^="2. "], button[aria-label^="3. "], button[aria-label^="4. "], button[aria-label^="5. "]').count();
+  comprobar('el mapa sale en el calendario', (await pm.getByText('Dónde es').count()) > 0);
+  // Viernes 2: Shakira, Las Ventas, Vistalegre y Movistar en Madrid; el Warner fuera.
+  comprobar('un punto por sitio en Madrid', (await marcas()) === 4, String(await marcas()));
+  comprobar('avisa de lo que queda fuera', (await pm.locator('body').innerText()).includes('Fuera de este mapa: Parque Warner'));
+  await pm.getByRole('button', { name: 'Toda la Comunidad', exact: true }).click();
+  await pm.waitForTimeout(300);
+  comprobar('en la Comunidad sale el Warner', (await pm.locator('button[aria-label^="5. Parque Warner"]').count()) === 1);
+  comprobar('y lo de Madrid se agrupa', (await pm.locator('button[aria-label*="sitios juntos"]').count()) === 1);
+  await pm.locator('button[aria-label*="sitios juntos"]').click();
+  await pm.waitForTimeout(300);
+  comprobar('el grupo lleva a Madrid de cerca', (await marcas()) === 4);
+  // Tocar un punto deja en la lista solo ese sitio.
+  await pm.locator('button[aria-label^="2. Las Ventas"]').click();
+  await pm.waitForTimeout(200);
+  let lm = await pm.getByText('Dónde es').locator('../..').innerText();
+  comprobar('tocar un punto enseña solo ese sitio', lm.includes('Corrida · Feria de Otoño') && !lm.includes('Guitarricadelafuente'));
+  // Todo el mes, y de ahí a un día.
+  await pm.getByRole('button', { name: 'Todo el mes' }).click();
+  await pm.waitForTimeout(300);
+  lm = await pm.getByText('Dónde es').locator('../..').innerText();
+  comprobar('todo el mes: los días de cada sitio', lm.includes('Las Ventas') && lm.includes('Lun 12'));
+  await pm.getByRole('button', { name: 'Lun 12', exact: true }).first().click();
+  await pm.waitForTimeout(400);
+  comprobar('y un día lleva a ese día', (await pm.getByText('Dónde es').locator('../..').innerText()).includes('Corrida de la Hispanidad'));
+  comprobar('el mapa no se sale en 320 px', (await pm.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) === 0);
+  comprobar('mapa sin errores', errMp.length === 0, errMp.join(' | '));
+  await mp.close();
 
   console.log('\n— OBJETIVOS —');
   const ob = await b.newContext({ viewport: { width: 360, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });

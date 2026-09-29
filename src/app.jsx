@@ -1,4 +1,4 @@
-const { useState, useMemo, useEffect } = React;
+const { useState, useMemo, useEffect, useRef } = React;
 const APP_VERSION = "__APP_VERSION__";
 const fmt = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -194,7 +194,18 @@ const limpiarEventos = (crudo) => {
     out.push({ fecha: e.fecha, hasta, titulo: String(e.titulo).slice(0, 60), lugar: e.lugar ? String(e.lugar).slice(0, 40) : "", nota: e.nota ? String(e.nota).slice(0, 160) : "", hora: ES_HORA.test(e.hora || "") ? e.hora : "", salida: leerSalida(e.salida) });
     if (out.length >= EVENTOS_MAX) break;
   }
-  return { actualizado: ES_FECHA.test(crudo.actualizado) ? crudo.actualizado : "", eventos: out };
+  return { actualizado: ES_FECHA.test(crudo.actualizado) ? crudo.actualizado : "", eventos: out, lugares: limpiarLugares(crudo.lugares) };
+};
+// Dónde está cada recinto, para el mapa. Lo que no cae dentro de la Comunidad
+// de Madrid (una errata, latitud y longitud al revés) se descarta sin más.
+const limpiarLugares = (l) => {
+  const out = {};
+  if (!l || typeof l !== "object" || Array.isArray(l)) return out;
+  for (const [n, c] of Object.entries(l)) {
+    if (Array.isArray(c) && c.length === 2 && c.every(Number.isFinite) && c[0] > 39.85 && c[0] < 41.2 && c[1] > -4.6 && c[1] < -3.0) out[String(n).slice(0, 40)] = [c[0], c[1]];
+    if (Object.keys(out).length >= 300) break;
+  }
+  return out;
 };
 // Un día puede tener varias cosas, y una feria ocupa varios días seguidos.
 const indexarEventos = (lista) => {
@@ -308,6 +319,96 @@ const Anillos = ({ datos, marcaMes, centro }) => {
   );
 };
 
+// EL MAPA DE LOS EVENTOS. Dibujado aquí con los contornos del IGN que trae
+// mapa-madrid.json: sin servidores de mapas de fuera, funciona sin cobertura y
+// no le cuenta a nadie qué se mira. Sin calles: municipios, sus nombres y los
+// puntos. Dos vistas: Madrid y alrededores, donde está casi todo, y la
+// Comunidad entera. Los puntos son HTML encima del dibujo para que el número y
+// el tamaño no cambien con el zoom.
+const ZONA_MADRID = { lat: [40.30, 40.50], lon: [-3.84, -3.54] };
+const MapaEventos = ({ mapa, puntos, vista, setVista, marcado, setMarcado }) => {
+  const ref = useRef(null);
+  const [ancho, setAncho] = useState(300);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const medir = () => setAncho(el.clientWidth || 300);
+    medir();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(medir); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const { lat0, lon0, k, cos } = mapa.proy;
+  const P = (lat, lon) => [(lon - lon0) * cos * k, (lat0 - lat) * k];
+  const vb = vista === "zona"
+    ? (() => { const [x1, y1] = P(ZONA_MADRID.lat[1], ZONA_MADRID.lon[0]); const [x2, y2] = P(ZONA_MADRID.lat[0], ZONA_MADRID.lon[1]); return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }; })()
+    : { x: mapa.caja[0] - 10, y: mapa.caja[1] - 10, w: mapa.caja[2] + 20, h: mapa.caja[3] + 20 };
+  const esc = ancho / vb.w;
+  const aPx = ([x, y]) => [(x - vb.x) * esc, (y - vb.y) * esc];
+  const dentro = ([x, y]) => x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h;
+  const alto = vb.h * esc;
+  const marcas = puntos.map((p, i) => ({ ...p, n: i + 1, s: aPx(P(p.lat, p.lon)), en: dentro(P(p.lat, p.lon)) })).filter((m) => m.en);
+  // Toda la Comunidad: lo que cae junto se agrupa, y al tocarlo se va a Madrid.
+  // Madrid y alrededores: lo que se pisa se aparta un poco, con una raya hasta
+  // su sitio de verdad.
+  const D = 24;
+  let grupos = [];
+  if (vista === "comunidad") {
+    for (const m of marcas) { const g = grupos.find((g) => Math.hypot(g.s[0] - m.s[0], g.s[1] - m.s[1]) < D); if (g) g.miembros.push(m); else grupos.push({ s: [...m.s], miembros: [m] }); }
+  } else {
+    const pos = marcas.map((m) => [...m.s]);
+    for (let it = 0; it < 40; it++) for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) {
+      let dx = pos[j][0] - pos[i][0], dy = pos[j][1] - pos[i][1]; let d = Math.hypot(dx, dy);
+      if (d >= D) continue;
+      if (d < 0.01) { dx = Math.cos(i + j); dy = Math.sin(i + j); d = 1; }
+      const f = (D - d) / 2 / d; pos[i][0] -= dx * f; pos[i][1] -= dy * f; pos[j][0] += dx * f; pos[j][1] += dy * f;
+    }
+    grupos = marcas.map((m, i) => ({ s: [Math.min(ancho - 13, Math.max(13, pos[i][0])), Math.min(alto - 13, Math.max(13, pos[i][1]))], real: m.s, miembros: [m] }));
+  }
+  // Nombres de municipios por orden de importancia (el del archivo): cada uno se
+  // queda solo si no pisa a un punto ni a un nombre ya puesto, y el que se sale
+  // por el borde se mete hacia dentro en vez de cortarse.
+  const ocupado = grupos.map((g) => ({ x: g.s[0] - 16, y: g.s[1] - 16, w: 32, h: 32 }));
+  const choca = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const etiquetas = [];
+  for (const n of mapa.nombres) {
+    if (!(n.en === "ambas" || n.en === vista) || !dentro([n.x, n.y])) continue;
+    const [sx, sy] = aPx([n.x, n.y]); const w = n.n.length * 5.9 + 6, h = 14;
+    const x = Math.min(Math.max(sx, w / 2 + 3), ancho - w / 2 - 3), y = Math.min(Math.max(sy, h / 2 + 3), alto - h / 2 - 3);
+    const caja = { x: x - w / 2, y: y - h / 2, w, h };
+    if (ocupado.some((o) => choca(o, caja))) continue;
+    ocupado.push(caja); etiquetas.push({ ...n, s: [x, y] });
+  }
+  return (
+    <div ref={ref} style={{ position: "relative", width: "100%", height: alto, borderRadius: 12, overflow: "hidden", background: "#e8ebf2" }}>
+      <svg viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} aria-hidden="true">
+        <path d={mapa.tierra} fill="#ffffff" stroke="#b6bccb" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+        <path d={mapa.capital} fill={`${C.acc}24`} />
+        <path d={mapa.bordes} fill="none" stroke="#d6dae4" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+      </svg>
+      {grupos.filter((g) => g.real && Math.hypot(g.real[0] - g.s[0], g.real[1] - g.s[1]) > 3).map((g) => (
+        <svg key={`r${g.miembros[0].n}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} aria-hidden="true">
+          <line x1={g.real[0]} y1={g.real[1]} x2={g.s[0]} y2={g.s[1]} stroke={C.t2} strokeWidth={1} />
+          <circle cx={g.real[0]} cy={g.real[1]} r={2.5} fill={C.t1} />
+        </svg>
+      ))}
+      {etiquetas.map((n) => (
+        <span key={n.n} style={{ position: "absolute", left: n.s[0], top: n.s[1], transform: "translate(-50%,-50%)", fontSize: 10, fontWeight: 700, color: C.t3, whiteSpace: "nowrap", textShadow: "0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff", pointerEvents: "none" }}>{n.n}</span>
+      ))}
+      {grupos.map((g) => {
+        if (g.miembros.length > 1) return (
+          <button key={`g${g.miembros[0].n}`} className="nb" onClick={() => setVista("zona")} aria-label={`${g.miembros.length} sitios juntos: ver Madrid de cerca`}
+            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: "translate(-50%,-50%)", minWidth: 32, height: 32, padding: "0 6px", borderRadius: 16, border: "2px solid #fff", background: C.t1, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)" }}>{g.miembros.length}</button>
+        );
+        const m = g.miembros[0]; const on = marcado === m.lugar;
+        return (
+          <button key={`m${m.n}`} className="nb" onClick={() => setMarcado(on ? null : m.lugar)} aria-label={`${m.n}. ${m.lugar}`} aria-pressed={on}
+            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.2 : 1})`, width: 26, height: 26, borderRadius: 13, border: `2px solid ${on ? C.t1 : "#fff"}`, background: C.evento, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s", padding: 0 }}>{m.n}</button>
+        );
+      })}
+    </div>
+  );
+};
+
 const Hero = ({ total, conductor, pct }) => (
   <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
     <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
@@ -385,7 +486,7 @@ function TXpro() {
   const [copiaMsg, setCopiaMsg] = useState("");
   const [hayUpdate, setHayUpdate] = useState(false);
   const [avisarPlay, setAvisarPlay] = useState(tocaAvisarDePlay);
-  const [eventos, setEventos] = useState(() => limpiarEventos(loadStorage(EVENTOS_KEY, null)) || { actualizado: "", eventos: [] });
+  const [eventos, setEventos] = useState(() => limpiarEventos(loadStorage(EVENTOS_KEY, null)) || { actualizado: "", eventos: [], lugares: {} });
   // Lo guardado se pinta ya; la red solo sirve para refrescarlo. Si falla, no
   // pasa nada: el conductor sigue viendo el último calendario que le llegó.
   useEffect(() => {
@@ -407,6 +508,16 @@ function TXpro() {
     return () => { vivo = false; };
   }, []);
   const eventosPorDia = useMemo(() => indexarEventos(eventos.eventos), [eventos]);
+  const [mapa, setMapa] = useState(null);
+  const [vistaMapa, setVistaMapa] = useState("zona");
+  const [alcanceMapa, setAlcanceMapa] = useState(null);   // null: el día si tiene algo, si no el mes
+  const [lugarMarcado, setLugarMarcado] = useState(null);
+  useEffect(() => {
+    if (view !== "calendario" || mapa) return;
+    let vivo = true;
+    fetch("./mapa-madrid.json").then((r) => (r.ok ? r.json() : null)).then((m) => { if (vivo && m && m.tierra && m.proy && Array.isArray(m.caja)) setMapa(m); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [view, mapa]);
   const cerrarAvisoPlay = () => { setAvisarPlay(false); try { localStorage.setItem(AVISO_PLAY_KEY, JSON.stringify(Date.now())); } catch {} };
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
@@ -825,7 +936,7 @@ function TXpro() {
                   const elegido = f === sel;
                   const intensidad = fact > 0 ? 0.18 + 0.55 * (fact / tope) : 0;
                   return (
-                    <button key={f} className="nb" onClick={() => setCalDia(f)} aria-label={`${f}${fact > 0 ? `, ${fmt(fact)}` : ", sin datos"}${eventosPorDia[f] ? `, ${eventosPorDia[f].map((e) => e.titulo).join(", ")}` : ""}`} style={{
+                    <button key={f} className="nb" onClick={() => { setCalDia(f); setAlcanceMapa(null); setLugarMarcado(null); }} aria-label={`${f}${fact > 0 ? `, ${fmt(fact)}` : ", sin datos"}${eventosPorDia[f] ? `, ${eventosPorDia[f].map((e) => e.titulo).join(", ")}` : ""}`} style={{
                       aspectRatio: "1 / 1", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", padding: 2,
                       border: elegido ? `2px solid ${C.accDim}` : esHoy ? `1.5px solid ${C.acc}` : `1px solid ${C.border}`,
                       background: fact > 0 ? `rgba(240,192,64,${intensidad})` : C.surf,
@@ -863,6 +974,62 @@ function TXpro() {
               </div>
             )}
 
+            {mapa && (() => {
+              const lugares = eventos.lugares || {};
+              const delMes = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes);
+              const delDia = sel ? (eventosPorDia[sel] || []) : [];
+              const conPunto = (lista) => lista.filter((e) => lugares[e.lugar]);
+              const alcance = alcanceMapa === "mes" || !sel ? "mes" : alcanceMapa === "dia" ? "dia" : conPunto(delDia).length ? "dia" : "mes";
+              const lista = alcance === "dia" ? delDia : delMes;
+              // Un punto por recinto, en el orden en que pasan las cosas.
+              const porLugar = new Map();
+              for (const e of [...conPunto(lista)].sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b))) {
+                if (!porLugar.has(e.lugar)) porLugar.set(e.lugar, { lugar: e.lugar, lat: lugares[e.lugar][0], lon: lugares[e.lugar][1], eventos: [] });
+                porLugar.get(e.lugar).eventos.push(e);
+              }
+              const puntos = [...porLugar.values()];
+              const generales = lista.filter((e) => !lugares[e.lugar]);
+              const enZona = (p) => p.lat >= ZONA_MADRID.lat[0] && p.lat <= ZONA_MADRID.lat[1] && p.lon >= ZONA_MADRID.lon[0] && p.lon <= ZONA_MADRID.lon[1];
+              const fuera = vistaMapa === "zona" ? puntos.filter((p) => !enZona(p)) : [];
+              const chip = (on) => ({ padding: "6px 10px", borderRadius: 8, border: `1px solid ${on ? C.evento : C.border}`, background: on ? `${C.evento}14` : C.surf, color: on ? C.t1 : C.t2, fontWeight: on ? 800 : 600, fontSize: 12, cursor: "pointer", fontFamily: "inherit" });
+              const visibles = lugarMarcado && porLugar.has(lugarMarcado) ? [porLugar.get(lugarMarcado)] : puntos;
+              return (
+                <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Dónde es</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="nb" disabled={!sel} onClick={() => { setAlcanceMapa("dia"); setLugarMarcado(null); }} style={{ ...chip(alcance === "dia"), opacity: sel ? 1 : 0.5 }}>{sel ? `${capitalizar(weekday(sel))} ${Number(sel.slice(8))}` : "Este día"}</button>
+                      <button className="nb" onClick={() => { setAlcanceMapa("mes"); setLugarMarcado(null); }} style={chip(alcance === "mes")}>Todo el mes</button>
+                    </div>
+                  </div>
+                  <MapaEventos mapa={mapa} puntos={puntos} vista={vistaMapa} setVista={setVistaMapa} marcado={lugarMarcado} setMarcado={setLugarMarcado} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="nb" onClick={() => setVistaMapa("zona")} style={chip(vistaMapa === "zona")}>Madrid</button>
+                      <button className="nb" onClick={() => setVistaMapa("comunidad")} style={chip(vistaMapa === "comunidad")}>Toda la Comunidad</button>
+                    </div>
+                    <span style={{ fontSize: 10, color: C.t3 }}>{mapa.fuente}</span>
+                  </div>
+                  {fuera.length > 0 && <button className="nb" onClick={() => setVistaMapa("comunidad")} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, cursor: "pointer", textAlign: "left" }}>Fuera de este mapa: <strong style={{ color: C.t1 }}>{fuera.map((p) => p.lugar).join(", ")}</strong> · <span style={{ textDecoration: "underline", fontWeight: 700, color: C.t1 }}>ver toda la Comunidad</span></button>}
+                  {puntos.length === 0 && <div style={{ fontSize: 12.5, color: C.t2, marginTop: 10 }}>{alcance === "dia" ? "Este día no hay nada con sitio concreto." : "Este mes no hay nada con sitio concreto."}</div>}
+                  {visibles.map((p) => { const n = puntos.indexOf(p) + 1; return (
+                    <div key={p.lugar} onClick={() => setLugarMarcado(lugarMarcado === p.lugar ? null : p.lugar)} style={{ display: "flex", gap: 10, padding: "10px 0 2px", borderTop: `1px solid ${C.border}66`, marginTop: 8, cursor: "pointer" }}>
+                      <span style={{ width: 22, height: 22, borderRadius: 11, background: C.evento, color: "#fff", fontWeight: 900, fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{n}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{p.lugar}</div>
+                        {alcance === "dia"
+                          ? p.eventos.map((e, i) => <div key={i} style={{ fontSize: 12, color: C.t2, marginTop: 2 }}>{e.titulo}{(e.salida || e.hora) ? ` · ${textoHoras(e)}` : ""}</div>)
+                          : <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>{p.eventos.map((e, i) => (
+                              <button key={i} className="nb" onClick={(ev) => { ev.stopPropagation(); setCalDia(e.fecha); setAlcanceMapa("dia"); setLugarMarcado(null); }} title={e.titulo} style={{ padding: "3px 7px", borderRadius: 6, border: `1px solid ${C.border}`, background: "#f6f7fb", fontSize: 11.5, fontWeight: 700, color: C.t1, cursor: "pointer", fontFamily: "inherit" }}>{capitalizar(weekday(e.fecha))} {Number(e.fecha.slice(8))}</button>
+                            ))}</div>}
+                      </div>
+                    </div>
+                  ); })}
+                  {lugarMarcado && porLugar.has(lugarMarcado) && puntos.length > 1 && <button className="nb" onClick={() => setLugarMarcado(null)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, textDecoration: "underline", cursor: "pointer" }}>Ver todos los sitios</button>}
+                  {alcance === "dia" && generales.length > 0 && <div style={{ fontSize: 12, color: C.t2, marginTop: 10 }}>En toda Madrid: <strong style={{ color: C.t1 }}>{generales.map((e) => e.titulo).join(", ")}</strong></div>}
+                </div>
+              );
+            })()}
             {(() => {
               const delMesEv = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b));
               if (!delMesEv.length) return null;
