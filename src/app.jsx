@@ -238,6 +238,10 @@ const carrerasDe = (d) => Math.max(0, Math.round(evalSuma(d && d.carreras)));
 // evento: el oro oscuro de la marca. Era morado y recordaba a Cabify; además
 // el número blanco de los puntos del mapa se quedaba en 4,2:1 y así va a 5,1:1.
 // No es el rojo del logo porque el rojo en la app es "debes a la empresa".
+// El rojo de la banda del logo. Solo para el puntito de "hay evento" en la
+// cuadrícula del calendario: a 5 px el dorado se perdía sobre las casillas que
+// la facturación tiñe de ámbar. El resto de los eventos sigue en dorado.
+const ROJO_TX = "#D8232A";
 const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8a6a17", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
 const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
@@ -948,7 +952,7 @@ function TXpro() {
                       <span style={{ fontSize: 12.5, fontWeight: esHoy || elegido ? 900 : 600, color: fact > 0 ? C.t1 : C.t3 }}>{Number(f.slice(8))}</span>
                       {fact > 0 && <span style={{ fontSize: 8.5, fontWeight: 700, color: C.accDim, lineHeight: 1 }}>{Math.round(fact)}</span>}
                       {notas[f] && <span style={{ position: "absolute", top: 3, right: 3, width: 5, height: 5, borderRadius: "50%", background: C.blue }} />}
-                      {eventosPorDia[f] && <span style={{ position: "absolute", top: 3, left: 3, width: 5, height: 5, borderRadius: "50%", background: C.evento }} />}
+                      {eventosPorDia[f] && <span style={{ position: "absolute", top: 3, left: 3, width: 5, height: 5, borderRadius: "50%", background: ROJO_TX }} />}
                     </button>
                   );
                 })}
