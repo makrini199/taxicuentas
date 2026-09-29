@@ -277,7 +277,7 @@ const { chromium } = require('playwright');
 
   // El orden dentro del día no puede depender de cómo esté escrito el archivo:
   // se sirve al revés y aun así tiene que salir 23:45 antes que 00:00.
-  const reves = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES' });
+  const reves = await b.newContext({ viewport: { width: 360, height: 700 }, locale: 'es-ES', serviceWorkers: 'block' });
   await reves.route('**/eventos.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ actualizado: '2026-09-24', eventos: [
     { fecha: '2026-10-01', titulo: 'Madrugada', salida: '00:30-01:30' },
     { fecha: '2026-10-01', titulo: 'Noche', salida: '23:15-00:15' },
@@ -301,7 +301,10 @@ const { chromium } = require('playwright');
   const primera = await abrirJueves();
   comprobar('ordena por hora aunque el archivo venga al revés', enOrden(primera), orden(primera).join(' '));
   comprobar('"hora" sola dice cuándo empieza', primera.includes('Empieza a las 18:00'));
-  // Segunda apertura: ya no hay descarga, sale de lo guardado en el móvil.
+  // Segunda apertura sin poder descargar: sale de lo guardado en el móvil, que es
+  // donde se perdían las horas (se guardaba ya limpio y se limpiaba dos veces).
+  await reves.unroute('**/eventos.json');
+  await reves.route('**/eventos.json', (r) => r.abort());
   const segunda = await abrirJueves();
   comprobar('las horas siguen al volver a abrir', segunda.includes('Salida 00:30 – 01:30 · ya de madrugada') && enOrden(segunda));
   await reves.close();
@@ -437,6 +440,25 @@ const { chromium } = require('playwright');
   comprobar('el mapa no se sale en 320 px', (await pm.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) === 0);
   comprobar('mapa sin errores', errMp.length === 0, errMp.join(' | '));
   await mp.close();
+
+  // Lo que les pasó a los probadores al actualizar a la 1.9.0: tenían guardado
+  // el calendario de antes, sin "lugares", y la app no lo volvía a pedir hasta
+  // pasadas 12 horas, así que el mapa salía vacío. Tiene que refrescarse al abrir.
+  const vj = await b.newContext({ viewport: { width: 360, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  const calViejo = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'eventos.json'), 'utf8'));
+  delete calViejo.lugares;
+  await vj.addInitScript((v) => { if (!localStorage.getItem('tc_eventos')) { localStorage.setItem('tc_eventos', JSON.stringify(v)); localStorage.setItem('tc_eventos_visto', JSON.stringify(Date.now() - 3600000)); } }, calViejo);
+  const pv2 = await vj.newPage();
+  await pv2.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pv2.waitForSelector('text=INGRESOS DEL DÍA');
+  await pv2.waitForTimeout(800);
+  await pv2.getByRole('button', { name: /Calendario/ }).click();
+  await pv2.waitForTimeout(500);
+  for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pv2.locator('body').innerText()); i++) { await pv2.getByLabel('Mes siguiente').click(); await pv2.waitForTimeout(120); }
+  await pv2.getByRole('button', { name: 'Todo el mes' }).click();
+  await pv2.waitForTimeout(400);
+  comprobar('con el calendario viejo guardado, el mapa se llena al abrir', !(await pv2.locator('body').innerText()).includes('no hay nada con sitio concreto'));
+  await vj.close();
 
   console.log('\n— OBJETIVOS —');
   const ob = await b.newContext({ viewport: { width: 360, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
