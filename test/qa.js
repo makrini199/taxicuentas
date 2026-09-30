@@ -98,6 +98,23 @@ const { chromium } = require('playwright');
   comprobar('por hora en el mes', /Ganas por hora\s+17,89\s€\/h/.test(mes));
   comprobar('sin incentivo por defecto', !/[Bb]ono/.test(mes), 'no debe inventar acuerdos');
 
+  console.log('\n— DESGLOSE —');
+  // Lo que pregunta la empresa: cuánto de cada cosa. Mismo día de antes:
+  // efectivo del taxímetro = 142,30 − 98,50 de tarjeta = 43,80;
+  // FreeNow cerrado: 46,10 − 12 ya cobrado = 34,10 en efectivo.
+  const des = await p.getByText('Desglose', { exact: true }).locator('../..').innerText();
+  comprobar('taxímetro y su efectivo', /Taxímetro\s+142,30\s€\s+43,80\s€/.test(des));
+  comprobar('cada app con su efectivo', /Uber\s+68,40\s€\s+18,00\s€/.test(des) && /Bolt\s+24,75\s€\s+24,75\s€/.test(des));
+  comprobar('app de tipo "cobrado"', /FreeNow · precio cerrado\s+46,10\s€\s+34,10\s€/.test(des));
+  comprobar('lo cobrado con tarjeta', /Con tarjeta\s+98,50\s€/.test(des));
+  // La columna de efectivo tiene que dar lo mismo que la liquidación: 120,65.
+  comprobar('el total cuadra con la liquidación', /Total\s+332,75\s€\s+120,65\s€/.test(des));
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:8080' });
+  await p.getByRole('button', { name: 'Copiar para la empresa' }).first().click();
+  await p.waitForTimeout(300);
+  const copiado = await p.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+  comprobar('se copia listo para WhatsApp', copiado.includes('Uber: 68,40 € · efectivo 18,00 €') && copiado.includes('TOTAL: 332,75 € · efectivo 120,65 €'), copiado.split('\n').pop());
+
   console.log('\n— PERIODO —');
   await p.getByRole('button', { name: /Periodo/ }).click();
   await p.waitForTimeout(500);
@@ -106,6 +123,7 @@ const { chromium } = require('playwright');
   const per = await p.locator('body').innerText();
   comprobar('total del periodo', per.includes('332,75'));
   comprobar('un día trabajado', /1 día trabajado/.test(per));
+  comprobar('el periodo también trae el desglose', /Total\s+332,75\s€\s+120,65\s€/.test(await p.getByText('Desglose', { exact: true }).locator('../..').innerText()));
 
   console.log('\n— AJUSTES —');
   await p.getByLabel('Ajustes').click();
