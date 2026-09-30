@@ -415,6 +415,65 @@ const MapaEventos = ({ mapa, puntos, vista, setVista, marcado, setMarcado }) => 
   );
 };
 
+// DESGLOSE: cuánto de cada cosa en un mes o un periodo, que es lo que pregunta
+// la empresa: "¿cuánto has hecho en efectivo? ¿y en Uber?". Mismas dos columnas
+// que el Diario. El efectivo del taxímetro es el taxímetro menos lo cobrado con
+// tarjeta; en las apps de tipo "cobrado" es lo que no cobró la empresa. Así la
+// suma de la columna de efectivo es el mismo efectivo de la liquidación.
+const desgloseDe = (entries, plats) => {
+  const n = (v) => Number(v) || 0;
+  let tax = 0, tarjeta = 0;
+  const porPlat = plats.map((p) => ({ p, fact: 0, efec: 0 }));
+  for (const [, d] of entries) {
+    tax += n(d.taximetro); tarjeta += n(d.visa);
+    for (const x of porPlat) { const t = n(d[x.p.key]), c = n(d[x.p.cobKey]); x.fact += t; x.efec += x.p.tipo === "cobrado" ? t - c : c; }
+  }
+  const filas = [{ nombre: "Taxímetro", fact: tax, efec: tax - tarjeta }, ...porPlat.filter((x) => x.fact || x.efec).map((x) => ({ nombre: x.p.nombre, fact: x.fact, efec: x.efec }))];
+  return { filas, tarjeta, totalFact: filas.reduce((a, f) => a + f.fact, 0), totalEfec: filas.reduce((a, f) => a + f.efec, 0) };
+};
+const Desglose = ({ entries, plats, etiqueta }) => {
+  const [aviso, setAviso] = useState("");
+  const d = desgloseDe(entries, plats);
+  const col = { width: 88, flexShrink: 0, textAlign: "right" };
+  const limpio = (v) => fmt(v).replace(/ /g, " ");
+  const texto = [`TXpro · ${etiqueta}`, ...d.filas.map((f) => `${f.nombre}: ${limpio(f.fact)} · efectivo ${limpio(f.efec)}`), ...(d.tarjeta ? [`Tarjeta: ${limpio(d.tarjeta)}`] : []), `TOTAL: ${limpio(d.totalFact)} · efectivo ${limpio(d.totalEfec)}`].join("\n");
+  const copiar = async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(texto); ok = true; } catch {
+      try { const ta = document.createElement("textarea"); ta.value = texto; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); ok = document.execCommand("copy"); ta.remove(); } catch {}
+    }
+    setAviso(ok ? "Copiado: pégalo en WhatsApp" : "No se pudo copiar en este móvil"); setTimeout(() => setAviso(""), 2500);
+  };
+  return (
+    <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+        <div style={{ flex: 1, fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Desglose</div>
+        <div style={{ ...col, fontSize: 10.5, color: C.t2, fontWeight: 700, letterSpacing: 0.5 }}>FACTURADO</div>
+        <div style={{ ...col, fontSize: 10.5, color: C.blue, fontWeight: 700, letterSpacing: 0.5 }}>EFECTIVO</div>
+      </div>
+      {d.filas.map((f) => (
+        <div key={f.nombre} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 0", borderTop: "1px solid #eef0f6" }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.t1, wordBreak: "break-word" }}>{f.nombre}</span>
+          <span style={{ ...col, fontSize: 13.5, fontWeight: 700, color: C.t1 }}>{fmt(f.fact)}</span>
+          <span style={{ ...col, fontSize: 13.5, fontWeight: 700, color: C.t1 }}>{fmt(f.efec)}</span>
+        </div>
+      ))}
+      {d.tarjeta > 0 && <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 0", borderTop: "1px solid #eef0f6" }}>
+        <span style={{ flex: 1, fontSize: 13, color: C.t2 }}>Con tarjeta</span>
+        <span style={{ ...col, fontSize: 13.5, fontWeight: 600, color: C.t2 }}>{fmt(d.tarjeta)}</span>
+        <span style={col} />
+      </div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 0 2px", borderTop: `2px solid ${C.border}` }}>
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 900, color: C.t1 }}>Total</span>
+        <span style={{ ...col, fontSize: 14.5, fontWeight: 900, color: C.accDim }}>{fmt(d.totalFact)}</span>
+        <span style={{ ...col, fontSize: 14.5, fontWeight: 900, color: C.blue }}>{fmt(d.totalEfec)}</span>
+      </div>
+      <div style={{ fontSize: 11, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Efectivo del taxímetro: el taxímetro menos lo cobrado con tarjeta.</div>
+      <button className="nb" onClick={copiar} style={{ marginTop: 10, width: "100%", padding: 10, borderRadius: 10, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{aviso || "Copiar para la empresa"}</button>
+    </div>
+  );
+};
+
 const Hero = ({ total, conductor, pct }) => (
   <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
     <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
@@ -1092,6 +1151,7 @@ function TXpro() {
             {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria, gastos: gastosMes } = selectedData; return (
               <div>
                 <Hero total={totalFact} conductor={conductorMes} pct={pct} />
+                <Desglose entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} etiqueta={capitalizar(monthLabel(selectedMonth))} />
                 <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfg.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
@@ -1217,6 +1277,7 @@ function TXpro() {
           ); })()}
           {diasTrabajados === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin días registrados en este periodo.</div> : <>
             <Hero total={totalFact} conductor={conductorMes} pct={pct} />
+            <Desglose entries={Object.entries(days).filter(([d]) => d >= lo && d <= hi)} plats={plats} etiqueta={`del ${dayMonth(lo)} al ${dayMonth(hi)}`} />
             {(() => { const porDia = Object.fromEntries(rows.map((r) => [r.date, r.s.facturacion])); const cal = daysBetween(lo, hi); const tope = Math.max(1, ...cal.map((d) => porDia[d] || 0)); return (
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Facturación por día</div>
