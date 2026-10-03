@@ -15,8 +15,14 @@
   "content_hash": "e9101b69e15eddd0",
   "quality": {
     "resampled_from": "M1",
-    "incomplete_bars": 2
+    "incomplete_bars": 2,
+    "gaps_by_kind": {
+      "weekend": 208
+    },
+    "largest_unexpected_gaps": [],
+    "forced": false,
+    "overall_severity": "INFO"
   },
-  "created_at": "2026-10-03T04:54:52+00:00",
+  "created_at": "2026-10-03T05:06:52+00:00",
   "notes": "SYNTHETIC random-walk data: no real edge exists; for pipeline tests only."
 }
