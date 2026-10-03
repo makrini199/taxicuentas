@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+.ipynb_checkpoints/
+
+# Market data is never committed (size + licensing). Only metadata JSON is kept.
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Ad-hoc reports; experiment outputs under experiments/ ARE committed.
+reports/*
+!reports/.gitkeep
