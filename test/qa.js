@@ -61,6 +61,14 @@ const { chromium } = require('playwright');
   comprobar('lo que ganas por hora', /ganas 17,89\s€\/h/.test(jor));
   // 332,75 / 20 carreras = 16,6375
   comprobar('media por carrera', /16,64\s€ por carrera/.test(jor));
+  // El combustible se apunta ahora en el día (antes, en Gastos). Dos repostajes.
+  const comb = p.locator('input[aria-label="Combustible"]');
+  await comb.fill('200+118,40');
+  await comb.press('Enter');
+  await p.waitForTimeout(200);
+  comprobar('combustible del día con calculadora', (await comb.inputValue()) === '318.4', await comb.inputValue());
+  const calc3 = await p.getByText('Cálculo del día').locator('..').innerText();
+  comprobar('el combustible no toca la liquidación del día', calc3.includes('166,38') && calc3.includes('212,10') && calc3.includes('120,65'));
   await p.getByRole('button', { name: 'Guardar día' }).click();
   await p.waitForTimeout(500);
   comprobar('aviso de guardado', await p.getByText('Día guardado').count() > 0);
@@ -68,9 +76,7 @@ const { chromium } = require('playwright');
   console.log('\n— GASTOS —');
   await p.getByRole('button', { name: /Gastos/ }).click();
   await p.waitForTimeout(500);
-  await p.locator('#gastoImporte').fill('318.40');   // Combustible viene elegido
-  await p.getByRole('button', { name: 'Guardar gasto' }).click();
-  await p.waitForTimeout(600);
+  comprobar('en Gastos ya no se apunta combustible', (await p.getByRole('button', { name: 'Combustible', exact: true }).count()) === 0);
   await p.getByRole('button', { name: 'Pinchazo', exact: true }).click();
   await p.locator('#gastoImporte').fill('45');
   comprobar('lo reembolsable viene marcado', await p.locator('#gastoReemb').isChecked());
@@ -78,11 +84,12 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(600);
   const gas = await p.locator('body').innerText();
   comprobar('gastos guardados', gas.includes('318,40') && gas.includes('45,00'));
+  comprobar('el combustible del Diario sale en su mes', gas.includes('Apuntado día a día en el Diario'));
   comprobar('total del mes', gas.includes('363,40'), '318,40 + 45');
   comprobar('lo que debe la empresa', /empresa te debe 45,00/.test(gas));
 
-  console.log('\n— MENSUAL —');
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  console.log('\n— RESUMEN · MES —');
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(600);
   const mes = await p.locator('body').innerText();
   comprobar('facturación del mes', mes.includes('332,75'));
@@ -106,7 +113,7 @@ const { chromium } = require('playwright');
   comprobar('taxímetro y su efectivo', /Taxímetro\s+142,30\s€\s+43,80\s€/.test(des));
   comprobar('cada app con su efectivo', /Uber\s+68,40\s€\s+18,00\s€/.test(des) && /Bolt\s+24,75\s€\s+24,75\s€/.test(des));
   comprobar('app de tipo "cobrado"', /FreeNow · precio cerrado\s+46,10\s€\s+34,10\s€/.test(des));
-  comprobar('lo cobrado con tarjeta', /Con tarjeta\s+98,50\s€/.test(des));
+  comprobar('lo cobrado con tarjeta', /Tarjeta\s+98,50\s€/.test(des));
   // La columna de efectivo tiene que dar lo mismo que la liquidación: 120,65.
   comprobar('el total cuadra con la liquidación', /Total\s+332,75\s€\s+120,65\s€/.test(des));
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:8080' });
@@ -115,14 +122,25 @@ const { chromium } = require('playwright');
   const copiado = await p.evaluate(() => navigator.clipboard.readText()).catch(() => '');
   comprobar('se copia listo para WhatsApp', copiado.includes('Uber: 68,40 € · efectivo 18,00 €') && copiado.includes('TOTAL: 332,75 € · efectivo 120,65 €'), copiado.split('\n').pop());
 
-  console.log('\n— PERIODO —');
-  await p.getByRole('button', { name: /Periodo/ }).click();
-  await p.waitForTimeout(500);
-  await p.getByRole('button', { name: 'Este mes' }).click();
+  console.log('\n— RESUMEN · SEMANA Y FECHAS —');
+  // Mensual y Periodo son ahora una sola pestaña, Resumen, con Mes, Semana y Fechas.
+  await p.getByRole('button', { name: /Resumen/ }).click();
+  await p.waitForTimeout(400);
+  comprobar('cinco pestañas abajo', (await p.locator('nav button').count()) === 5);
+  comprobar('el resumen abre en el mes', (await p.getByRole('button', { name: 'Mes', exact: true }).getAttribute('aria-pressed')) === 'true');
+  await p.getByRole('button', { name: 'Semana', exact: true }).click();
   await p.waitForTimeout(600);
+  comprobar('la semana va de lunes a domingo', /Del \d{2}\/\d{2} al \d{2}\/\d{2}/.test(await p.locator('body').innerText()) && (await p.locator('#rangoDesde').count()) === 0);
   const per = await p.locator('body').innerText();
   comprobar('total del periodo', per.includes('332,75'));
   comprobar('un día trabajado', /1 día trabajado/.test(per));
+  await p.getByRole('button', { name: 'Fechas', exact: true }).click();
+  await p.waitForTimeout(300);
+  const hoyQA = await p.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await p.locator('#rangoDesde').fill(hoyQA);
+  await p.locator('#rangoHasta').fill(hoyQA);
+  await p.waitForTimeout(400);
+  comprobar('fechas a elegir: solo hoy', (await p.locator('body').innerText()).includes('332,75') && /1 día trabajado/.test(await p.locator('body').innerText()));
   comprobar('el periodo también trae el desglose', /Total\s+332,75\s€\s+120,65\s€/.test(await p.getByText('Desglose', { exact: true }).locator('../..').innerText()));
 
   console.log('\n— AJUSTES —');
@@ -135,7 +153,7 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(500);
   const aj = await p.getByText('Así queda tu acuerdo').locator('..').innerText();
   comprobar('resumen del acuerdo', aj.includes('45%') && aj.includes('300') && aj.includes('30%'));
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(600);
   const mes2 = await p.locator('body').innerText();
   // 332.75 supera 300 → 30% de 318.40 = 95.52 ; 45% de 332.75 = 149.74
@@ -161,7 +179,7 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(700);
   const rest = await p.getByText('Así queda tu acuerdo').locator('..').innerText();
   comprobar('acuerdo restaurado', rest.includes('45%'));
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(600);
   const tras = await p.locator('body').innerText();
   comprobar('datos restaurados', tras.includes('332,75'));
@@ -189,7 +207,7 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(600);
   comprobar('apagada desaparece del parte', await p.locator('input[aria-label="Bolt"]').count() === 0);
   comprobar('las demás siguen', await p.locator('input[aria-label="Uber"]').count() === 1);
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(700);
   comprobar('apagarla NO borra sus cuentas', (await p.locator('body').innerText()).includes('150,00'), '100 + 50 de Bolt');
 
@@ -417,6 +435,32 @@ const { chromium } = require('playwright');
   comprobar('viaje a viaje sin errores', errVV.length === 0, errVV.join(' | '));
   await vv.close();
 
+  console.log('\n— COMBUSTIBLE: LO VIEJO DE GASTOS Y LO NUEVO DEL DIARIO —');
+  // Quien ya tenía repostajes apuntados en Gastos no puede perderlos al pasar el
+  // combustible al Diario: tienen que sumarse los dos, también para el bono.
+  const cb = await b.newContext({ viewport: { width: 360, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  await cb.addInitScript(() => {
+    if (localStorage.getItem('tc_days')) return;
+    const d = new Date(); const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    localStorage.setItem('tc_days', JSON.stringify({ [hoy]: { taximetro: 1000, visa: 0, combustible: 60 } }));
+    localStorage.setItem('tc_gastos', JSON.stringify([{ id: 1, date: hoy, concepto: 'Combustible', importe: 40, reembolsable: false }]));
+    localStorage.setItem('tc_cfg', JSON.stringify({ incentivo: 'combustible', umbral: '500', pctCombustible: '50' }));
+    localStorage.setItem('tc_cfg_ok', 'true');
+  });
+  const pc2 = await cb.newPage();
+  await pc2.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pc2.waitForSelector('text=INGRESOS DEL DÍA');
+  await pc2.getByRole('button', { name: /Gastos/ }).click();
+  await pc2.waitForTimeout(400);
+  const gc = await pc2.locator('body').innerText();
+  comprobar('lo viejo de Gastos sigue ahí', gc.includes('40,00') && gc.includes('Apuntado día a día en el Diario') && gc.includes('60,00'));
+  comprobar('y el mes suma los dos', gc.includes('100,00'));
+  await pc2.getByRole('button', { name: /Resumen/ }).click();
+  await pc2.waitForTimeout(500);
+  // facturación 1000 ≥ 500 → 50 % de (40 + 60) = 50,00
+  comprobar('el bono cuenta los dos', /50% del combustible/.test(await pc2.locator('body').innerText()) && (await pc2.locator('body').innerText()).includes('50,00'));
+  await cb.close();
+
   console.log('\n— MAPA DE LOS EVENTOS —');
   const mp = await b.newContext({ viewport: { width: 320, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
   const pm = await mp.newPage();
@@ -430,31 +474,36 @@ const { chromium } = require('playwright');
   for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pm.locator('body').innerText()); i++) { await pm.getByLabel('Mes siguiente').click(); await pm.waitForTimeout(120); }
   await pm.getByRole('button', { name: /^2026-10-02/ }).click();
   await pm.waitForTimeout(500);
-  const marcas = () => pm.locator('button[aria-label^="1. "], button[aria-label^="2. "], button[aria-label^="3. "], button[aria-label^="4. "], button[aria-label^="5. "]').count();
+  const tarjetaMapa = () => pm.getByText('Dónde es').locator('../..').innerText();
   comprobar('el mapa sale en el calendario', (await pm.getByText('Dónde es').count()) > 0);
-  // Viernes 2: Shakira, Las Ventas, Vistalegre y Movistar en Madrid; el Warner fuera.
-  comprobar('un punto por sitio en Madrid', (await marcas()) === 4, String(await marcas()));
-  comprobar('avisa de lo que queda fuera', (await pm.locator('body').innerText()).includes('Fuera de este mapa: Parque Warner'));
-  await pm.getByRole('button', { name: 'Toda la Comunidad', exact: true }).click();
-  await pm.waitForTimeout(300);
-  comprobar('en la Comunidad sale el Warner', (await pm.locator('button[aria-label^="5. Parque Warner"]').count()) === 1);
-  comprobar('y lo de Madrid se agrupa', (await pm.locator('button[aria-label*="sitios juntos"]').count()) === 1);
-  await pm.locator('button[aria-label*="sitios juntos"]').click();
-  await pm.waitForTimeout(300);
-  comprobar('el grupo lleva a Madrid de cerca', (await marcas()) === 4);
-  // Tocar un punto deja en la lista solo ese sitio.
-  await pm.locator('button[aria-label^="2. Las Ventas"]').click();
+  comprobar('solo la vista de toda la Comunidad', (await pm.getByRole('button', { name: 'Madrid', exact: true }).count()) === 0);
+  // Viernes 2: lo de la capital (Las Ventas, Vistalegre, Movistar, Iberdrola) cae
+  // junto y se agrupa; el Warner va aparte con su número.
+  comprobar('el Warner con su punto', (await pm.locator('button[aria-label^="5. Parque Warner"]').count()) === 1);
+  const grupo = pm.locator('button[aria-label*="sitios juntos"]');
+  comprobar('lo de la capital, agrupado', (await grupo.count()) === 1 && (await grupo.innerText()) === '4');
+  await grupo.click();
   await pm.waitForTimeout(200);
-  let lm = await pm.getByText('Dónde es').locator('../..').innerText();
-  comprobar('tocar un punto enseña solo ese sitio', lm.includes('Corrida · Feria de Otoño') && !lm.includes('Guitarricadelafuente'));
-  // Todo el mes, y de ahí a un día.
+  let lm = await tarjetaMapa();
+  comprobar('tocar el grupo deja esos sitios en la lista', lm.includes('Las Ventas') && lm.includes('Movistar Arena') && !lm.includes('Halloween Scary Nights'));
+  await pm.getByRole('button', { name: 'Ver todos los sitios' }).click();
+  await pm.locator('button[aria-label^="5. Parque Warner"]').click();
+  await pm.waitForTimeout(200);
+  lm = await tarjetaMapa();
+  comprobar('tocar un punto enseña solo ese sitio', lm.includes('Halloween Scary Nights') && !lm.includes('Guitarricadelafuente'));
+  // "Días fuertes" sigue al botón: el día elegido, o todo el mes.
+  const fuertes = () => pm.getByText(/Días fuertes/i).last().locator('..').innerText();
+  let df = await fuertes();
+  comprobar('con el día elegido, solo lo de ese día', /D[ÍI]AS FUERTES · VIE 2/i.test(df) && df.includes('Evanescence') && !df.includes('Bryant Myers'));
   await pm.getByRole('button', { name: 'Todo el mes' }).click();
   await pm.waitForTimeout(300);
-  lm = await pm.getByText('Dónde es').locator('../..').innerText();
+  df = await fuertes();
+  comprobar('con todo el mes, todos', /D[ÍI]AS FUERTES DEL MES/i.test(df) && df.includes('Bryant Myers') && df.includes('Evanescence'));
+  lm = await tarjetaMapa();
   comprobar('todo el mes: los días de cada sitio', lm.includes('Las Ventas') && lm.includes('Lun 12'));
   await pm.getByRole('button', { name: 'Lun 12', exact: true }).first().click();
   await pm.waitForTimeout(400);
-  comprobar('y un día lleva a ese día', (await pm.getByText('Dónde es').locator('../..').innerText()).includes('Corrida de la Hispanidad'));
+  comprobar('y un día lleva a ese día', (await tarjetaMapa()).includes('Corrida de la Hispanidad'));
   comprobar('el mapa no se sale en 320 px', (await pm.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) === 0);
   comprobar('mapa sin errores', errMp.length === 0, errMp.join(' | '));
   await mp.close();
@@ -498,16 +547,24 @@ const { chromium } = require('playwright');
   await po.locator('#obj-mes').fill('1000');
   await po.waitForTimeout(1200);
   let ot = await po.locator('body').innerText();
+  // Días de esta semana (lunes a domingo) que caen en el mes: el objetivo semanal
+  // de 300 se reparte entre ellos, y lo de otro mes no cuenta.
+  const enMes = await po.evaluate(() => { const h = new Date(); const lun = new Date(h.getFullYear(), h.getMonth(), h.getDate() - ((h.getDay() + 6) % 7)); let n = 0; for (let i = 0; i < 7; i++) { const d = new Date(lun.getFullYear(), lun.getMonth(), lun.getDate() + i); if (d.getMonth() === h.getMonth()) n++; } return n; });
+  const metaSem = Math.round((300 * enMes / 7) * 100) / 100;
+  const pctSem = (v) => Math.round((v / metaSem) * 100);
+  const eur = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v).replace(/ /g, ' ');
+  ot = ot.replace(/ /g, ' ');
   comprobar('el centro dice el % del mes', /15%\s+del mes/.test(ot));
   comprobar('hoy superado', /Hoy\s+150%/.test(ot) && ot.includes('Superado por 50,00'));
-  comprobar('lo que falta de la semana', /Esta semana\s+50%/.test(ot) && ot.includes('Te faltan 150,00'));
+  comprobar('la semana, cortada en el mes', new RegExp(`Esta semana[^\\n]*\\s+${pctSem(150)}%`).test(ot), `${enMes} días del mes · ${pctSem(150)}%`);
+  if (enMes < 7) comprobar('y lo explica', ot.includes(`${enMes} de los 7`));
   // Se llena viaje a viaje: lo apuntado sin guardar también cuenta.
   await po.getByRole('button', { name: /Diario/ }).click();
   await po.locator('input[aria-label="Taxímetro"]').fill('150+50');
   await po.getByRole('button', { name: /Objetivos/ }).click();
   await po.waitForTimeout(1200);
-  ot = await po.locator('body').innerText();
-  comprobar('se llena en directo sin guardar', /20%\s+del mes/.test(ot) && /Esta semana\s+67%/.test(ot));
+  ot = (await po.locator('body').innerText()).replace(/ /g, ' ');
+  comprobar('se llena en directo sin guardar', /20%\s+del mes/.test(ot) && new RegExp(`Esta semana[^\\n]*\\s+${pctSem(200)}%`).test(ot));
   comprobar('los anillos se pintan', (await po.locator('svg circle').count()) >= 6);
   await po.reload({ waitUntil: 'load' });
   await po.waitForSelector('text=INGRESOS DEL DÍA');
