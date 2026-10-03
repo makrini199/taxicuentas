@@ -48,7 +48,9 @@ const calcDay = (d, pct = 50, plats = PLATAFORMAS_BASE) => {
   const conductor50 = facturacion * (pct / 100);
   return { facturacion, conductor50, cobradoEmpresa: empresa, diferencia: conductor50 - empresa };
 };
-const CONCEPTOS = ["Combustible", "Pinchazo", "ITV", "Lavado", "Taller", "Multa", "Parking", "Otros"];
+// El combustible ya no se apunta aquí: va en el Diario, día a día, que es cuando
+// se reposta. Los repostajes que ya estaban en Gastos siguen contando igual.
+const CONCEPTOS = ["Pinchazo", "ITV", "Lavado", "Taller", "Multa", "Parking", "Otros"];
 const gastoValido = (g) => g && typeof g === "object" && /^\d{4}-\d{2}-\d{2}$/.test(g.date) && Number(g.importe) > 0;
 // Los repostajes se guardaban aparte; pasan a ser un gasto más, con su concepto.
 const loadGastos = () => {
@@ -68,6 +70,16 @@ const sumarGastos = (lista, desde, hasta) => lista.reduce((a, g) => {
   return a;
 }, { total: 0, reembolsable: 0, combustible: 0 });
 const finDeMes = (ym) => ym + "-31";
+// Gastos de unas fechas: los apuntados en Gastos más el combustible del Diario.
+// Con esto el bono de "% del combustible" cuenta lo repostado día a día.
+const combustibleDe = (d) => Math.max(0, evalSuma(d && d.combustible));
+const gastosEntre = (lista, dias, desde, hasta) => {
+  const g = sumarGastos(lista, desde, hasta);
+  let diario = 0;
+  for (const [f, d] of Object.entries(dias)) if (f >= desde && f <= hasta) diario += combustibleDe(d);
+  diario = Math.round(diario * 100) / 100;
+  return { ...g, total: g.total + diario, combustible: g.combustible + diario, combustibleDiario: diario };
+};
 const DEFAULT_CFG = { objetivos: { dia: "", semana: "", mes: "" }, pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
 // Deja la lista siempre completa y en orden: las cuatro de serie primero, con el
 // interruptor que tuviera cada una, y detrás las que haya añadido el conductor.
@@ -545,7 +557,7 @@ function TXpro() {
   const [calMes, setCalMes] = useState(monthKey(today));
   const [calDia, setCalDia] = useState(today);
   const [gastos, setGastos] = useState(loadGastos);
-  const [gastoForm, setGastoForm] = useState({ date: today, concepto: "Combustible", importe: "", reembolsable: false });
+  const [gastoForm, setGastoForm] = useState({ date: today, concepto: "Pinchazo", importe: "", reembolsable: true });
   const [gastoSaved, setGastoSaved] = useState(false);
   const [cfg, setCfg] = useState(loadCfg);
   const [copia, setCopia] = useState(null);
@@ -615,6 +627,7 @@ function TXpro() {
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
   const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = Math.max(0, evalSuma(form[k]));
     const prop = propinasDe(form); if (prop) parsed.propinas = prop;
+    const comb = combustibleDe(form); if (comb) parsed.combustible = comb;
     const car = carrerasDe(form); if (car) parsed.carreras = car;
     if (ES_HORA.test(form.inicio || "")) parsed.inicio = form.inicio;
     if (ES_HORA.test(form.fin || "")) parsed.fin = form.fin;
@@ -647,10 +660,10 @@ function TXpro() {
   const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
   const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
   const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
-  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const g = sumarGastos(gastos, ym + "-01", finDeMes(ym)); const s = summarize(entries, pct, plats); return { ym, ...s, gastos: g, combustibleMes: g.combustible, diferenciaMes: s.diferenciaMes - g.reembolsable, incentivo: incentivoDe(cfg, s.totalFact, g.combustible) }; }), [months, days, gastos, pct, cfg, plats]);
+  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const g = gastosEntre(gastos, days, ym + "-01", finDeMes(ym)); const s = summarize(entries, pct, plats); return { ym, ...s, gastos: g, combustibleMes: g.combustible, diferenciaMes: s.diferenciaMes - g.reembolsable, incentivo: incentivoDe(cfg, s.totalFact, g.combustible) }; }), [months, days, gastos, pct, cfg, plats]);
   useEffect(() => { if (months.length && !months.includes(selectedMonth)) setSelectedMonth(months[0]); }, [months]);
   const selectedData = monthData.find((m) => m.ym === selectedMonth);
-  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = sumarGastos(gastos, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct, plats); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, pct, plats]);
+  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = gastosEntre(gastos, days, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct, plats); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, pct, plats]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
   const exportarCopia = async () => {
     const payload = { app: "txpro", formato: 3, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, gastos, notas, cfg };
@@ -713,13 +726,13 @@ function TXpro() {
   // Debajo de la casilla que se está escribiendo: el botón de sumar otro viaje
   // (no todos los teclados numéricos tienen "+") y la cuenta en vivo. El
   // onMouseDown evita que el botón le quite el foco a la casilla y cierre el teclado.
-  const ayudaSuma = (k) => {
+  const ayudaSuma = (k, que = "viaje") => {
     const raw = String(form[k] ?? "");
     const hayCuenta = /\d[+-]\d/.test(raw.replace(/,/g, "."));
     return (
       <div style={{ padding: "0 0 10px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => sumarOtro(k)} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+ Sumar otro viaje</button>
+        <button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => sumarOtro(k)} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+ Sumar otro {que}</button>
         <span style={{ flex: 1, textAlign: "right", fontSize: 13, fontWeight: 800, color: C.accDim }}>{hayCuenta ? `= ${fmt(Math.max(0, evalSuma(raw)))}` : ""}</span>
         </div>
         {/* La casilla es estrecha y solo enseña el final de la cuenta: aquí van todos
@@ -841,6 +854,11 @@ function TXpro() {
                 {enfoque === "propinas" && <div style={{ marginTop: 8 }}>{ayudaSuma("propinas")}</div>}
                 {enfoque === "carreras" && <div style={{ marginTop: 8, paddingBottom: 2 }}><button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => editar("carreras", String(carrerasDe(form) + 1))} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+1 carrera</button></div>}
                 <div style={{ fontSize: 11, color: C.t3, marginTop: 9, lineHeight: 1.45 }}>Las propinas son tuyas enteras: no entran en la facturación ni en el reparto con la empresa.</div>
+                <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "flex-end" }}>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Combustible</span>{casilla("combustible", "Combustible", { width: "100%", padding: "10px 11px", fontSize: 15 })}</label>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 11, color: C.t3, lineHeight: 1.4, paddingBottom: 6 }}>Lo que has repostado hoy. Se suma solo al mes y a tu bono de combustible.</div>
+                </div>
+                {enfoque === "combustible" && <div style={{ marginTop: 8 }}>{ayudaSuma("combustible", "repostaje")}</div>}
                 {datos.length > 0 && <div style={{ marginTop: 10, background: `${C.acc}10`, border: `1px solid ${C.acc}33`, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700, color: C.t1, lineHeight: 1.5 }}>{datos.join(" · ")}</div>}
               </div>
             );
@@ -919,7 +937,7 @@ function TXpro() {
             </div>
           </>);
         })()}
-        {view === "gastos" && (() => { const mesActual = monthKey(today); const ordenados = [...gastos].sort((a, b) => b.date.localeCompare(a.date)); const meses = [...new Set(ordenados.map((g) => monthKey(g.date)))]; return (<>
+        {view === "gastos" && (() => { const mesActual = monthKey(today); const ordenados = [...gastos].sort((a, b) => b.date.localeCompare(a.date)); const meses = [...new Set([...ordenados.map((g) => monthKey(g.date)), ...Object.entries(days).filter(([, d]) => combustibleDe(d) > 0).map(([f]) => monthKey(f))])].sort().reverse(); return (<>
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Gastos</div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Lo que pagas tú de tu bolsillo. Marca los que te devuelve la empresa y se descontarán de lo que le debes.</div>
           {gastoSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>Gasto guardado</div>}
@@ -950,7 +968,7 @@ function TXpro() {
 
           {meses.length === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Todavía no has apuntado ningún gasto.</div> : meses.map((m) => {
             const delMes = ordenados.filter((g) => monthKey(g.date) === m);
-            const sum = sumarGastos(gastos, m + "-01", finDeMes(m));
+            const sum = gastosEntre(gastos, days, m + "-01", finDeMes(m));
             return (
               <div key={m} style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, gap: 8 }}>
@@ -958,6 +976,14 @@ function TXpro() {
                   <div style={{ fontSize: 18, fontWeight: 900, color: C.red, whiteSpace: "nowrap" }}>−{fmt(sum.total)}</div>
                 </div>
                 {sum.reembolsable > 0 && <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 12.5, color: C.green, fontWeight: 700 }}>La empresa te debe {fmt(sum.reembolsable)} de estos gastos</div>}
+                {sum.combustibleDiario > 0 && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${C.border}44` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.t1 }}>Combustible</div>
+                    <div style={{ fontSize: 11, color: C.t3 }}>Apuntado día a día en el Diario</div>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, whiteSpace: "nowrap" }}>{fmt(sum.combustibleDiario)}</div>
+                  <div style={{ width: 30, flexShrink: 0 }} />
+                </div>}
                 {delMes.map((g) => (
                   <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${C.border}44` }}>
                     <div style={{ flex: 1, minWidth: 0 }}>

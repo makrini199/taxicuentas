@@ -61,6 +61,14 @@ const { chromium } = require('playwright');
   comprobar('lo que ganas por hora', /ganas 17,89\s€\/h/.test(jor));
   // 332,75 / 20 carreras = 16,6375
   comprobar('media por carrera', /16,64\s€ por carrera/.test(jor));
+  // El combustible se apunta ahora en el día (antes, en Gastos). Dos repostajes.
+  const comb = p.locator('input[aria-label="Combustible"]');
+  await comb.fill('200+118,40');
+  await comb.press('Enter');
+  await p.waitForTimeout(200);
+  comprobar('combustible del día con calculadora', (await comb.inputValue()) === '318.4', await comb.inputValue());
+  const calc3 = await p.getByText('Cálculo del día').locator('..').innerText();
+  comprobar('el combustible no toca la liquidación del día', calc3.includes('166,38') && calc3.includes('212,10') && calc3.includes('120,65'));
   await p.getByRole('button', { name: 'Guardar día' }).click();
   await p.waitForTimeout(500);
   comprobar('aviso de guardado', await p.getByText('Día guardado').count() > 0);
@@ -68,9 +76,7 @@ const { chromium } = require('playwright');
   console.log('\n— GASTOS —');
   await p.getByRole('button', { name: /Gastos/ }).click();
   await p.waitForTimeout(500);
-  await p.locator('#gastoImporte').fill('318.40');   // Combustible viene elegido
-  await p.getByRole('button', { name: 'Guardar gasto' }).click();
-  await p.waitForTimeout(600);
+  comprobar('en Gastos ya no se apunta combustible', (await p.getByRole('button', { name: 'Combustible', exact: true }).count()) === 0);
   await p.getByRole('button', { name: 'Pinchazo', exact: true }).click();
   await p.locator('#gastoImporte').fill('45');
   comprobar('lo reembolsable viene marcado', await p.locator('#gastoReemb').isChecked());
@@ -78,6 +84,7 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(600);
   const gas = await p.locator('body').innerText();
   comprobar('gastos guardados', gas.includes('318,40') && gas.includes('45,00'));
+  comprobar('el combustible del Diario sale en su mes', gas.includes('Apuntado día a día en el Diario'));
   comprobar('total del mes', gas.includes('363,40'), '318,40 + 45');
   comprobar('lo que debe la empresa', /empresa te debe 45,00/.test(gas));
 
@@ -427,6 +434,32 @@ const { chromium } = require('playwright');
   comprobar('se guarda el número, no la cuenta', elDia.taximetro === 24.05 && elDia.propinas === 3.5 && elDia.carreras === 2, JSON.stringify(elDia).slice(0, 90));
   comprobar('viaje a viaje sin errores', errVV.length === 0, errVV.join(' | '));
   await vv.close();
+
+  console.log('\n— COMBUSTIBLE: LO VIEJO DE GASTOS Y LO NUEVO DEL DIARIO —');
+  // Quien ya tenía repostajes apuntados en Gastos no puede perderlos al pasar el
+  // combustible al Diario: tienen que sumarse los dos, también para el bono.
+  const cb = await b.newContext({ viewport: { width: 360, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
+  await cb.addInitScript(() => {
+    if (localStorage.getItem('tc_days')) return;
+    const d = new Date(); const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    localStorage.setItem('tc_days', JSON.stringify({ [hoy]: { taximetro: 1000, visa: 0, combustible: 60 } }));
+    localStorage.setItem('tc_gastos', JSON.stringify([{ id: 1, date: hoy, concepto: 'Combustible', importe: 40, reembolsable: false }]));
+    localStorage.setItem('tc_cfg', JSON.stringify({ incentivo: 'combustible', umbral: '500', pctCombustible: '50' }));
+    localStorage.setItem('tc_cfg_ok', 'true');
+  });
+  const pc2 = await cb.newPage();
+  await pc2.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pc2.waitForSelector('text=INGRESOS DEL DÍA');
+  await pc2.getByRole('button', { name: /Gastos/ }).click();
+  await pc2.waitForTimeout(400);
+  const gc = await pc2.locator('body').innerText();
+  comprobar('lo viejo de Gastos sigue ahí', gc.includes('40,00') && gc.includes('Apuntado día a día en el Diario') && gc.includes('60,00'));
+  comprobar('y el mes suma los dos', gc.includes('100,00'));
+  await pc2.getByRole('button', { name: /Resumen/ }).click();
+  await pc2.waitForTimeout(500);
+  // facturación 1000 ≥ 500 → 50 % de (40 + 60) = 50,00
+  comprobar('el bono cuenta los dos', /50% del combustible/.test(await pc2.locator('body').innerText()) && (await pc2.locator('body').innerText()).includes('50,00'));
+  await cb.close();
 
   console.log('\n— MAPA DE LOS EVENTOS —');
   const mp = await b.newContext({ viewport: { width: 320, height: 900 }, locale: 'es-ES', timezoneId: 'Europe/Madrid' });
