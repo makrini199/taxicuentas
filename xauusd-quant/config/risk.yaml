@@ -1,0 +1,12 @@
+risk_per_trade_pct: 0.5        # % of current balance risked per trade
+max_daily_loss_pct: 2.0        # block new entries for the rest of the day
+max_weekly_loss_pct: 4.0       # block new entries for the rest of the week
+max_drawdown_pct: 20.0         # kill switch: no new entries after this DD
+max_consecutive_losses: 5      # block new entries until next risk day
+max_open_positions: 1
+min_lot: 0.01
+lot_step: 0.01
+max_lot: 50.0
+include_commission_in_sizing: true
+# "Day" / "week" boundaries for the loss limits.
+risk_day_timezone: Europe/Madrid

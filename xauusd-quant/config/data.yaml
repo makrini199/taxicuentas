@@ -1,0 +1,39 @@
+# Dataset definition. Change data source here, never in code.
+instrument: XAUUSD
+# synthetic | mt5_csv | generic_csv | parquet
+source: synthetic
+raw_path: data/raw/XAUUSD_M1_synthetic.parquet
+processed_dir: data/processed
+metadata_dir: data/metadata
+
+# Timezone of the timestamps in the RAW file. Internally everything is UTC.
+#   - IANA name ("UTC", "Europe/Madrid", "Europe/Athens", ...)
+#   - "NY+7": MT5 "New York close" servers (server = New York local + 7h, so
+#     the daily candle opens at 17:00 New York all year round).
+source_timezone: UTC
+
+# Prices in the file: "bid" (MT5 default) or "mid".
+price_basis: bid
+# tick | real | none — tick volume and real (exchange) volume are NOT equivalent.
+volume_type: tick
+
+base_timeframe: M1
+timeframes: [M1, M5, M15, M30, H1, H4, D1]
+
+point_size: 0.01       # 1 point in price units (MT5 SPREAD column is in points)
+contract_size: 100     # troy ounces per 1.0 lot
+
+# Chronological splits. Boundaries are exclusive upper bounds (UTC):
+#   train      = [start, train_end)
+#   validation = [train_end, validation_end)
+#   oos        = [validation_end, end]       <- protected, see BACKTESTING.md
+splits:
+  train_end: "2023-01-01"
+  validation_end: "2024-01-01"
+
+synthetic:
+  start: "2021-01-04"
+  end: "2024-12-31"
+  seed: 42
+  start_price: 1850.0
+  annual_vol: 0.15

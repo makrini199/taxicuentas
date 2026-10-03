@@ -1,0 +1,19 @@
+# Trading sessions. Each window is defined in ITS OWN timezone so DST is
+# handled per market. A bar belongs to a window when its OPEN time is in
+# [start, end). Windows may cross midnight.
+sessions:
+  asia:          {start: "09:00", end: "15:00", tz: "Asia/Tokyo"}
+  london:        {start: "08:00", end: "16:30", tz: "Europe/London"}
+  new_york:      {start: "08:00", end: "17:00", tz: "America/New_York"}
+  ldn_ny_overlap: {start: "08:00", end: "11:30", tz: "America/New_York"}
+  # Initial hypothesis (spec §18). Anchored to Spain local time.
+  golden_hours:  {start: "14:30", end: "16:30", tz: "Europe/Madrid"}
+  # Same idea anchored to New York. Differs from the Madrid one during the
+  # 2-3 weeks per year when US and EU DST are out of sync.
+  golden_hours_ny: {start: "08:30", end: "10:30", tz: "America/New_York"}
+
+# Precedence used to give each bar ONE primary session label (first match wins).
+primary_order: [golden_hours, ldn_ny_overlap, new_york, london, asia]
+
+# Timezone used for hour-of-day / day-of-week reporting.
+report_timezone: Europe/Madrid

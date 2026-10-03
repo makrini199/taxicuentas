@@ -1,0 +1,45 @@
+initial_equity: 100000.0
+account_currency: USD
+active_cost_scenario: base
+close_open_positions_at_end: true
+# When SL and TP are both inside the same bar the intrabar path is unknown:
+# worst_case assumes the stop was hit first.
+intrabar_policy: worst_case
+
+# Prices are in USD per ounce. Spread/slippage in price units.
+# commission in USD per 1.0 lot round turn. swap in USD per lot per night
+# (negative = paid). Latency = extra bars between signal and fill.
+cost_scenarios:
+  optimistic:
+    spread_source: data
+    fixed_spread: 0.15
+    spread_multiplier: 0.8
+    min_spread: 0.05
+    commission_per_lot_round_turn: 0.0
+    slippage_market: 0.00
+    slippage_stop: 0.02
+    swap_long_per_lot: 0.0
+    swap_short_per_lot: 0.0
+    latency_bars: 0
+  base:
+    spread_source: data
+    fixed_spread: 0.30
+    spread_multiplier: 1.0
+    min_spread: 0.10
+    commission_per_lot_round_turn: 7.0
+    slippage_market: 0.05
+    slippage_stop: 0.10
+    swap_long_per_lot: -25.0
+    swap_short_per_lot: 5.0
+    latency_bars: 0
+  stress:
+    spread_source: data
+    fixed_spread: 0.60
+    spread_multiplier: 2.0
+    min_spread: 0.25
+    commission_per_lot_round_turn: 10.0
+    slippage_market: 0.20
+    slippage_stop: 0.40
+    swap_long_per_lot: -40.0
+    swap_short_per_lot: 0.0
+    latency_bars: 1

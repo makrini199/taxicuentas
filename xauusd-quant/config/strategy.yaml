@@ -1,0 +1,30 @@
+active: structure_breakout_baseline
+
+strategies:
+  # Pipeline smoke-test baseline (EXP000). NOT a research hypothesis:
+  # enter on a confirmed BOS/CHOCH, stop behind the protective swing,
+  # fixed-R target. Exists to prove the pipeline works end to end.
+  structure_breakout_baseline:
+    timeframe: M5
+    params:
+      swing_left: 3
+      swing_right: 3
+      break_mode: close        # close | wick
+      events: [BOS, CHOCH]
+      stop_buffer: 0.10        # price units beyond the protective swing
+      min_stop: 0.50           # reject setups with stop distance below this
+      max_stop: 15.00          # ... or above this (price units)
+      rr: 2.0                  # take-profit in R multiples
+      max_bars_in_trade: 288   # time exit (288 x M5 = 24h)
+      session_filter: null     # name from sessions.yaml, or null
+
+# Signal scoring weights (Phase 8+). Kept here so they are never hardcoded.
+scoring:
+  structure: 1.0
+  liquidity_sweep: 0.0
+  wyckoff: 0.0
+  volume: 0.0
+  rsi_divergence: 0.0
+  mtf_alignment: 0.0
+  ob_fvg: 0.0
+  session: 0.0
