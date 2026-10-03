@@ -80,7 +80,7 @@ const gastosEntre = (lista, dias, desde, hasta) => {
   diario = Math.round(diario * 100) / 100;
   return { ...g, total: g.total + diario, combustible: g.combustible + diario, combustibleDiario: diario };
 };
-const DEFAULT_CFG = { objetivos: { dia: "", semana: "", mes: "" }, pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
+const DEFAULT_CFG = { objetivos: { dia: "", semana: "", mes: "", diasTrabajo: 6 }, pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
 // Deja la lista siempre completa y en orden: las cuatro de serie primero, con el
 // interruptor que tuviera cada una, y detrás las que haya añadido el conductor.
 // Quien nunca haya pasado por Ajustes las tiene las cuatro encendidas, que es
@@ -104,7 +104,14 @@ const normPlataformas = (lista) => {
 const nuevaPlataforma = (nombre, tipo) => { const key = "p" + Date.now().toString(36); return { key, cobKey: key + "b", nombre: nombre.trim().slice(0, 24), tipo: tipo === "cobrado" ? "cobrado" : "efectivo", base: false, activa: true }; };
 // Objetivos de facturación de cada día, semana y mes. Se guardan con el acuerdo,
 // así que viajan en la copia de seguridad.
-const normObjetivos = (o) => Object.fromEntries(["dia", "semana", "mes"].map((k) => { const n = Number(o && o[k]); return [k, Number.isFinite(n) && n > 0 ? String(Math.round(n * 100) / 100) : ""]; }));
+// diasTrabajo: los días que se trabaja a la semana (6 en el taxi, con su día de
+// libranza). Con ellos se reparten los objetivos por días de trabajo, no de calendario.
+const normObjetivos = (o) => {
+  const out = Object.fromEntries(["dia", "semana", "mes"].map((k) => { const n = Number(o && o[k]); return [k, Number.isFinite(n) && n > 0 ? String(Math.round(n * 100) / 100) : ""]; }));
+  const d = Math.round(Number(o && o.diasTrabajo));
+  out.diasTrabajo = d >= 1 && d <= 7 ? d : 6;
+  return out;
+};
 const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas), objetivos: normObjetivos(g && g.objetivos) }; };
 const num = (v) => Number(v) || 0;
 const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
@@ -857,15 +864,21 @@ function TXpro() {
           const diasSemanaMes = daysBetween(ws, we).filter((f) => monthKey(f) === mk);
           const semIni = diasSemanaMes[0], semFin = diasSemanaMes[diasSemanaMes.length - 1];
           const partida = diasSemanaMes.length < 7;
+          const diasTrabajo = obj.diasTrabajo >= 1 && obj.diasTrabajo <= 7 ? obj.diasTrabajo : 6;
+          // Si la semana cortada tiene menos días que los que se trabaja, el objetivo se
+          // reparte: 1.500 a la semana trabajando 6 días son 250 al día, y con 4 días
+          // de la semana dentro del mes tocan 1.000.
+          const reparto = partida && diasSemanaMes.length < diasTrabajo ? diasSemanaMes.length / diasTrabajo : 1;
           const hecho = { dia: factVivo[today] || 0, semana: suma((f) => f >= semIni && f <= semFin), mes: suma((f) => monthKey(f) === mk) };
           const total = diasEnMes(mk); const diaMes = Number(today.slice(8));
           const quedanMes = total - diaMes + 1;            // contando hoy
+          const quedanTrabajo = Math.max(1, Math.round((quedanMes * (obj.diasTrabajo >= 1 && obj.diasTrabajo <= 7 ? obj.diasTrabajo : 6)) / 7));
           const quedanSemana = daysBetween(today, semFin).length;  // contando hoy, sin salir del mes
           const nombres = { dia: "Hoy", semana: partida ? `Esta semana · del ${Number(semIni.slice(8))} al ${Number(semFin.slice(8))}` : "Esta semana", mes: capitalizar(monthLabel(mk).split(" ")[0]) };
           const datos = {};
           for (const k of ["mes", "semana", "dia"]) {
             let meta = num(obj[k]);
-            if (k === "semana" && partida) meta = Math.round(((meta * diasSemanaMes.length) / 7) * 100) / 100;
+            if (k === "semana" && reparto < 1) meta = Math.round(meta * reparto * 100) / 100;
             if (meta > 0) datos[k] = { meta, hecho: hecho[k], frac: hecho[k] / meta };
           }
           const lider = datos.mes ? "mes" : datos.semana ? "semana" : datos.dia ? "dia" : null;
@@ -877,7 +890,7 @@ function TXpro() {
             if (falta <= 0) return <span style={{ color: C.green, fontWeight: 800 }}>✓ Superado por {fmt(-falta)}</span>;
             if (k === "mes") return quedanMes === 1
               ? <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> y hoy es el último día del mes</>
-              : <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong>: {fmt(falta / quedanMes)} al día en los {quedanMes} días que quedan</>;
+              : <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong>: {fmt(falta / quedanTrabajo)} al día en los {quedanTrabajo} días de trabajo que quedan</>;
             if (k === "semana") return <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> en {quedanSemana} {quedanSemana === 1 ? "día" : "días"}</>;
             return <>Te faltan <strong style={{ color: C.t1 }}>{fmt(falta)}</strong> para hoy</>;
           };
@@ -898,7 +911,7 @@ function TXpro() {
                     </div>
                     <div style={{ fontSize: 13, color: C.t1, fontWeight: 600, marginTop: 3, paddingLeft: 18 }}>{fmt(datos[k].hecho)} <span style={{ color: C.t2, fontWeight: 500 }}>de {fmt0(datos[k].meta)}</span></div>
                     <div style={{ fontSize: 12, color: C.t2, marginTop: 4, paddingLeft: 18, lineHeight: 1.45 }}>{lineaPie(k)}</div>
-                    {k === "semana" && partida && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 3, paddingLeft: 18, lineHeight: 1.45 }}>Solo cuentan los días de {monthLabel(mk).split(" ")[0]}: {diasSemanaMes.length} de los 7, así que el objetivo es {diasSemanaMes.length}/7 de tus {fmt0(num(obj.semana))}.</div>}
+                    {k === "semana" && reparto < 1 && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 3, paddingLeft: 18, lineHeight: 1.45 }}>Solo cuentan los días de {monthLabel(mk).split(" ")[0]}: {diasSemanaMes.length}. Trabajas {diasTrabajo} a la semana, así que el objetivo es {diasSemanaMes.length}/{diasTrabajo} de tus {fmt0(num(obj.semana))} ({fmt(num(obj.semana) / diasTrabajo)} al día).</div>}
                     {k === "mes" && datos.mes.hecho < datos.mes.meta && quedanMes > 1 && <div style={{ fontSize: 12, color: C.t2, marginTop: 3, paddingLeft: 18, lineHeight: 1.45 }}>
                       <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: C.t1, marginRight: 5, verticalAlign: "middle" }} />
                       El punto negro es donde deberías ir al acabar hoy: {datos.mes.hecho >= ritmo ? <>vas <strong style={{ color: C.t1 }}>{fmt(datos.mes.hecho - ritmo)} por delante</strong></> : <>vas <strong style={{ color: C.t1 }}>{fmt(ritmo - datos.mes.hecho)} por detrás</strong></>}.
@@ -910,7 +923,7 @@ function TXpro() {
 
             <div style={{ ...card, padding: 16, marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Cuánto quieres facturar</div>
-              <div style={{ fontSize: 11.5, color: C.t3, marginBottom: 12, lineHeight: 1.45 }}>Taxímetro más apps, como en Mensual. Deja vacío el que no quieras usar.</div>
+              <div style={{ fontSize: 11.5, color: C.t3, marginBottom: 12, lineHeight: 1.45 }}>Taxímetro más apps, como en Resumen. Deja vacío el que no quieras usar.</div>
               {[["dia", "Cada día"], ["semana", "Cada semana"], ["mes", "Cada mes"]].map(([k, lb]) => (
                 <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
                   <span style={{ width: 10, height: 10, borderRadius: "50%", background: ANILLOS[k].c, flexShrink: 0 }} />
@@ -919,6 +932,14 @@ function TXpro() {
                   <span style={{ fontSize: 13, color: C.t2, fontWeight: 700 }}>€</span>
                 </div>
               ))}
+              {(() => { const d = obj.diasTrabajo >= 1 && obj.diasTrabajo <= 7 ? obj.diasTrabajo : 6; const boton = (on) => ({ width: 34, height: 34, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: on ? C.t1 : C.t3, fontSize: 18, fontWeight: 800, cursor: on ? "pointer" : "default", fontFamily: "inherit", opacity: on ? 1 : 0.4 }); return (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0 4px", borderTop: `1px solid ${C.border}`, marginTop: 6 }}>
+                  <span style={{ ...etiqueta, flex: 1 }}>Días que trabajas a la semana</span>
+                  <button className="nb" aria-label="Un día menos" disabled={d <= 1} onClick={() => ponerObjetivo("diasTrabajo", d - 1)} style={boton(d > 1)}>−</button>
+                  <span aria-label="Días de trabajo a la semana" style={{ minWidth: 18, textAlign: "center", fontSize: 16, fontWeight: 900, color: C.t1 }}>{d}</span>
+                  <button className="nb" aria-label="Un día más" disabled={d >= 7} onClick={() => ponerObjetivo("diasTrabajo", d + 1)} style={boton(d < 7)}>+</button>
+                </div>
+              ); })()}
               {(mesPasado > 0 || (umbralBono > 0 && !num(obj.mes))) && <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 10, fontSize: 12, color: C.t2, lineHeight: 1.5 }}>
                 {mesPasado > 0 && <div>El mes pasado facturaste <strong style={{ color: C.t1 }}>{fmt(mesPasado)}</strong>.</div>}
                 {umbralBono > 0 && !num(obj.mes) && <button className="nb" onClick={() => ponerObjetivo("mes", String(umbralBono))} style={{ marginTop: 8, padding: "8px 12px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Usar el de tu bono ({fmt0(umbralBono)} al mes)</button>}

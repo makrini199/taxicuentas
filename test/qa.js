@@ -550,14 +550,21 @@ const { chromium } = require('playwright');
   // Días de esta semana (lunes a domingo) que caen en el mes: el objetivo semanal
   // de 300 se reparte entre ellos, y lo de otro mes no cuenta.
   const enMes = await po.evaluate(() => { const h = new Date(); const lun = new Date(h.getFullYear(), h.getMonth(), h.getDate() - ((h.getDay() + 6) % 7)); let n = 0; for (let i = 0; i < 7; i++) { const d = new Date(lun.getFullYear(), lun.getMonth(), lun.getDate() + i); if (d.getMonth() === h.getMonth()) n++; } return n; });
-  const metaSem = Math.round((300 * enMes / 7) * 100) / 100;
+  // Se reparte por días de trabajo (6 a la semana si no se dice otra cosa): con
+  // menos días que esos dentro del mes, el objetivo es la parte que les toca.
+  const metaCon = (dias) => (enMes < dias ? Math.round((300 * enMes / dias) * 100) / 100 : 300);
+  let metaSem = metaCon(6);
   const pctSem = (v) => Math.round((v / metaSem) * 100);
   const eur = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v).replace(/ /g, ' ');
   ot = ot.replace(/ /g, ' ');
   comprobar('el centro dice el % del mes', /15%\s+del mes/.test(ot));
   comprobar('hoy superado', /Hoy\s+150%/.test(ot) && ot.includes('Superado por 50,00'));
   comprobar('la semana, cortada en el mes', new RegExp(`Esta semana[^\\n]*\\s+${pctSem(150)}%`).test(ot), `${enMes} días del mes · ${pctSem(150)}%`);
-  if (enMes < 7) comprobar('y lo explica', ot.includes(`${enMes} de los 7`));
+  if (enMes < 6) comprobar('y lo explica', ot.includes(`${enMes}/6 de tus 300`));
+  // El mes pide lo que falta entre los días de TRABAJO que quedan, no los del calendario.
+  const quedanTrab = await po.evaluate(() => { const h = new Date(); const fin = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate(); return Math.max(1, Math.round(((fin - h.getDate() + 1) * 6) / 7)); });
+  const ultimoDia = await po.evaluate(() => { const h = new Date(); return new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate() === h.getDate(); });
+  if (!ultimoDia) comprobar('el mes cuenta días de trabajo', ot.includes(`en los ${quedanTrab} días de trabajo que quedan`), `${quedanTrab} días`);
   // Se llena viaje a viaje: lo apuntado sin guardar también cuenta.
   await po.getByRole('button', { name: /Diario/ }).click();
   await po.locator('input[aria-label="Taxímetro"]').fill('150+50');
@@ -565,6 +572,12 @@ const { chromium } = require('playwright');
   await po.waitForTimeout(1200);
   ot = (await po.locator('body').innerText()).replace(/ /g, ' ');
   comprobar('se llena en directo sin guardar', /20%\s+del mes/.test(ot) && new RegExp(`Esta semana[^\\n]*\\s+${pctSem(200)}%`).test(ot));
+  // Quien trabaja 5 días: el reparto de la semana cambia con él.
+  await po.getByRole('button', { name: 'Un día menos' }).click();
+  await po.waitForTimeout(400);
+  metaSem = metaCon(5);
+  ot = (await po.locator('body').innerText()).replace(/\u00a0/g, ' ');
+  comprobar('con 5 días de trabajo, otro reparto', (await po.getByLabel('Días de trabajo a la semana').innerText()) === '5' && new RegExp(`Esta semana[^\\n]*\\s+${pctSem(200)}%`).test(ot), `${pctSem(200)}%`);
   comprobar('los anillos se pintan', (await po.locator('svg circle').count()) >= 6);
   await po.reload({ waitUntil: 'load' });
   await po.waitForSelector('text=INGRESOS DEL DÍA');
