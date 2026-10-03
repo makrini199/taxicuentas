@@ -1,0 +1,142 @@
+data:
+  instrument: XAUUSD
+  source: synthetic
+  raw_path: data/raw/XAUUSD_M1_synthetic.parquet
+  processed_dir: data/processed
+  metadata_dir: data/metadata
+  source_timezone: UTC
+  price_basis: bid
+  volume_type: tick
+  base_timeframe: M1
+  timeframes:
+  - M1
+  - M5
+  - M15
+  - M30
+  - H1
+  - H4
+  - D1
+  point_size: 0.01
+  contract_size: 100.0
+  splits:
+    train_end: '2023-01-01'
+    validation_end: '2024-01-01'
+  synthetic:
+    start: '2021-01-04'
+    end: '2024-12-31'
+    seed: 42
+    start_price: 1850.0
+    annual_vol: 0.15
+  csv_column_map: null
+sessions:
+  sessions:
+    asia:
+      start: 09:00
+      end: '15:00'
+      tz: Asia/Tokyo
+    london:
+      start: 08:00
+      end: '16:30'
+      tz: Europe/London
+    new_york:
+      start: 08:00
+      end: '17:00'
+      tz: America/New_York
+    ldn_ny_overlap:
+      start: 08:00
+      end: '11:30'
+      tz: America/New_York
+    golden_hours:
+      start: '14:30'
+      end: '16:30'
+      tz: Europe/Madrid
+    golden_hours_ny:
+      start: 08:30
+      end: '10:30'
+      tz: America/New_York
+  primary_order:
+  - golden_hours
+  - ldn_ny_overlap
+  - new_york
+  - london
+  - asia
+  report_timezone: Europe/Madrid
+strategy:
+  active: structure_breakout_baseline
+  strategies:
+    structure_breakout_baseline:
+      timeframe: M5
+      params:
+        swing_left: 3
+        swing_right: 3
+        break_mode: close
+        events:
+        - BOS
+        - CHOCH
+        stop_buffer: 0.1
+        min_stop: 0.5
+        max_stop: 15.0
+        rr: 2.0
+        max_bars_in_trade: 288
+        session_filter: null
+  scoring:
+    structure: 1.0
+    liquidity_sweep: 0.0
+    wyckoff: 0.0
+    volume: 0.0
+    rsi_divergence: 0.0
+    mtf_alignment: 0.0
+    ob_fvg: 0.0
+    session: 0.0
+risk:
+  risk_per_trade_pct: 0.5
+  max_daily_loss_pct: 2.0
+  max_weekly_loss_pct: 4.0
+  max_drawdown_pct: 20.0
+  max_consecutive_losses: 5
+  max_open_positions: 1
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  include_commission_in_sizing: true
+  risk_day_timezone: Europe/Madrid
+backtest:
+  initial_equity: 100000.0
+  account_currency: USD
+  active_cost_scenario: base
+  close_open_positions_at_end: true
+  intrabar_policy: worst_case
+  cost_scenarios:
+    optimistic:
+      spread_source: data
+      fixed_spread: 0.15
+      spread_multiplier: 0.8
+      min_spread: 0.05
+      commission_per_lot_round_turn: 0.0
+      slippage_market: 0.0
+      slippage_stop: 0.02
+      swap_long_per_lot: 0.0
+      swap_short_per_lot: 0.0
+      latency_bars: 0
+    base:
+      spread_source: data
+      fixed_spread: 0.3
+      spread_multiplier: 1.0
+      min_spread: 0.1
+      commission_per_lot_round_turn: 7.0
+      slippage_market: 0.05
+      slippage_stop: 0.1
+      swap_long_per_lot: -25.0
+      swap_short_per_lot: 5.0
+      latency_bars: 0
+    stress:
+      spread_source: data
+      fixed_spread: 0.6
+      spread_multiplier: 2.0
+      min_spread: 0.25
+      commission_per_lot_round_turn: 10.0
+      slippage_market: 0.2
+      slippage_stop: 0.4
+      swap_long_per_lot: -40.0
+      swap_short_per_lot: 0.0
+      latency_bars: 1

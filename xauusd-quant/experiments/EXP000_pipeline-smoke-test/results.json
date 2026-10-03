@@ -1,0 +1,228 @@
+{
+  "metrics": {
+    "optimistic": {
+      "number_of_trades": 290,
+      "net_profit": -17721.4767999992,
+      "net_profit_pct": -17.7214767999992,
+      "gross_profit": 74468.85919999865,
+      "gross_loss": -92190.33599999789,
+      "profit_factor": 0.8077729448778705,
+      "win_rate": 0.296551724137931,
+      "loss_rate": 0.7034482758620689,
+      "average_trade": -61.108540689652415,
+      "average_win": 865.9169674418448,
+      "average_loss": -451.9134117646955,
+      "largest_win": 1019.6699999999955,
+      "largest_loss": -1006.2400000000093,
+      "expectancy": -61.108540689652415,
+      "expectancy_r": -0.13138060917040978,
+      "median_r": -1.002822005559116,
+      "std_r": 1.3598157568811353,
+      "t_stat_r": -1.6453193333229272,
+      "p_value_r": 0.10099111925242199,
+      "max_consecutive_wins": 5,
+      "max_consecutive_losses": 14,
+      "total_costs": 0.0,
+      "max_drawdown_pct": 20.09125470570168,
+      "max_drawdown_money": 20687.08199999921,
+      "avg_drawdown_pct": 1.0416702376895777,
+      "drawdown_episodes": 28,
+      "sharpe": -1.0926568644286574,
+      "sortino": -1.387345488338192,
+      "cagr_pct": -9.359578402621171,
+      "calmar": -0.46585335459238514,
+      "recovery_factor": -0.8566445862205156,
+      "years": 1.9849418206707734,
+      "trades_per_year": 146.1
+    },
+    "base": {
+      "number_of_trades": 150,
+      "net_profit": -16552.88399999867,
+      "net_profit_pct": -16.55288399999867,
+      "gross_profit": 35041.94999999883,
+      "gross_loss": -51594.83399999751,
+      "profit_factor": 0.6791755546689137,
+      "win_rate": 0.26666666666666666,
+      "loss_rate": 0.7333333333333333,
+      "average_trade": -110.35255999999113,
+      "average_win": 876.0487499999708,
+      "average_loss": -469.04394545452277,
+      "largest_win": 986.3299999999913,
+      "largest_loss": -578.0999999999575,
+      "expectancy": -110.35255999999113,
+      "expectancy_r": -0.23844052300449395,
+      "median_r": -1.0144725377835733,
+      "std_r": 1.3075122705570048,
+      "t_stat_r": -2.2334689643660233,
+      "p_value_r": 0.027007899077308505,
+      "max_consecutive_wins": 4,
+      "max_consecutive_losses": 14,
+      "total_costs": 1250.9500000000003,
+      "max_drawdown_pct": 20.16749081925312,
+      "max_drawdown_money": 20803.00999999889,
+      "avg_drawdown_pct": 0.9912347612924498,
+      "drawdown_episodes": 31,
+      "sharpe": -1.3580326598604424,
+      "sortino": -1.6473395513920446,
+      "cagr_pct": -8.713286711399991,
+      "calmar": -0.4320461474107505,
+      "recovery_factor": -0.7956965842923478,
+      "years": 1.9849418206707734,
+      "trades_per_year": 75.56896551724138
+    },
+    "stress": {
+      "number_of_trades": 101,
+      "net_profit": -19969.264000000505,
+      "net_profit_pct": -19.969264000000507,
+      "gross_profit": 17989.29599999976,
+      "gross_loss": -37958.56000000028,
+      "profit_factor": 0.47391934783615675,
+      "win_rate": 0.21782178217821782,
+      "loss_rate": 0.7821782178217822,
+      "average_trade": -197.71548514851986,
+      "average_win": 817.6952727272618,
+      "average_loss": -480.48810126582634,
+      "largest_win": 940.1239999999787,
+      "largest_loss": -640.4999999999802,
+      "expectancy": -197.71548514851986,
+      "expectancy_r": -0.43982563868413244,
+      "median_r": -1.063673989175436,
+      "std_r": 1.247110158602655,
+      "t_stat_r": -3.54434845491778,
+      "p_value_r": 0.0006002108502662725,
+      "max_consecutive_wins": 2,
+      "max_consecutive_losses": 14,
+      "total_costs": 1222.1,
+      "max_drawdown_pct": 20.409811610772522,
+      "max_drawdown_money": 20522.784000000465,
+      "avg_drawdown_pct": 4.350173848374104,
+      "drawdown_episodes": 5,
+      "sharpe": -2.1512484988439775,
+      "sortino": -2.2144795741668055,
+      "cagr_pct": -10.615657779337727,
+      "calmar": -0.5201252212310802,
+      "recovery_factor": -0.9730290003539506,
+      "years": 1.9849418206707734,
+      "trades_per_year": 50.88310344827586
+    }
+  },
+  "engine_info": {
+    "optimistic": {
+      "bars": 143508,
+      "spread_source": "data",
+      "final_balance": 82278.5232000008,
+      "open_positions_at_end": 0,
+      "halted_by_max_drawdown": true,
+      "halted_at": "2021-05-13 00:15:00+00:00",
+      "signals": 9537,
+      "rejected_signals": 9247
+    },
+    "base": {
+      "bars": 143508,
+      "spread_source": "data",
+      "final_balance": 83447.11600000116,
+      "open_positions_at_end": 0,
+      "halted_by_max_drawdown": true,
+      "halted_at": "2021-03-12 01:05:00+00:00",
+      "signals": 9537,
+      "rejected_signals": 9387
+    },
+    "stress": {
+      "bars": 143508,
+      "spread_source": "data",
+      "final_balance": 80030.73599999952,
+      "open_positions_at_end": 0,
+      "halted_by_max_drawdown": true,
+      "halted_at": "2021-02-17 00:15:00+00:00",
+      "signals": 9537,
+      "rejected_signals": 9436
+    }
+  },
+  "acceptance": [
+    {
+      "code": "A",
+      "name": "Statistical robustness",
+      "status": "FAIL",
+      "detail": "mean R = -0.238, t = -2.23 (need >= 2.0), n = 150",
+      "hard": true
+    },
+    {
+      "code": "B",
+      "name": "Out-of-sample performance",
+      "status": "NOT RUN",
+      "detail": "Phase 13",
+      "hard": true
+    },
+    {
+      "code": "C",
+      "name": "Walk-forward stability",
+      "status": "NOT RUN",
+      "detail": "Phase 12",
+      "hard": true
+    },
+    {
+      "code": "D",
+      "name": "Parameter stability",
+      "status": "NOT RUN",
+      "detail": "Phase 11",
+      "hard": true
+    },
+    {
+      "code": "E",
+      "name": "Cost robustness",
+      "status": "FAIL",
+      "detail": "stress-cost expectancy = -0.440 R",
+      "hard": true
+    },
+    {
+      "code": "F",
+      "name": "Drawdown",
+      "status": "FAIL",
+      "detail": "max DD = 20.2% (limit 20.0%)",
+      "hard": true
+    },
+    {
+      "code": "G",
+      "name": "Trade count",
+      "status": "FAIL",
+      "detail": "150 trades (need >= 200)",
+      "hard": true
+    },
+    {
+      "code": "H",
+      "name": "Regime robustness",
+      "status": "NOT RUN",
+      "detail": "regime detection not implemented yet",
+      "hard": true
+    },
+    {
+      "code": "I",
+      "name": "Monte Carlo robustness",
+      "status": "NOT RUN",
+      "detail": "Phase 14",
+      "hard": true
+    },
+    {
+      "code": "J",
+      "name": "Operational reliability",
+      "status": "NOT RUN",
+      "detail": "requires paper trading (Phase 17)",
+      "hard": true
+    }
+  ],
+  "status": "REJECT",
+  "overfitting_flags": [
+    [
+      "HIGH",
+      "Dataset is SYNTHETIC: results say nothing about real XAUUSD."
+    ],
+    [
+      "MEDIUM",
+      "150 trades: confidence intervals are wide."
+    ],
+    [
+      "MEDIUM",
+      "10 parameters for 150 trades (< 30 trades per parameter)."
+    ]
+  ]
+}
