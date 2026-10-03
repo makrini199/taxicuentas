@@ -18,9 +18,17 @@ def clean_ohlcv(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     report = {"rows_in": int(len(df))}
     out = df[~df.index.isna()]
     report["nat_timestamps_removed"] = int(len(df) - len(out))
-    out = out.sort_index()
+    out = out.sort_index(kind="stable")  # stable: among equal timestamps the earlier file wins
     dup = out.index.duplicated(keep="first")
     report["duplicates_removed"] = int(dup.sum())
+    if dup.any():
+        # A duplicate whose prices differ from the kept row means two sources disagree.
+        first = out[~dup][PRICE_COLS]
+        later = out[dup][PRICE_COLS]
+        diff = (later - first.reindex(later.index)).abs().max(axis=1) > 1e-9
+        report["duplicate_conflicts"] = int(diff.sum())
+    else:
+        report["duplicate_conflicts"] = 0
     out = out[~dup]
     nan_rows = out[PRICE_COLS].isna().any(axis=1)
     report["nan_price_rows_removed"] = int(nan_rows.sum())
