@@ -15,17 +15,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from xq.data.calendar import trading_minutes
 from xq.utils.timeutils import NY_TZ
 
-
-def trading_minutes(start: str, end: str) -> pd.DatetimeIndex:
-    idx = pd.date_range(pd.Timestamp(start, tz="UTC"), pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1),
-                        freq="1min", inclusive="left")
-    ny = idx.tz_convert(NY_TZ)
-    wd = np.asarray(ny.weekday)
-    hr = np.asarray(ny.hour)
-    closed = (wd == 5) | ((wd == 4) & (hr >= 17)) | ((wd == 6) & (hr < 18)) | (hr == 17)
-    return idx[~closed]
+__all__ = ["generate_synthetic_m1", "trading_minutes"]
 
 
 def generate_synthetic_m1(
