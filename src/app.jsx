@@ -1017,7 +1017,7 @@ function TXpro() {
           const facturado = delMes.reduce((a, f) => a + (days[f] ? calcDay(days[f], pct, plats).facturacion : 0), 0);
           const tope = Math.max(1, ...delMes.map((f) => (days[f] ? calcDay(days[f], pct, plats).facturacion : 0)));
           const sel = calDia && monthKey(calDia) === calMes ? calDia : null;
-          // El botón del día o de todo el mes manda en el mapa y en "Días fuertes".
+          // El botón del día o de todo el mes manda en el mapa.
           // Si no se ha tocado, se enseña el día elegido cuando tiene algo.
           const delDiaCal = sel ? (eventosPorDia[sel] || []) : [];
           const alcanceCal = alcanceMapa === "mes" || !sel ? "mes" : alcanceMapa === "dia" ? "dia" : delDiaCal.length ? "dia" : "mes";
@@ -1126,27 +1126,7 @@ function TXpro() {
                     </div>
                   ); })}
                   {lugarMarcado && visibles.length < puntos.length && <button className="nb" onClick={() => setLugarMarcado(null)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, textDecoration: "underline", cursor: "pointer" }}>Ver todos los sitios</button>}
-                  {alcance === "dia" && generales.length > 0 && <div style={{ fontSize: 12, color: C.t2, marginTop: 10 }}>En toda Madrid: <strong style={{ color: C.t1 }}>{generales.map((e) => e.titulo).join(", ")}</strong></div>}
-                </div>
-              );
-            })()}
-            {(() => {
-              const delMesEv = alcanceCal === "dia"
-                ? [...delDiaCal]
-                : eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b));
-              if (!delMesEv.length) return null;
-              return (
-                <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>{alcanceCal === "dia" ? `Días fuertes · ${weekday(sel)} ${Number(sel.slice(8))}` : "Días fuertes del mes"}</div>
-                  {delMesEv.map((e, i) => (
-                    <div key={i} onClick={() => { setCalDia(e.fecha); if (monthKey(e.fecha) !== calMes) setCalMes(monthKey(e.fecha)); }} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i === delMesEv.length - 1 ? "none" : `1px solid ${C.border}44`, cursor: "pointer" }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 800, color: C.evento, minWidth: 38, flexShrink: 0 }}>{dayMonth(e.fecha)}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: C.t1, fontWeight: 700 }}>{e.titulo}</div>
-                        {(e.lugar || e.salida || e.hora) && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 1 }}>{[e.lugar, e.salida ? `salida ${e.salida.desde}` : e.hora ? `a las ${e.hora}` : ""].filter(Boolean).join(" · ")}</div>}
-                      </div>
-                    </div>
-                  ))}
+                  {generales.length > 0 && <div style={{ fontSize: 12, color: C.t2, marginTop: 10 }}>En toda Madrid: <strong style={{ color: C.t1 }}>{[...new Set(generales.map((e) => e.titulo))].join(", ")}</strong></div>}
                 </div>
               );
             })()}
