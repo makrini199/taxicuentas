@@ -474,31 +474,36 @@ const { chromium } = require('playwright');
   for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pm.locator('body').innerText()); i++) { await pm.getByLabel('Mes siguiente').click(); await pm.waitForTimeout(120); }
   await pm.getByRole('button', { name: /^2026-10-02/ }).click();
   await pm.waitForTimeout(500);
-  const marcas = () => pm.locator('button[aria-label^="1. "], button[aria-label^="2. "], button[aria-label^="3. "], button[aria-label^="4. "], button[aria-label^="5. "]').count();
+  const tarjetaMapa = () => pm.getByText('Dónde es').locator('../..').innerText();
   comprobar('el mapa sale en el calendario', (await pm.getByText('Dónde es').count()) > 0);
-  // Viernes 2: Shakira, Las Ventas, Vistalegre y Movistar en Madrid; el Warner fuera.
-  comprobar('un punto por sitio en Madrid', (await marcas()) === 4, String(await marcas()));
-  comprobar('avisa de lo que queda fuera', (await pm.locator('body').innerText()).includes('Fuera de este mapa: Parque Warner'));
-  await pm.getByRole('button', { name: 'Toda la Comunidad', exact: true }).click();
-  await pm.waitForTimeout(300);
-  comprobar('en la Comunidad sale el Warner', (await pm.locator('button[aria-label^="5. Parque Warner"]').count()) === 1);
-  comprobar('y lo de Madrid se agrupa', (await pm.locator('button[aria-label*="sitios juntos"]').count()) === 1);
-  await pm.locator('button[aria-label*="sitios juntos"]').click();
-  await pm.waitForTimeout(300);
-  comprobar('el grupo lleva a Madrid de cerca', (await marcas()) === 4);
-  // Tocar un punto deja en la lista solo ese sitio.
-  await pm.locator('button[aria-label^="2. Las Ventas"]').click();
+  comprobar('solo la vista de toda la Comunidad', (await pm.getByRole('button', { name: 'Madrid', exact: true }).count()) === 0);
+  // Viernes 2: lo de la capital (Las Ventas, Vistalegre, Movistar, Iberdrola) cae
+  // junto y se agrupa; el Warner va aparte con su número.
+  comprobar('el Warner con su punto', (await pm.locator('button[aria-label^="5. Parque Warner"]').count()) === 1);
+  const grupo = pm.locator('button[aria-label*="sitios juntos"]');
+  comprobar('lo de la capital, agrupado', (await grupo.count()) === 1 && (await grupo.innerText()) === '4');
+  await grupo.click();
   await pm.waitForTimeout(200);
-  let lm = await pm.getByText('Dónde es').locator('../..').innerText();
-  comprobar('tocar un punto enseña solo ese sitio', lm.includes('Corrida · Feria de Otoño') && !lm.includes('Guitarricadelafuente'));
-  // Todo el mes, y de ahí a un día.
+  let lm = await tarjetaMapa();
+  comprobar('tocar el grupo deja esos sitios en la lista', lm.includes('Las Ventas') && lm.includes('Movistar Arena') && !lm.includes('Halloween Scary Nights'));
+  await pm.getByRole('button', { name: 'Ver todos los sitios' }).click();
+  await pm.locator('button[aria-label^="5. Parque Warner"]').click();
+  await pm.waitForTimeout(200);
+  lm = await tarjetaMapa();
+  comprobar('tocar un punto enseña solo ese sitio', lm.includes('Halloween Scary Nights') && !lm.includes('Guitarricadelafuente'));
+  // "Días fuertes" sigue al botón: el día elegido, o todo el mes.
+  const fuertes = () => pm.getByText(/Días fuertes/i).last().locator('..').innerText();
+  let df = await fuertes();
+  comprobar('con el día elegido, solo lo de ese día', /D[ÍI]AS FUERTES · VIE 2/i.test(df) && df.includes('Evanescence') && !df.includes('Bryant Myers'));
   await pm.getByRole('button', { name: 'Todo el mes' }).click();
   await pm.waitForTimeout(300);
-  lm = await pm.getByText('Dónde es').locator('../..').innerText();
+  df = await fuertes();
+  comprobar('con todo el mes, todos', /D[ÍI]AS FUERTES DEL MES/i.test(df) && df.includes('Bryant Myers') && df.includes('Evanescence'));
+  lm = await tarjetaMapa();
   comprobar('todo el mes: los días de cada sitio', lm.includes('Las Ventas') && lm.includes('Lun 12'));
   await pm.getByRole('button', { name: 'Lun 12', exact: true }).first().click();
   await pm.waitForTimeout(400);
-  comprobar('y un día lleva a ese día', (await pm.getByText('Dónde es').locator('../..').innerText()).includes('Corrida de la Hispanidad'));
+  comprobar('y un día lleva a ese día', (await tarjetaMapa()).includes('Corrida de la Hispanidad'));
   comprobar('el mapa no se sale en 320 px', (await pm.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) === 0);
   comprobar('mapa sin errores', errMp.length === 0, errMp.join(' | '));
   await mp.close();
@@ -542,16 +547,24 @@ const { chromium } = require('playwright');
   await po.locator('#obj-mes').fill('1000');
   await po.waitForTimeout(1200);
   let ot = await po.locator('body').innerText();
+  // Días de esta semana (lunes a domingo) que caen en el mes: el objetivo semanal
+  // de 300 se reparte entre ellos, y lo de otro mes no cuenta.
+  const enMes = await po.evaluate(() => { const h = new Date(); const lun = new Date(h.getFullYear(), h.getMonth(), h.getDate() - ((h.getDay() + 6) % 7)); let n = 0; for (let i = 0; i < 7; i++) { const d = new Date(lun.getFullYear(), lun.getMonth(), lun.getDate() + i); if (d.getMonth() === h.getMonth()) n++; } return n; });
+  const metaSem = Math.round((300 * enMes / 7) * 100) / 100;
+  const pctSem = (v) => Math.round((v / metaSem) * 100);
+  const eur = (v) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v).replace(/ /g, ' ');
+  ot = ot.replace(/ /g, ' ');
   comprobar('el centro dice el % del mes', /15%\s+del mes/.test(ot));
   comprobar('hoy superado', /Hoy\s+150%/.test(ot) && ot.includes('Superado por 50,00'));
-  comprobar('lo que falta de la semana', /Esta semana\s+50%/.test(ot) && ot.includes('Te faltan 150,00'));
+  comprobar('la semana, cortada en el mes', new RegExp(`Esta semana[^\\n]*\\s+${pctSem(150)}%`).test(ot), `${enMes} días del mes · ${pctSem(150)}%`);
+  if (enMes < 7) comprobar('y lo explica', ot.includes(`${enMes} de los 7`));
   // Se llena viaje a viaje: lo apuntado sin guardar también cuenta.
   await po.getByRole('button', { name: /Diario/ }).click();
   await po.locator('input[aria-label="Taxímetro"]').fill('150+50');
   await po.getByRole('button', { name: /Objetivos/ }).click();
   await po.waitForTimeout(1200);
-  ot = await po.locator('body').innerText();
-  comprobar('se llena en directo sin guardar', /20%\s+del mes/.test(ot) && /Esta semana\s+67%/.test(ot));
+  ot = (await po.locator('body').innerText()).replace(/ /g, ' ');
+  comprobar('se llena en directo sin guardar', /20%\s+del mes/.test(ot) && new RegExp(`Esta semana[^\\n]*\\s+${pctSem(200)}%`).test(ot));
   comprobar('los anillos se pintan', (await po.locator('svg circle').count()) >= 6);
   await po.reload({ waitUntil: 'load' });
   await po.waitForSelector('text=INGRESOS DEL DÍA');

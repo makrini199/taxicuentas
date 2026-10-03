@@ -341,11 +341,11 @@ const Anillos = ({ datos, marcaMes, centro }) => {
 // EL MAPA DE LOS EVENTOS. Dibujado aquí con los contornos del IGN que trae
 // mapa-madrid.json: sin servidores de mapas de fuera, funciona sin cobertura y
 // no le cuenta a nadie qué se mira. Sin calles: municipios, sus nombres y los
-// puntos. Dos vistas: Madrid y alrededores, donde está casi todo, y la
-// Comunidad entera. Los puntos son HTML encima del dibujo para que el número y
-// el tamaño no cambien con el zoom.
-const ZONA_MADRID = { lat: [40.30, 40.50], lon: [-3.84, -3.54] };
-const MapaEventos = ({ mapa, puntos, vista, setVista, marcado, setMarcado }) => {
+// puntos, con la Comunidad entera a la vista. Lo que cae junto (los recintos de
+// la capital, casi siempre) se agrupa en un círculo con el número de sitios, y
+// tocarlo deja esos sitios en la lista de debajo. Los puntos son HTML encima del
+// dibujo para que el número y el tamaño no cambien con la escala.
+const MapaEventos = ({ mapa, puntos, marcado, setMarcado }) => {
   const ref = useRef(null);
   const [ancho, setAncho] = useState(300);
   useEffect(() => {
@@ -358,31 +358,15 @@ const MapaEventos = ({ mapa, puntos, vista, setVista, marcado, setMarcado }) => 
   }, []);
   const { lat0, lon0, k, cos } = mapa.proy;
   const P = (lat, lon) => [(lon - lon0) * cos * k, (lat0 - lat) * k];
-  const vb = vista === "zona"
-    ? (() => { const [x1, y1] = P(ZONA_MADRID.lat[1], ZONA_MADRID.lon[0]); const [x2, y2] = P(ZONA_MADRID.lat[0], ZONA_MADRID.lon[1]); return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }; })()
-    : { x: mapa.caja[0] - 10, y: mapa.caja[1] - 10, w: mapa.caja[2] + 20, h: mapa.caja[3] + 20 };
+  const vb = { x: mapa.caja[0] - 10, y: mapa.caja[1] - 10, w: mapa.caja[2] + 20, h: mapa.caja[3] + 20 };
   const esc = ancho / vb.w;
   const aPx = ([x, y]) => [(x - vb.x) * esc, (y - vb.y) * esc];
-  const dentro = ([x, y]) => x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h;
   const alto = vb.h * esc;
-  const marcas = puntos.map((p, i) => ({ ...p, n: i + 1, s: aPx(P(p.lat, p.lon)), en: dentro(P(p.lat, p.lon)) })).filter((m) => m.en);
-  // Toda la Comunidad: lo que cae junto se agrupa, y al tocarlo se va a Madrid.
-  // Madrid y alrededores: lo que se pisa se aparta un poco, con una raya hasta
-  // su sitio de verdad.
+  const marcas = puntos.map((p, i) => ({ ...p, n: i + 1, s: aPx(P(p.lat, p.lon)) }));
   const D = 24;
-  let grupos = [];
-  if (vista === "comunidad") {
-    for (const m of marcas) { const g = grupos.find((g) => Math.hypot(g.s[0] - m.s[0], g.s[1] - m.s[1]) < D); if (g) g.miembros.push(m); else grupos.push({ s: [...m.s], miembros: [m] }); }
-  } else {
-    const pos = marcas.map((m) => [...m.s]);
-    for (let it = 0; it < 40; it++) for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) {
-      let dx = pos[j][0] - pos[i][0], dy = pos[j][1] - pos[i][1]; let d = Math.hypot(dx, dy);
-      if (d >= D) continue;
-      if (d < 0.01) { dx = Math.cos(i + j); dy = Math.sin(i + j); d = 1; }
-      const f = (D - d) / 2 / d; pos[i][0] -= dx * f; pos[i][1] -= dy * f; pos[j][0] += dx * f; pos[j][1] += dy * f;
-    }
-    grupos = marcas.map((m, i) => ({ s: [Math.min(ancho - 13, Math.max(13, pos[i][0])), Math.min(alto - 13, Math.max(13, pos[i][1]))], real: m.s, miembros: [m] }));
-  }
+  const grupos = [];
+  for (const m of marcas) { const g = grupos.find((g) => Math.hypot(g.s[0] - m.s[0], g.s[1] - m.s[1]) < D); if (g) g.miembros.push(m); else grupos.push({ s: [...m.s], miembros: [m] }); }
+  const esMarcado = (lista) => !!marcado && marcado.length === lista.length && lista.every((l) => marcado.includes(l));
   // Nombres de municipios por orden de importancia (el del archivo): cada uno se
   // queda solo si no pisa a un punto ni a un nombre ya puesto, y el que se sale
   // por el borde se mete hacia dentro en vez de cortarse.
@@ -390,7 +374,7 @@ const MapaEventos = ({ mapa, puntos, vista, setVista, marcado, setMarcado }) => 
   const choca = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   const etiquetas = [];
   for (const n of mapa.nombres) {
-    if (!(n.en === "ambas" || n.en === vista) || !dentro([n.x, n.y])) continue;
+    if (n.en === "zona") continue;
     const [sx, sy] = aPx([n.x, n.y]); const w = n.n.length * 5.9 + 6, h = 14;
     const x = Math.min(Math.max(sx, w / 2 + 3), ancho - w / 2 - 3), y = Math.min(Math.max(sy, h / 2 + 3), alto - h / 2 - 3);
     const caja = { x: x - w / 2, y: y - h / 2, w, h };
@@ -404,23 +388,18 @@ const MapaEventos = ({ mapa, puntos, vista, setVista, marcado, setMarcado }) => 
         <path d={mapa.capital} fill={`${C.acc}24`} />
         <path d={mapa.bordes} fill="none" stroke="#d6dae4" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
       </svg>
-      {grupos.filter((g) => g.real && Math.hypot(g.real[0] - g.s[0], g.real[1] - g.s[1]) > 3).map((g) => (
-        <svg key={`r${g.miembros[0].n}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} aria-hidden="true">
-          <line x1={g.real[0]} y1={g.real[1]} x2={g.s[0]} y2={g.s[1]} stroke={C.t2} strokeWidth={1} />
-          <circle cx={g.real[0]} cy={g.real[1]} r={2.5} fill={C.t1} />
-        </svg>
-      ))}
       {etiquetas.map((n) => (
         <span key={n.n} style={{ position: "absolute", left: n.s[0], top: n.s[1], transform: "translate(-50%,-50%)", fontSize: 10, fontWeight: 700, color: C.t3, whiteSpace: "nowrap", textShadow: "0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff", pointerEvents: "none" }}>{n.n}</span>
       ))}
       {grupos.map((g) => {
+        const lugares = g.miembros.map((m) => m.lugar); const on = esMarcado(lugares);
         if (g.miembros.length > 1) return (
-          <button key={`g${g.miembros[0].n}`} className="nb" onClick={() => setVista("zona")} aria-label={`${g.miembros.length} sitios juntos: ver Madrid de cerca`}
-            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: "translate(-50%,-50%)", minWidth: 32, height: 32, padding: "0 6px", borderRadius: 16, border: "2px solid #fff", background: C.t1, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)" }}>{g.miembros.length}</button>
+          <button key={`g${g.miembros[0].n}`} className="nb" onClick={() => setMarcado(on ? null : lugares)} aria-label={`${g.miembros.length} sitios juntos: ${lugares.join(", ")}`} aria-pressed={on}
+            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.15 : 1})`, minWidth: 32, height: 32, padding: "0 6px", borderRadius: 16, border: `2px solid ${on ? C.acc : "#fff"}`, background: C.t1, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s" }}>{g.miembros.length}</button>
         );
-        const m = g.miembros[0]; const on = marcado === m.lugar;
+        const m = g.miembros[0];
         return (
-          <button key={`m${m.n}`} className="nb" onClick={() => setMarcado(on ? null : m.lugar)} aria-label={`${m.n}. ${m.lugar}`} aria-pressed={on}
+          <button key={`m${m.n}`} className="nb" onClick={() => setMarcado(on ? null : lugares)} aria-label={`${m.n}. ${m.lugar}`} aria-pressed={on}
             style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.2 : 1})`, width: 26, height: 26, borderRadius: 13, border: `2px solid ${on ? C.t1 : "#fff"}`, background: C.evento, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s", padding: 0 }}>{m.n}</button>
         );
       })}
@@ -588,7 +567,6 @@ function TXpro() {
   }, []);
   const eventosPorDia = useMemo(() => indexarEventos(eventos.eventos), [eventos]);
   const [mapa, setMapa] = useState(null);
-  const [vistaMapa, setVistaMapa] = useState("zona");
   const [alcanceMapa, setAlcanceMapa] = useState(null);   // null: el día si tiene algo, si no el mes
   const [lugarMarcado, setLugarMarcado] = useState(null);
   useEffect(() => {
@@ -873,13 +851,23 @@ function TXpro() {
           const obj = cfg.objetivos || {};
           const ws = weekStart(today); const we = shiftDays(ws, 6); const mk = monthKey(today);
           const suma = (ok) => Object.entries(factVivo).reduce((a, [f, v]) => (ok(f) ? a + v : a), 0);
-          const hecho = { dia: factVivo[today] || 0, semana: suma((f) => f >= ws && f <= we), mes: suma((f) => monthKey(f) === mk) };
+          // La semana se corta en el mes natural: la que empezó el lunes 28 de
+          // septiembre solo cuenta, en octubre, del 1 al 4. Y su objetivo se reparte
+          // por los días que caen en el mes (4 de 7), para no pedir los 7 días en 4.
+          const diasSemanaMes = daysBetween(ws, we).filter((f) => monthKey(f) === mk);
+          const semIni = diasSemanaMes[0], semFin = diasSemanaMes[diasSemanaMes.length - 1];
+          const partida = diasSemanaMes.length < 7;
+          const hecho = { dia: factVivo[today] || 0, semana: suma((f) => f >= semIni && f <= semFin), mes: suma((f) => monthKey(f) === mk) };
           const total = diasEnMes(mk); const diaMes = Number(today.slice(8));
           const quedanMes = total - diaMes + 1;            // contando hoy
-          const quedanSemana = 7 - WD.indexOf(weekday(today));  // contando hoy; la semana empieza en lunes
-          const nombres = { dia: "Hoy", semana: "Esta semana", mes: capitalizar(monthLabel(mk).split(" ")[0]) };
+          const quedanSemana = daysBetween(today, semFin).length;  // contando hoy, sin salir del mes
+          const nombres = { dia: "Hoy", semana: partida ? `Esta semana · del ${Number(semIni.slice(8))} al ${Number(semFin.slice(8))}` : "Esta semana", mes: capitalizar(monthLabel(mk).split(" ")[0]) };
           const datos = {};
-          for (const k of ["mes", "semana", "dia"]) { const meta = num(obj[k]); if (meta > 0) datos[k] = { meta, hecho: hecho[k], frac: hecho[k] / meta }; }
+          for (const k of ["mes", "semana", "dia"]) {
+            let meta = num(obj[k]);
+            if (k === "semana" && partida) meta = Math.round(((meta * diasSemanaMes.length) / 7) * 100) / 100;
+            if (meta > 0) datos[k] = { meta, hecho: hecho[k], frac: hecho[k] / meta };
+          }
           const lider = datos.mes ? "mes" : datos.semana ? "semana" : datos.dia ? "dia" : null;
           const ritmo = datos.mes ? datos.mes.meta * (diaMes / total) : 0;
           const mesPasado = Object.entries(days).filter(([f]) => monthKey(f) === mesVecino(mk, -1)).reduce((a, [, d]) => a + calcDay(d, pct, plats).facturacion, 0);
@@ -910,6 +898,7 @@ function TXpro() {
                     </div>
                     <div style={{ fontSize: 13, color: C.t1, fontWeight: 600, marginTop: 3, paddingLeft: 18 }}>{fmt(datos[k].hecho)} <span style={{ color: C.t2, fontWeight: 500 }}>de {fmt0(datos[k].meta)}</span></div>
                     <div style={{ fontSize: 12, color: C.t2, marginTop: 4, paddingLeft: 18, lineHeight: 1.45 }}>{lineaPie(k)}</div>
+                    {k === "semana" && partida && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 3, paddingLeft: 18, lineHeight: 1.45 }}>Solo cuentan los días de {monthLabel(mk).split(" ")[0]}: {diasSemanaMes.length} de los 7, así que el objetivo es {diasSemanaMes.length}/7 de tus {fmt0(num(obj.semana))}.</div>}
                     {k === "mes" && datos.mes.hecho < datos.mes.meta && quedanMes > 1 && <div style={{ fontSize: 12, color: C.t2, marginTop: 3, paddingLeft: 18, lineHeight: 1.45 }}>
                       <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: C.t1, marginRight: 5, verticalAlign: "middle" }} />
                       El punto negro es donde deberías ir al acabar hoy: {datos.mes.hecho >= ritmo ? <>vas <strong style={{ color: C.t1 }}>{fmt(datos.mes.hecho - ritmo)} por delante</strong></> : <>vas <strong style={{ color: C.t1 }}>{fmt(ritmo - datos.mes.hecho)} por detrás</strong></>}.
@@ -1007,6 +996,10 @@ function TXpro() {
           const facturado = delMes.reduce((a, f) => a + (days[f] ? calcDay(days[f], pct, plats).facturacion : 0), 0);
           const tope = Math.max(1, ...delMes.map((f) => (days[f] ? calcDay(days[f], pct, plats).facturacion : 0)));
           const sel = calDia && monthKey(calDia) === calMes ? calDia : null;
+          // El botón del día o de todo el mes manda en el mapa y en "Días fuertes".
+          // Si no se ha tocado, se enseña el día elegido cuando tiene algo.
+          const delDiaCal = sel ? (eventosPorDia[sel] || []) : [];
+          const alcanceCal = alcanceMapa === "mes" || !sel ? "mes" : alcanceMapa === "dia" ? "dia" : delDiaCal.length ? "dia" : "mes";
           const datosSel = sel && days[sel] ? calcDay(days[sel], pct, plats) : null;
           const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 36, height: 36, fontSize: 18, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 };
           return (<>
@@ -1073,10 +1066,9 @@ function TXpro() {
             {mapa && (() => {
               const lugares = eventos.lugares || {};
               const delMes = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes);
-              const delDia = sel ? (eventosPorDia[sel] || []) : [];
               const conPunto = (lista) => lista.filter((e) => lugares[e.lugar]);
-              const alcance = alcanceMapa === "mes" || !sel ? "mes" : alcanceMapa === "dia" ? "dia" : conPunto(delDia).length ? "dia" : "mes";
-              const lista = alcance === "dia" ? delDia : delMes;
+              const alcance = alcanceCal;
+              const lista = alcance === "dia" ? delDiaCal : delMes;
               // Un punto por recinto, en el orden en que pasan las cosas.
               const porLugar = new Map();
               for (const e of [...conPunto(lista)].sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b))) {
@@ -1085,10 +1077,8 @@ function TXpro() {
               }
               const puntos = [...porLugar.values()];
               const generales = lista.filter((e) => !lugares[e.lugar]);
-              const enZona = (p) => p.lat >= ZONA_MADRID.lat[0] && p.lat <= ZONA_MADRID.lat[1] && p.lon >= ZONA_MADRID.lon[0] && p.lon <= ZONA_MADRID.lon[1];
-              const fuera = vistaMapa === "zona" ? puntos.filter((p) => !enZona(p)) : [];
               const chip = (on) => ({ padding: "6px 10px", borderRadius: 8, border: `1px solid ${on ? C.evento : C.border}`, background: on ? `${C.evento}14` : C.surf, color: on ? C.t1 : C.t2, fontWeight: on ? 800 : 600, fontSize: 12, cursor: "pointer", fontFamily: "inherit" });
-              const visibles = lugarMarcado && porLugar.has(lugarMarcado) ? [porLugar.get(lugarMarcado)] : puntos;
+              const visibles = lugarMarcado ? puntos.filter((p) => lugarMarcado.includes(p.lugar)) : puntos;
               return (
                 <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
@@ -1098,18 +1088,11 @@ function TXpro() {
                       <button className="nb" onClick={() => { setAlcanceMapa("mes"); setLugarMarcado(null); }} style={chip(alcance === "mes")}>Todo el mes</button>
                     </div>
                   </div>
-                  <MapaEventos mapa={mapa} puntos={puntos} vista={vistaMapa} setVista={setVistaMapa} marcado={lugarMarcado} setMarcado={setLugarMarcado} />
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className="nb" onClick={() => setVistaMapa("zona")} style={chip(vistaMapa === "zona")}>Madrid</button>
-                      <button className="nb" onClick={() => setVistaMapa("comunidad")} style={chip(vistaMapa === "comunidad")}>Toda la Comunidad</button>
-                    </div>
-                    <span style={{ fontSize: 10, color: C.t3 }}>{mapa.fuente}</span>
-                  </div>
-                  {fuera.length > 0 && <button className="nb" onClick={() => setVistaMapa("comunidad")} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, cursor: "pointer", textAlign: "left" }}>Fuera de este mapa: <strong style={{ color: C.t1 }}>{fuera.map((p) => p.lugar).join(", ")}</strong> · <span style={{ textDecoration: "underline", fontWeight: 700, color: C.t1 }}>ver toda la Comunidad</span></button>}
+                  <MapaEventos mapa={mapa} puntos={puntos} marcado={lugarMarcado} setMarcado={setLugarMarcado} />
+                  <div style={{ fontSize: 10, color: C.t3, marginTop: 6, textAlign: "right" }}>{mapa.fuente}</div>
                   {puntos.length === 0 && <div style={{ fontSize: 12.5, color: C.t2, marginTop: 10 }}>{alcance === "dia" ? "Este día no hay nada con sitio concreto." : "Este mes no hay nada con sitio concreto."}</div>}
                   {visibles.map((p) => { const n = puntos.indexOf(p) + 1; return (
-                    <div key={p.lugar} onClick={() => setLugarMarcado(lugarMarcado === p.lugar ? null : p.lugar)} style={{ display: "flex", gap: 10, padding: "10px 0 2px", borderTop: `1px solid ${C.border}66`, marginTop: 8, cursor: "pointer" }}>
+                    <div key={p.lugar} onClick={() => setLugarMarcado(lugarMarcado && lugarMarcado.length === 1 && lugarMarcado[0] === p.lugar ? null : [p.lugar])} style={{ display: "flex", gap: 10, padding: "10px 0 2px", borderTop: `1px solid ${C.border}66`, marginTop: 8, cursor: "pointer" }}>
                       <span style={{ width: 22, height: 22, borderRadius: 11, background: C.evento, color: "#fff", fontWeight: 900, fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{n}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{p.lugar}</div>
@@ -1121,17 +1104,19 @@ function TXpro() {
                       </div>
                     </div>
                   ); })}
-                  {lugarMarcado && porLugar.has(lugarMarcado) && puntos.length > 1 && <button className="nb" onClick={() => setLugarMarcado(null)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, textDecoration: "underline", cursor: "pointer" }}>Ver todos los sitios</button>}
+                  {lugarMarcado && visibles.length < puntos.length && <button className="nb" onClick={() => setLugarMarcado(null)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t2, textDecoration: "underline", cursor: "pointer" }}>Ver todos los sitios</button>}
                   {alcance === "dia" && generales.length > 0 && <div style={{ fontSize: 12, color: C.t2, marginTop: 10 }}>En toda Madrid: <strong style={{ color: C.t1 }}>{generales.map((e) => e.titulo).join(", ")}</strong></div>}
                 </div>
               );
             })()}
             {(() => {
-              const delMesEv = eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b));
+              const delMesEv = alcanceCal === "dia"
+                ? [...delDiaCal]
+                : eventos.eventos.filter((e) => monthKey(e.fecha) === calMes || monthKey(e.hasta) === calMes).sort((a, b) => a.fecha.localeCompare(b.fecha) || ordenDelDia(a) - ordenDelDia(b));
               if (!delMesEv.length) return null;
               return (
                 <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Días fuertes del mes</div>
+                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>{alcanceCal === "dia" ? `Días fuertes · ${weekday(sel)} ${Number(sel.slice(8))}` : "Días fuertes del mes"}</div>
                   {delMesEv.map((e, i) => (
                     <div key={i} onClick={() => { setCalDia(e.fecha); if (monthKey(e.fecha) !== calMes) setCalMes(monthKey(e.fecha)); }} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i === delMesEv.length - 1 ? "none" : `1px solid ${C.border}44`, cursor: "pointer" }}>
                       <div style={{ fontSize: 12.5, fontWeight: 800, color: C.evento, minWidth: 38, flexShrink: 0 }}>{dayMonth(e.fecha)}</div>
