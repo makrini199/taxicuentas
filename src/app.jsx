@@ -273,6 +273,7 @@ const TRAZOS = {
   periodo: <><path d="M4 12h16" /><circle cx="7" cy="12" r="2.6" /><circle cx="17" cy="12" r="2.6" /><path d="M7 6.4v2.6M17 15v2.6" /></>,
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
 };
+TRAZOS.resumen = TRAZOS.mensual;
 const Icono = ({ name, size = 23 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}>{TRAZOS[name]}</svg>
 );
@@ -459,7 +460,7 @@ const Desglose = ({ entries, plats, etiqueta }) => {
         </div>
       ))}
       {d.tarjeta > 0 && <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 0", borderTop: "1px solid #eef0f6" }}>
-        <span style={{ flex: 1, fontSize: 13, color: C.t2 }}>Con tarjeta</span>
+        <span style={{ flex: 1, fontSize: 13, color: C.t2 }}>Tarjeta</span>
         <span style={{ ...col, fontSize: 13.5, fontWeight: 600, color: C.t2 }}>{fmt(d.tarjeta)}</span>
         <span style={col} />
       </div>}
@@ -601,6 +602,9 @@ function TXpro() {
   const platConDatos = (pl) => Object.values(days).some((d) => (Number(d[pl.key]) || 0) !== 0 || (Number(d[pl.cobKey]) || 0) !== 0);
   const quitarPlat = (key) => cambiarPlats((lista) => lista.filter((pl) => pl.key !== key));
   const [selectedMonth, setSelectedMonth] = useState(monthKey(today));
+  // Mensual y Periodo eran casi la misma pantalla: ahora son una, "Resumen",
+  // con un selector de mes, semana (de lunes a domingo) o fechas a elegir.
+  const [modoResumen, setModoResumen] = useState("mes");
   const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
   const [rangeTo, setRangeTo] = useState(today);
   useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
@@ -1127,7 +1131,16 @@ function TXpro() {
             ); })()}
           </>);
         })()}
-        {view === "mensual" && <>
+        {view === "resumen" && (() => {
+          const seg = (on) => ({ flex: 1, padding: "9px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit" });
+          const ir = (m) => { setModoResumen(m); if (m === "semana") { const ws = weekStart(today); setRangeFrom(ws); setRangeTo(shiftDays(ws, 6)); } };
+          return (
+            <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
+              {[["mes", "Mes"], ["semana", "Semana"], ["fechas", "Fechas"]].map(([m, lb]) => <button key={m} className="nb" aria-pressed={modoResumen === m} onClick={() => ir(m)} style={seg(modoResumen === m)}>{lb}</button>)}
+            </div>
+          );
+        })()}
+        {view === "resumen" && modoResumen === "mes" && <>
           {monthData.length === 0 && <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>}
           {monthData.length > 0 && <>
             <div style={{ ...card, padding: 16, marginBottom: 12 }}>
@@ -1142,12 +1155,18 @@ function TXpro() {
                 ))}
               </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 900, color: C.t1 }}>{capitalizar(monthLabel(selectedMonth))}</div>
-              <select className="inp" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={{ ...inp, width: "auto", padding: "8px 10px", fontSize: 13 }}>
-                {months.map((m) => (<option key={m} value={m}>{monthLabel(m)}</option>))}
-              </select>
-            </div>
+            {(() => {
+              const i = months.indexOf(selectedMonth); const antes = months[i + 1], despues = months[i - 1];
+              const flecha = (on) => ({ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: on ? "pointer" : "default", fontFamily: "inherit", flexShrink: 0, opacity: on ? 1 : 0.35 });
+              const n = selectedData ? selectedData.diasTrabajados : 0;
+              return (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+                  <button className="nb" disabled={!antes} onClick={() => antes && setSelectedMonth(antes)} aria-label="Mes anterior" style={flecha(!!antes)}>‹</button>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: C.t1, textAlign: "center" }}>{capitalizar(monthLabel(selectedMonth))}<div style={{ fontSize: 11, color: C.t2, fontWeight: 600 }}>{n} {n === 1 ? "día trabajado" : "días trabajados"}</div></div>
+                  <button className="nb" disabled={!despues} onClick={() => despues && setSelectedMonth(despues)} aria-label="Mes siguiente" style={flecha(!!despues)}>›</button>
+                </div>
+              );
+            })()}
             {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria, gastos: gastosMes } = selectedData; return (
               <div>
                 <Hero total={totalFact} conductor={conductorMes} pct={pct} />
@@ -1255,19 +1274,13 @@ function TXpro() {
         <div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div>
       </div>
         </>); })()}
-        {view === "periodo" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria, gastos: gastosPeriodo } = rangeData; const atajos = [["Esta semana", weekStart(today), today], ["Últimos 7 días", shiftDays(today, -6), today], ["Este mes", monthStart(today), today]]; return (<>
-          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Elige el periodo</div>
-            <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
-              {atajos.map(([lb, f, t]) => { const on = rangeFrom === f && rangeTo === t; return (
-                <button key={lb} className="nb" onClick={() => { setRangeFrom(f); setRangeTo(t); }} style={{ flex: 1, padding: "9px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>{lb}</button>
-              ); })}
-            </div>
+        {view === "resumen" && modoResumen !== "mes" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria, gastos: gastosPeriodo } = rangeData; return (<>
+          {modoResumen === "fechas" && <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}><label htmlFor="rangoDesde" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" id="rangoDesde" aria-label="Desde" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>
               <div style={{ minWidth: 0 }}><label htmlFor="rangoHasta" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Hasta</label><input type="date" id="rangoHasta" aria-label="Hasta" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} /></div>
             </div>
-          </div>
+          </div>}
           {(() => { const largo = daysBetween(lo, hi).length; const mover = (n) => { setRangeFrom(shiftDays(lo, n * largo)); setRangeTo(shiftDays(hi, n * largo)); }; const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }; return (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
               <button className="nb" onClick={() => mover(-1)} aria-label="Periodo anterior" style={flecha}>‹</button>
@@ -1301,7 +1314,7 @@ function TXpro() {
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["mensual", "Mensual"], ["periodo", "Periodo"]].map(([v, lb]) => (
+        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["resumen", "Resumen"]].map(([v, lb]) => (
           <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
             <Icono name={v} />{lb}
           </button>

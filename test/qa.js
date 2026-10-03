@@ -81,8 +81,8 @@ const { chromium } = require('playwright');
   comprobar('total del mes', gas.includes('363,40'), '318,40 + 45');
   comprobar('lo que debe la empresa', /empresa te debe 45,00/.test(gas));
 
-  console.log('\n— MENSUAL —');
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  console.log('\n— RESUMEN · MES —');
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(600);
   const mes = await p.locator('body').innerText();
   comprobar('facturación del mes', mes.includes('332,75'));
@@ -106,7 +106,7 @@ const { chromium } = require('playwright');
   comprobar('taxímetro y su efectivo', /Taxímetro\s+142,30\s€\s+43,80\s€/.test(des));
   comprobar('cada app con su efectivo', /Uber\s+68,40\s€\s+18,00\s€/.test(des) && /Bolt\s+24,75\s€\s+24,75\s€/.test(des));
   comprobar('app de tipo "cobrado"', /FreeNow · precio cerrado\s+46,10\s€\s+34,10\s€/.test(des));
-  comprobar('lo cobrado con tarjeta', /Con tarjeta\s+98,50\s€/.test(des));
+  comprobar('lo cobrado con tarjeta', /Tarjeta\s+98,50\s€/.test(des));
   // La columna de efectivo tiene que dar lo mismo que la liquidación: 120,65.
   comprobar('el total cuadra con la liquidación', /Total\s+332,75\s€\s+120,65\s€/.test(des));
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://localhost:8080' });
@@ -115,14 +115,25 @@ const { chromium } = require('playwright');
   const copiado = await p.evaluate(() => navigator.clipboard.readText()).catch(() => '');
   comprobar('se copia listo para WhatsApp', copiado.includes('Uber: 68,40 € · efectivo 18,00 €') && copiado.includes('TOTAL: 332,75 € · efectivo 120,65 €'), copiado.split('\n').pop());
 
-  console.log('\n— PERIODO —');
-  await p.getByRole('button', { name: /Periodo/ }).click();
-  await p.waitForTimeout(500);
-  await p.getByRole('button', { name: 'Este mes' }).click();
+  console.log('\n— RESUMEN · SEMANA Y FECHAS —');
+  // Mensual y Periodo son ahora una sola pestaña, Resumen, con Mes, Semana y Fechas.
+  await p.getByRole('button', { name: /Resumen/ }).click();
+  await p.waitForTimeout(400);
+  comprobar('cinco pestañas abajo', (await p.locator('nav button').count()) === 5);
+  comprobar('el resumen abre en el mes', (await p.getByRole('button', { name: 'Mes', exact: true }).getAttribute('aria-pressed')) === 'true');
+  await p.getByRole('button', { name: 'Semana', exact: true }).click();
   await p.waitForTimeout(600);
+  comprobar('la semana va de lunes a domingo', /Del \d{2}\/\d{2} al \d{2}\/\d{2}/.test(await p.locator('body').innerText()) && (await p.locator('#rangoDesde').count()) === 0);
   const per = await p.locator('body').innerText();
   comprobar('total del periodo', per.includes('332,75'));
   comprobar('un día trabajado', /1 día trabajado/.test(per));
+  await p.getByRole('button', { name: 'Fechas', exact: true }).click();
+  await p.waitForTimeout(300);
+  const hoyQA = await p.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await p.locator('#rangoDesde').fill(hoyQA);
+  await p.locator('#rangoHasta').fill(hoyQA);
+  await p.waitForTimeout(400);
+  comprobar('fechas a elegir: solo hoy', (await p.locator('body').innerText()).includes('332,75') && /1 día trabajado/.test(await p.locator('body').innerText()));
   comprobar('el periodo también trae el desglose', /Total\s+332,75\s€\s+120,65\s€/.test(await p.getByText('Desglose', { exact: true }).locator('../..').innerText()));
 
   console.log('\n— AJUSTES —');
@@ -135,7 +146,7 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(500);
   const aj = await p.getByText('Así queda tu acuerdo').locator('..').innerText();
   comprobar('resumen del acuerdo', aj.includes('45%') && aj.includes('300') && aj.includes('30%'));
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(600);
   const mes2 = await p.locator('body').innerText();
   // 332.75 supera 300 → 30% de 318.40 = 95.52 ; 45% de 332.75 = 149.74
@@ -161,7 +172,7 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(700);
   const rest = await p.getByText('Así queda tu acuerdo').locator('..').innerText();
   comprobar('acuerdo restaurado', rest.includes('45%'));
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(600);
   const tras = await p.locator('body').innerText();
   comprobar('datos restaurados', tras.includes('332,75'));
@@ -189,7 +200,7 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(600);
   comprobar('apagada desaparece del parte', await p.locator('input[aria-label="Bolt"]').count() === 0);
   comprobar('las demás siguen', await p.locator('input[aria-label="Uber"]').count() === 1);
-  await p.getByRole('button', { name: /Mensual/ }).click();
+  await p.getByRole('button', { name: /Resumen/ }).click(); await p.getByRole('button', { name: 'Mes', exact: true }).click();
   await p.waitForTimeout(700);
   comprobar('apagarla NO borra sus cuentas', (await p.locator('body').innerText()).includes('150,00'), '100 + 50 de Bolt');
 
