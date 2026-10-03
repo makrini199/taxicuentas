@@ -4,10 +4,10 @@ Sistema de **investigación cuantitativa** sobre XAUUSD. Su objetivo no es produ
 decidir de forma reproducible si existe una ventaja explotable, e intentar destruir cada hipótesis antes de
 aceptarla. Especificación completa: [`MASTER_PROMPT.md`](MASTER_PROMPT.md).
 
-> **Estado: FIRST MILESTONE (§48) completado.** Esqueleto, pipeline de datos, motor de backtest, estructura de
-> mercado básica, tests y un primer backtest (EXP000) sobre datos **sintéticos**. Aún **no hay datos reales**:
-> ningún resultado de este repositorio dice nada todavía sobre el oro real.
-> Nada aquí envía órdenes a ningún broker.
+> **Estado: FASE 1 (data infrastructure) abierta** — todos sus criterios cumplidos salvo la ingesta de datos
+> reales del usuario. Ver [PHASES.md](PHASES.md): no se avanza de fase hasta cerrar la actual. El código de las
+> fases 2–3 creado en el primer hito (§48) está congelado y no aceptado. Aún **no hay datos reales**: ningún
+> resultado de este repositorio dice nada todavía sobre el oro real. Nada aquí envía órdenes a ningún broker.
 
 ## Inicio rápido
 
@@ -16,8 +16,8 @@ cd xauusd-quant
 pip install -r requirements.txt
 
 python scripts/make_synthetic_data.py      # o coloca tu export de MT5 en data/raw y edita config/data.yaml
-python scripts/build_dataset.py            # limpia, valida, remuestrea M1..D1, escribe metadata
-python -m pytest                           # 62 tests
+python scripts/build_dataset.py            # limpia, valida, diagnostica, remuestrea M1..D1, metadata + informe de calidad
+python -m pytest                           # 80 tests
 python scripts/run_backtest.py --name "mi experimento" --segment train
 ```
 
@@ -27,9 +27,9 @@ Cada ejecución crea `experiments/EXPnnn_<nombre>/` con `report.md`, `trades.csv
 ### Usar datos reales de MetaTrader 5
 
 1. MT5 → Ver → Símbolos → Barras → XAUUSD, M1 → Exportar barras → `data/raw/XAUUSD_M1.csv`
-2. En `config/data.yaml`: `source: mt5_csv`, `raw_path: data/raw/XAUUSD_M1.csv` y **la zona horaria del
-   servidor** en `source_timezone` (p. ej. `NY+7` para servidores "New York close", `Europe/Athens`, `UTC`…).
-   Comprobarla bien: un error aquí desplaza todas las sesiones.
+2. En `config/data.yaml`: `source: mt5_csv`, `raw_path: data/raw/XAUUSD_M1.csv` (o un glob si hay varios
+   ficheros) y **la zona horaria del servidor** en `source_timezone` (p. ej. `NY+7`, `Europe/Athens`, `UTC`…).
+   Si es incorrecta, el build se detiene y dice cuántas horas se desvía.
 3. Ajustar `splits` a tus fechas y ejecutar `python scripts/build_dataset.py`.
 
 ## Estructura
@@ -37,7 +37,8 @@ Cada ejecución crea `experiments/EXPnnn_<nombre>/` con `report.md`, `trades.csv
 ```
 config/        data.yaml · sessions.yaml · strategy.yaml · risk.yaml · backtest.yaml
 src/xq/        paquete Python (ver ARCHITECTURE.md)
-  data/        loaders (MT5, CSV, parquet), limpieza, gaps, metadata, remuestreo, sintético
+  data/        loaders (MT5, CSV, parquet, multi-fichero), limpieza, diagnósticos, calendario, gaps,
+               metadata + informe de calidad, remuestreo, sintético
   structure/   swings con retardo de confirmación, HH/HL/LH/LL, BOS/CHOCH
   mtf/         alineación HTF→LTF sin look-ahead
   strategies/  interfaz Strategy + baseline structure_breakout
@@ -57,6 +58,7 @@ El paquete se llama `xq` (en `src/xq/…`) en lugar de usar `src` como paquete: 
 
 | Documento | Contenido |
 |---|---|
+| [PHASES.md](PHASES.md) | **criterios de paso de cada fase y estado actual** |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | módulos, flujo de datos, convenciones de tiempo |
 | [DATA.md](DATA.md) | esquema, fuentes, zonas horarias, gaps, tick vs real volume |
 | [BACKTESTING.md](BACKTESTING.md) | reglas de ejecución, costes, **cómo se evita cada tipo de look-ahead**, OOS |
@@ -69,10 +71,10 @@ El paquete se llama `xq` (en `src/xq/…`) en lugar de usar `src` como paquete: 
 
 | Fase | Estado |
 |---|---|
-| 1 Data infrastructure | ✅ |
-| 2 Backtesting engine | ✅ (costes, riesgo básico, métricas, informes) |
-| 3 Market structure | ✅ básica (swings, BOS/CHOCH) |
-| 4 SMC (liquidez, sweeps, OB, FVG) | ⏭ siguiente |
+| 1 Data infrastructure | 🟡 abierta — falta validar con datos reales |
+| 2 Backtesting engine | ⏸ código del hito §48, congelado, no aceptado |
+| 3 Market structure | ⏸ código del hito §48, congelado, no aceptado |
+| 4 SMC (liquidez, sweeps, OB, FVG) | no iniciada |
 | 5–7 Wyckoff · Volume · RSI | pendiente |
 | 8–9 System A · System B | pendiente (EXP001 tras fase 4–6) |
 | 10 Risk engine completo | parcial (sizing + límites ya existen) |

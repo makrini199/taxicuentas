@@ -2,6 +2,9 @@
 instrument: XAUUSD
 # synthetic | mt5_csv | generic_csv | parquet
 source: synthetic
+# A single file or a glob (e.g. data/raw/XAUUSD_M1_*.csv for exports split by
+# year). Files are merged in name order; on overlapping timestamps the earlier
+# file wins and disagreements are counted as duplicate_conflicts.
 raw_path: data/raw/XAUUSD_M1_synthetic.parquet
 processed_dir: data/processed
 metadata_dir: data/metadata
@@ -10,6 +13,8 @@ metadata_dir: data/metadata
 #   - IANA name ("UTC", "Europe/Madrid", "Europe/Athens", ...)
 #   - "NY+7": MT5 "New York close" servers (server = New York local + 7h, so
 #     the daily candle opens at 17:00 New York all year round).
+# The build CHECKS this against gold's weekly close (Fri 17:00 NY) and reopen
+# (Sun 18:00 NY) and stops if it does not match. See DATA.md.
 source_timezone: UTC
 
 # Prices in the file: "bid" (MT5 default) or "mid".
