@@ -56,6 +56,7 @@ def build_report(
     equity: pd.Series,
     breakdowns: dict[str, pd.DataFrame],
     rejected: pd.DataFrame,
+    engine_info: dict[str, dict],
     criteria: list[Criterion],
     status: str,
     flags: list[tuple[str, str]],
@@ -73,6 +74,11 @@ def build_report(
     s.append(f"Primary cost scenario `{primary}`: {m['number_of_trades']} trades, expectancy "
              f"{_fmt(m['expectancy_r'])} R (t = {_fmt(m['t_stat_r'])}), PF {_fmt(m['profit_factor'])}, "
              f"net {_fmt(m['net_profit_pct'])}%, max DD {_fmt(m['max_drawdown_pct'])}%.\n")
+    halted = {k: v["halted_at"] for k, v in engine_info.items() if v.get("halted_by_max_drawdown")}
+    if halted:
+        s.append("**Max-drawdown kill switch fired** — no new entries after: "
+                 + ", ".join(f"`{k}` {v}" for k, v in halted.items())
+                 + ". Statistics after that point are missing, so the sample is truncated.\n")
     if meta.get("notes"):
         s.append(f"Notes: {meta['notes']}\n")
 

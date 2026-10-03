@@ -122,7 +122,7 @@ def run_experiment(
                     "segment_start": meta["segment_start"], "segment_end": meta["segment_end"], "segment_bars": len(df)}
     text = build_report(meta=meta, params=spec.params, dataset=dataset_info, scenario_metrics=scen_metrics,
                         primary=primary, trades=pr.trades, equity=pr.equity["equity"], breakdowns=breakdowns,
-                        rejected=pr.rejected, criteria=criteria, status=status, flags=flags, charts=ch)
+                        rejected=pr.rejected, engine_info={k: v.info for k, v in results.items()}, criteria=criteria, status=status, flags=flags, charts=ch)
     write_report(out / "report.md", text)
 
     (out / "config.yaml").write_text(yaml.safe_dump(json.loads(cfg.model_dump_json()), sort_keys=False), encoding="utf-8")

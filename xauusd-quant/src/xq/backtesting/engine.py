@@ -134,6 +134,7 @@ def run_backtest(
     trades: list[dict] = []
     equity = np.empty(n)
     next_id = 1
+    halted_at = None
 
     def close_pos(p: _Pos, i: int, exit_price: float, reason: str, at_close: bool) -> None:
         nonlocal balance
@@ -243,6 +244,8 @@ def run_backtest(
             unreal += p.direction * (mark - p.entry_price) * p.units
         equity[i] = balance + unreal
         rs.on_equity(equity[i])
+        if rs.halted and halted_at is None:
+            halted_at = idx[i] + step
 
         # 5. signal at the close of bar i
         s = sig_map.get(i)
@@ -270,6 +273,7 @@ def run_backtest(
     info = {
         "bars": n, "spread_source": spread_note, "final_balance": float(balance),
         "open_positions_at_end": len(positions), "halted_by_max_drawdown": bool(rs.halted),
+        "halted_at": str(halted_at) if halted_at is not None else None,
         "signals": int(len(signals)), "rejected_signals": len(rejected),
     }
     return BacktestResult(trades_df, eq, pd.DataFrame(rejected, columns=["signal_time", "direction", "reason"]), info)

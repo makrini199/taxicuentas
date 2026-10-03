@@ -46,6 +46,8 @@ def test_end_to_end_experiment(tiny_project, tmp_path):
     for section in ("## Overfitting risk", "## Final status", "## Walk-forward", "SYNTHETIC"):
         assert section in report
     assert meta["status"] in ("REJECT", "RESEARCH")
+    results = json.loads((out / "results.json").read_text())
+    assert all("halted_at" in v for v in results["engine_info"].values())
     with pytest.raises(FileExistsError, match="identical"):
         run_experiment(tiny_project, name="smoke again", segment="train", experiments_dir=exps, log=lambda *_: None)
 
