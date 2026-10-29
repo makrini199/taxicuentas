@@ -149,6 +149,10 @@ const loadDays = () => Object.fromEntries(Object.entries(loadStorage("tc_days", 
 // antes no han aceptado la invitación. Al pasar a producción, cambiar por
 // https://play.google.com/store/apps/details?id=com.txpro.cuentas
 const PLAY_URL = "https://play.google.com/apps/testing/com.txpro.cuentas";
+// A dónde llegan las ideas y los fallos. Es el mismo correo que figura en
+// Play Console para los probadores.
+const CORREO_COMENTARIOS = "proyecto.txpro@gmail.com";
+const enlaceComentarios = () => `mailto:${CORREO_COMENTARIOS}?subject=${encodeURIComponent(`TXpro ${APP_VERSION} · Ideas o fallos`)}&body=${encodeURIComponent("Cuéntanos qué te falta, qué cambiarías o qué ha fallado:\n\n")}`;
 const AVISO_PLAY_KEY = "tc_aviso_play";
 const AVISO_PLAY_DIAS = 7;
 // La app instalada carga esta misma web por dentro, así que hay que mirar tres
@@ -1260,6 +1264,12 @@ function TXpro() {
               </div>
               <button className="saveBtn" onClick={addPlat} disabled={!appNueva.nombre.trim()} style={{ width: "100%", padding: 11, borderRadius: 10, border: "none", background: appNueva.nombre.trim() ? `linear-gradient(135deg,${C.acc},${C.accDim})` : "#e7eaf2", color: appNueva.nombre.trim() ? "#0d0f14" : C.t3, fontWeight: 800, fontSize: 13, cursor: appNueva.nombre.trim() ? "pointer" : "default", fontFamily: "inherit" }}>Añadir aplicación</button>
             </div>
+          </div>
+          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>¿Ideas o fallos?</div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>TXpro la hacemos con lo que nos pedís los compañeros. Cuéntanos qué te falta, qué cambiarías o qué ha fallado.</div>
+            <a className="saveBtn" href={enlaceComentarios()} style={{ display: "block", padding: 11, borderRadius: 10, background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 800, fontSize: 13, fontFamily: "inherit", textAlign: "center", textDecoration: "none" }}>Enviar comentarios</a>
+            <div style={{ fontSize: 11, color: C.t3, marginTop: 8, textAlign: "center" }}>Se abre tu correo hacia {CORREO_COMENTARIOS}</div>
           </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
         <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Copia de seguridad</div>
