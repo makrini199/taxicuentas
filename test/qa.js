@@ -230,6 +230,8 @@ const { chromium } = require('playwright');
   await p.getByLabel('Ajustes').click();
   await p.waitForTimeout(600);
   comprobar('no se puede quitar una con cifras dentro', await p.getByRole('button', { name: 'Quitar RTI' }).count() === 0);
+  const comentarios = await p.getByRole('link', { name: 'Enviar comentarios' }).getAttribute('href').catch(() => null);
+  comprobar('botón para mandar ideas o fallos', !!comentarios && comentarios.startsWith('mailto:proyecto.txpro@gmail.com?subject=') && decodeURIComponent(comentarios).includes('Ideas o fallos'), comentarios || 'no está');
 
   console.log('\n— SIN CONEXIÓN —');
   await p.waitForTimeout(1500);
