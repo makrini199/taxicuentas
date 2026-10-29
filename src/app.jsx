@@ -170,6 +170,19 @@ const enAppInstalada = () => {
 const esAndroid = () => { try { return /Android/i.test(navigator.userAgent || ""); } catch { return false; } };
 const avisoPlaySilenciado = () => { const t = loadStorage(AVISO_PLAY_KEY, 0); return typeof t === "number" && Date.now() - t < AVISO_PLAY_DIAS * 86400000; };
 const tocaAvisarDePlay = () => esAndroid() && !enAppInstalada() && !avisoPlaySilenciado();
+// En iPhone no hay tienda que valga mientras no estemos en la App Store, pero
+// Safari instala la web como app: icono en la pantalla de inicio, pantalla
+// completa y sin conexión. El aviso enseña cómo, con el mismo "Más tarde".
+// El iPad moderno se presenta como un Mac, así que se le reconoce por la
+// pantalla táctil.
+const AVISO_IOS_KEY = "tc_aviso_ios";
+const esIOS = () => { try { const ua = navigator.userAgent || ""; return /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1); } catch { return false; } };
+const avisoIOSSilenciado = () => { const t = loadStorage(AVISO_IOS_KEY, 0); return typeof t === "number" && Date.now() - t < AVISO_PLAY_DIAS * 86400000; };
+const tocaAvisarDeIOS = () => esIOS() && !enAppInstalada() && !avisoIOSSilenciado();
+// El botón de compartir de Safari: un cuadrado con una flecha hacia arriba.
+const IconoCompartir = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: "-2px" }}><path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" /></svg>
+);
 
 // LOS DÍAS FUERTES DE MADRID
 //
@@ -587,6 +600,8 @@ function TXpro() {
     return () => { vivo = false; };
   }, [view, mapa]);
   const cerrarAvisoPlay = () => { setAvisarPlay(false); try { localStorage.setItem(AVISO_PLAY_KEY, JSON.stringify(Date.now())); } catch {} };
+  const [avisarIOS, setAvisarIOS] = useState(tocaAvisarDeIOS);
+  const cerrarAvisoIOS = () => { setAvisarIOS(false); try { localStorage.setItem(AVISO_IOS_KEY, JSON.stringify(Date.now())); } catch {} };
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
   const marcarCfgOk = () => { setCfgOk(true); try { localStorage.setItem("tc_cfg_ok", "true"); } catch {} };
@@ -756,6 +771,17 @@ function TXpro() {
           <a className="saveBtn" href={PLAY_URL} target="_blank" rel="noopener noreferrer" style={{ flex: 1, padding: 10, borderRadius: 10, background: C.blue, color: "#fff", fontWeight: 800, fontSize: 13, fontFamily: "inherit", textAlign: "center", textDecoration: "none" }}>Instalar la app</a>
           <button className="nb" onClick={cerrarAvisoPlay} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Más tarde</button>
         </div>
+      </div>}
+      {avisarIOS && <div style={{ margin: "16px 16px 0", background: `${C.blue}0f`, border: `1.5px solid ${C.blue}44`, borderRadius: 14, padding: 14 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: C.t1, marginBottom: 4 }}>Instala TXpro en tu iPhone</div>
+        <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 8 }}>Tendrás su icono en la pantalla de inicio, sin la barra del navegador y disponible aunque te quedes sin cobertura. Es gratis y no pasa por la App Store.</div>
+        <ol style={{ margin: "0 0 10px", paddingLeft: 20, fontSize: 12.5, color: C.t1, lineHeight: 1.7 }}>
+          <li>Toca el botón <strong>Compartir</strong> <IconoCompartir /> de Safari.</li>
+          <li>Elige <strong>«Añadir a pantalla de inicio»</strong>.</li>
+          <li>Toca <strong>Añadir</strong>.</li>
+        </ol>
+        <div style={{ fontSize: 11.5, color: C.t3, marginBottom: 10 }}>¿No te sale? Abre txpro.app en Safari y vuelve a probar.</div>
+        <button className="nb" onClick={cerrarAvisoIOS} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Más tarde</button>
       </div>}
       {hayUpdate && <div style={{ margin: "16px 16px 0", background: `${C.green}14`, border: `1.5px solid ${C.green}44`, borderRadius: 14, padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: C.t1 }}>Hay una versión nueva</div><div style={{ fontSize: 11.5, color: C.t2, marginTop: 2 }}>Guarda lo que tengas a medias antes de actualizar.</div></div>
