@@ -620,7 +620,22 @@ const { chromium } = require('playwright');
 
   const iphone = await abrirComo(IPHONE_UA);
   comprobar('no sale en iPhone', !(await seVe(iphone.pg)));
+  // En iPhone sale otro: cómo instalarla desde Safari.
+  const veIOS = (pg) => pg.getByText('Instala TXpro en tu iPhone').count().then((n) => n > 0);
+  comprobar('en iPhone explica cómo instalarla desde Safari', await veIOS(iphone.pg) && (await iphone.pg.locator('body').innerText()).includes('Añadir a pantalla de inicio'));
+  await iphone.pg.getByRole('button', { name: 'Más tarde' }).click();
+  await iphone.pg.waitForTimeout(300);
+  comprobar('"Más tarde" lo cierra también en iPhone', !(await veIOS(iphone.pg)));
+  await iphone.pg.reload({ waitUntil: 'load' });
+  await iphone.pg.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('y no vuelve al recargar en iPhone', !(await veIOS(iphone.pg)));
   await iphone.c.close();
+  const iphoneApp = await abrirComo(IPHONE_UA, 'Object.defineProperty(navigator, "standalone", { value: true });');
+  comprobar('no sale en el iPhone que ya la tiene instalada', !(await veIOS(iphoneApp.pg)));
+  await iphoneApp.c.close();
+  const webAndroid = await abrirComo(ANDROID_UA);
+  comprobar('el aviso de iPhone no sale en Android', !(await veIOS(webAndroid.pg)));
+  await webAndroid.c.close();
 
   console.log('\n— RESULTADO —');
   console.log('errores de consola:', errores.length ? errores : 'ninguno');
