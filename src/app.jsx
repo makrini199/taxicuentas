@@ -262,11 +262,23 @@ const indexarEventos = (lista) => {
 const minutosDe = (h) => { const [hh, mm] = h.split(":").map(Number); return hh * 60 + mm; };
 // Si termina a una hora anterior a la de empezar es que pasó la medianoche: de
 // 18:00 a 04:00 son 10 horas, que en el taxi es lo más normal del mundo.
+// El descanso (minutos de pausa, sale del cronómetro) se descuenta de la jornada.
+const descansoDe = (d) => { const n = Math.round(Number(d && d.descanso)); return Number.isFinite(n) && n > 0 ? n : 0; };
 const minutosJornada = (d) => {
   if (!d || !ES_HORA.test(d.inicio || "") || !ES_HORA.test(d.fin || "")) return 0;
   const m = minutosDe(d.fin) - minutosDe(d.inicio);
-  return m > 0 ? m : m < 0 ? m + 1440 : 0;
+  const bruto = m > 0 ? m : m < 0 ? m + 1440 : 0;
+  return Math.max(0, bruto - descansoDe(d));
 };
+// EL CRONÓMETRO DE LA JORNADA: "Empezar", "Pausa", "Seguir" y "Terminar" rellenan
+// solos la hora de empezar, la de terminar y el descanso del día en que se
+// empezó (de 18:00 a 03:00 cuenta para el día de las 18:00). Se guarda aparte
+// para que siga corriendo aunque se cierre la app.
+const RELOJ_KEY = "tc_reloj";
+const relojValido = (r) => r && typeof r === "object" && /^\d{4}-\d{2}-\d{2}$/.test(r.fecha) && Number.isFinite(r.inicio) && Number.isFinite(r.pausado) ? r : null;
+const horaDe = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const minutosReloj = (r, ahora) => (r ? Math.max(0, Math.round((ahora - r.inicio - r.pausado - (r.pausaDesde ? ahora - r.pausaDesde : 0)) / 60000)) : 0);
+const lunesDe = (f) => shiftDays(f, -WD.indexOf(weekday(f)));
 const duracion = (min) => { const h = Math.floor(min / 60); const m = min % 60; return m ? `${h} h ${m} min` : `${h} h`; };
 const propinasDe = (d) => Math.max(0, evalSuma(d && d.propinas));
 const carrerasDe = (d) => Math.max(0, Math.round(evalSuma(d && d.carreras)));
@@ -475,6 +487,34 @@ const desgloseDe = (entries, plats) => {
   const filas = [{ nombre: "Taxímetro", fact: tax, efec: tax - tarjeta }, ...porPlat.filter((x) => x.fact || x.efec).map((x) => ({ nombre: x.p.nombre, fact: x.fact, efec: x.efec }))];
   return { filas, tarjeta, totalFact: filas.reduce((a, f) => a + f.fact, 0), totalEfec: filas.reduce((a, f) => a + f.efec, 0) };
 };
+// Qué parte de lo facturado viene de cada sitio, y cómo va frente al periodo
+// anterior del mismo tamaño (el mes pasado, la semana pasada…).
+const mesAnterior = (ym) => { const [y, m] = ym.split("-").map(Number); return ymd(new Date(y, m - 2, 1)).slice(0, 7); };
+const diasEntre = (a, b) => { const [y1, m1, d1] = a.split("-").map(Number); const [y2, m2, d2] = b.split("-").map(Number); return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000); };
+const Reparto = ({ entries, plats, previo, frente }) => {
+  const d = desgloseDe(entries, plats);
+  const filas = d.filas.filter((f) => f.fact > 0).sort((a, b) => b.fact - a.fact);
+  if (!filas.length) return null;
+  const cambio = previo > 0 ? ((d.totalFact - previo) / previo) * 100 : null;
+  const sube = cambio !== null && cambio >= 0;
+  return (
+    <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Por plataforma</div>
+        {cambio !== null && <div style={{ fontSize: 12, fontWeight: 800, color: sube ? C.green : C.red, textAlign: "right" }}>{sube ? "▲" : "▼"} {Math.abs(cambio).toLocaleString("es-ES", { maximumFractionDigits: 0 })} % <span style={{ color: C.t3, fontWeight: 600 }}>frente a {frente}</span></div>}
+      </div>
+      {filas.map((f) => { const parte = d.totalFact ? f.fact / d.totalFact : 0; return (
+        <div key={f.nombre} style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, color: C.t1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.nombre}</span>
+            <span style={{ color: C.t2, whiteSpace: "nowrap" }}><strong style={{ color: C.t1 }}>{fmt(f.fact)}</strong> · {Math.round(parte * 100)} %</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 4, background: C.linea, overflow: "hidden" }}><div style={{ width: `${Math.max(2, parte * 100)}%`, height: "100%", borderRadius: 4, background: C.acc }} /></div>
+        </div>
+      ); })}
+    </div>
+  );
+};
 const Desglose = ({ entries, plats, etiqueta }) => {
   const [aviso, setAviso] = useState("");
   const d = desgloseDe(entries, plats);
@@ -641,6 +681,11 @@ function TXpro() {
   }, [view, mapa]);
   const cerrarAvisoPlay = () => { setAvisarPlay(false); try { localStorage.setItem(AVISO_PLAY_KEY, JSON.stringify(Date.now())); } catch {} };
   const [avisarIOS, setAvisarIOS] = useState(tocaAvisarDeIOS);
+  const [reloj, setReloj] = useState(() => relojValido(loadStorage(RELOJ_KEY, null)));
+  const [ahora, setAhora] = useState(() => Date.now());
+  const [avisoReloj, setAvisoReloj] = useState("");
+  useEffect(() => { try { if (reloj) localStorage.setItem(RELOJ_KEY, JSON.stringify(reloj)); else localStorage.removeItem(RELOJ_KEY); } catch {} }, [reloj]);
+  useEffect(() => { if (!reloj) return; setAhora(Date.now()); const t = setInterval(() => setAhora(Date.now()), 15000); return () => clearInterval(t); }, [reloj]);
   const cerrarAvisoIOS = () => { setAvisarIOS(false); try { localStorage.setItem(AVISO_IOS_KEY, JSON.stringify(Date.now())); } catch {} };
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
@@ -675,6 +720,7 @@ function TXpro() {
     const car = carrerasDe(form); if (car) parsed.carreras = car;
     if (ES_HORA.test(form.inicio || "")) parsed.inicio = form.inicio;
     if (ES_HORA.test(form.fin || "")) parsed.fin = form.fin;
+    if (parsed.inicio && parsed.fin && descansoDe(form)) parsed.descanso = descansoDe(form);
     const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setForm(vacio ? { ...EMPTY } : { ...parsed }); quitarBorrador(editDate); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
   const quitarBorrador = (f) => setBorradores((b) => { if (!b[f]) return b; const n = { ...b }; delete n[f]; return n; });
   const descartarBorrador = () => { if (!window.confirm("¿Descartar lo que has apuntado sin guardar en este día?")) return; quitarBorrador(editDate); setForm(days[editDate] ? { ...days[editDate] } : { ...EMPTY }); };
@@ -687,6 +733,29 @@ function TXpro() {
     if (raw && !/[+-]$/.test(raw)) editar(k, raw + "+");
     requestAnimationFrame(() => { const el = document.querySelector(`[data-casilla="${k}"]`); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} } });
   };
+  // Cambia un día aunque no sea el que está abierto: el cronómetro puede terminar
+  // de madrugada, cuando en pantalla ya hay otra fecha.
+  const ponerEnDia = (fecha, cambios) => {
+    if (fecha === editDate) { const n = { ...form, ...cambios }; setForm(n); setBorradores((b) => ({ ...b, [fecha]: n })); return; }
+    setBorradores((b) => ({ ...b, [fecha]: { ...(b[fecha] || days[fecha] || EMPTY), ...cambios } }));
+  };
+  const empezarJornada = () => {
+    const t = Date.now(); const fecha = todayStr();
+    const base = fecha === editDate ? form : borradores[fecha] ? { ...borradores[fecha] } : days[fecha] ? { ...days[fecha] } : { ...EMPTY };
+    const n = { ...base, inicio: horaDe(t), fin: "", descanso: "" };
+    setEditDate(fecha); setEnfoque(null); setForm(n); setBorradores((b) => ({ ...b, [fecha]: n }));
+    setReloj({ fecha, inicio: t, pausado: 0, pausaDesde: null }); setAvisoReloj("");
+  };
+  const pausarJornada = () => setReloj((r) => (r && !r.pausaDesde ? { ...r, pausaDesde: Date.now() } : r));
+  const seguirJornada = () => setReloj((r) => (r && r.pausaDesde ? { ...r, pausado: r.pausado + (Date.now() - r.pausaDesde), pausaDesde: null } : r));
+  const terminarJornada = () => {
+    if (!reloj) return; const t = Date.now();
+    const pausado = reloj.pausado + (reloj.pausaDesde ? t - reloj.pausaDesde : 0);
+    const descanso = Math.round(pausado / 60000);
+    ponerEnDia(reloj.fecha, { inicio: horaDe(reloj.inicio), fin: horaDe(t), descanso: descanso > 0 ? descanso : "" });
+    setReloj(null); setAvisoReloj(reloj.fecha === editDate ? "Jornada terminada: revisa las cifras y guarda el día." : `Jornada terminada y apuntada en el ${weekday(reloj.fecha)} ${Number(reloj.fecha.slice(8))}: ábrelo y guárdalo.`);
+  };
+  const cancelarReloj = () => { if (window.confirm("¿Parar el cronómetro sin apuntar la hora de terminar?")) setReloj(null); };
   const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? { ...days[d] } : { ...EMPTY }); };
   const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
   const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(form[k])); return calcDay(raw, pct, plats); }, [form, pct, plats]);
@@ -837,6 +906,69 @@ function TXpro() {
               <button className="nb" onClick={marcarCfgOk} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ahora no</button>
             </div>
           </div>}
+          {(() => {
+            // LA PANTALLA DE HOY: lo que llevas, de un vistazo, y el cronómetro.
+            const esHoy = editDate === todayStr();
+            const relojAqui = reloj && reloj.fecha === editDate;
+            const minVivos = relojAqui ? minutosReloj(reloj, ahora) : jornadaHoy.min;
+            const ganado = dayStats.conductor50 + jornadaHoy.propinas;
+            const porHora = minVivos >= 15 && ganado > 0 ? ganado / (minVivos / 60) : 0;
+            const lunes = lunesDe(editDate);
+            const semana = ["L", "M", "X", "J", "V", "S", "D"].map((letra, i) => { const f = shiftDays(lunes, i); return { f, letra, v: factVivo[f] || 0 }; });
+            const maximo = Math.max(...semana.map((x) => x.v), 1);
+            const totalSemana = semana.reduce((acc, x) => acc + x.v, 0);
+            const esEstaSemana = lunesDe(todayStr()) === lunes;
+            const ficha = { flex: 1, minWidth: 0, background: C.inp, border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 10px" };
+            const fichaTit = { fontSize: 10.5, color: C.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 };
+            const fichaVal = { fontSize: 16, fontWeight: 900, color: C.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+            const boton = (principal) => ({ flex: 1, padding: 12, borderRadius: 12, border: principal ? "none" : `1px solid ${C.border}`, background: principal ? `linear-gradient(135deg,${C.acc},${C.accDim})` : C.surf, color: principal ? "#0d0f14" : C.t1, fontWeight: 900, fontSize: 14, cursor: "pointer", fontFamily: "inherit" });
+            return (
+              <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Resumen del día">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{esHoy ? "Hoy" : `${weekday(editDate)} ${Number(editDate.slice(8))}/${editDate.slice(5, 7)}`}</div>
+                  {relojAqui && <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 9px", borderRadius: 20, background: reloj.pausaDesde ? `${C.acc}18` : `${C.green}18`, color: reloj.pausaDesde ? C.accDim : C.green, fontSize: 11.5, fontWeight: 800 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: reloj.pausaDesde ? C.acc : C.green }} />{reloj.pausaDesde ? "En pausa" : `En jornada desde las ${horaDe(reloj.inicio)}`}</div>}
+                </div>
+                <div style={{ fontSize: 34, fontWeight: 900, color: C.t1, letterSpacing: -0.5, lineHeight: 1.1 }}>{fmt(dayStats.facturacion)}</div>
+                <div style={{ fontSize: 12.5, color: C.t2, marginTop: 3 }}>Facturado · tu parte ({pct}%) <strong style={{ color: C.t1 }}>{fmt(dayStats.conductor50)}</strong>{jornadaHoy.propinas > 0 ? <> + propinas <strong style={{ color: C.green }}>{fmt(jornadaHoy.propinas)}</strong></> : null}</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <div style={ficha}><div style={fichaTit}>Carreras</div><div style={fichaVal}>{jornadaHoy.carreras || 0}</div></div>
+                  <div style={ficha}><div style={fichaTit}>Horas</div><div style={fichaVal}>{minVivos ? duracion(minVivos) : "—"}</div></div>
+                  <div style={ficha}><div style={fichaTit}>Ganas/hora</div><div style={{ ...fichaVal, color: porHora ? C.accDim : C.t1 }}>{porHora ? fmt0(porHora) : "—"}</div></div>
+                </div>
+                {relojAqui ? <>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    {reloj.pausaDesde
+                      ? <button className="saveBtn" onClick={seguirJornada} style={boton(false)}>▶ Seguir</button>
+                      : <button className="saveBtn" onClick={pausarJornada} style={boton(false)}>❚❚ Pausa</button>}
+                    <button className="saveBtn" onClick={terminarJornada} style={boton(true)}>■ Terminar jornada</button>
+                  </div>
+                  <button className="nb" onClick={cancelarReloj} style={{ marginTop: 8, background: "none", border: "none", padding: 0, font: "inherit", fontSize: 11.5, color: C.t3, textDecoration: "underline", cursor: "pointer" }}>Parar sin apuntar</button>
+                </> : reloj ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "9px 12px" }}>
+                    <div style={{ flex: 1, fontSize: 12.5, color: C.t1 }}>Tienes en marcha la jornada del <strong>{weekday(reloj.fecha)} {Number(reloj.fecha.slice(8))}</strong></div>
+                    <button className="nb" onClick={() => changeDate(reloj.fecha)} style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${C.green}55`, background: C.surf, color: C.green, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Ver</button>
+                  </div>
+                ) : esHoy && !form.fin ? (
+                  <button className="saveBtn" onClick={empezarJornada} style={{ ...boton(true), width: "100%", marginTop: 12 }}>▶ Empezar jornada</button>
+                ) : null}
+                {avisoReloj && <div style={{ marginTop: 10, fontSize: 12.5, color: C.green, fontWeight: 700 }}>{avisoReloj}</div>}
+                <div style={{ borderTop: `1px solid ${C.linea}`, marginTop: 14, paddingTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{esEstaSemana ? "Esta semana" : `Semana del ${Number(lunes.slice(8))}/${lunes.slice(5, 7)}`}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{fmt(totalSemana)}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
+                    {semana.map((x) => { const sel = x.f === editDate; return (
+                      <button key={x.f} className="nb" onClick={() => changeDate(x.f)} aria-label={`${weekday(x.f)} ${Number(x.f.slice(8))}: ${fmt(x.v)}`} aria-pressed={sel} style={{ flex: 1, background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, fontFamily: "inherit" }}>
+                        <div style={{ width: "100%", height: 56, display: "flex", alignItems: "flex-end" }}><div style={{ width: "100%", height: Math.max(4, Math.round((x.v / maximo) * 56)), borderRadius: 6, background: x.v ? (sel ? C.acc : `${C.acc}66`) : C.linea }} /></div>
+                        <span style={{ fontSize: 11, fontWeight: sel ? 900 : 700, color: sel ? C.t1 : C.t3 }}>{x.letra}</span>
+                      </button>
+                    ); })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
           {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>{saved === "borrado" ? "Día eliminado" : "Día guardado"}</div>}
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
@@ -908,6 +1040,7 @@ function TXpro() {
                 </div>
                 {enfoque === "propinas" && <div style={{ marginTop: 8 }}>{ayudaSuma("propinas")}</div>}
                 {enfoque === "carreras" && <div style={{ marginTop: 8, paddingBottom: 2 }}><button type="button" className="nb" onMouseDown={(e) => e.preventDefault()} onClick={() => editar("carreras", String(carrerasDe(form) + 1))} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>+1 carrera</button></div>}
+                {descansoDe(form) > 0 && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 9, fontSize: 12, color: C.t2 }}><span>Descontados <strong style={{ color: C.t1 }}>{descansoDe(form)} min</strong> de descanso</span><button type="button" className="nb" onClick={() => editar("descanso", "")} style={{ background: "none", border: "none", padding: 0, font: "inherit", fontSize: 12, color: C.t3, textDecoration: "underline", cursor: "pointer" }}>Quitar</button></div>}
                 <div style={{ fontSize: 11, color: C.t3, marginTop: 9, lineHeight: 1.45 }}>Las propinas son tuyas enteras: no entran en la facturación ni en el reparto con la empresa.</div>
                 <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "flex-end" }}>
                   <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Combustible</span>{casilla("combustible", "Combustible", { width: "100%", padding: "10px 11px", fontSize: 15 })}</label>
@@ -1253,6 +1386,7 @@ function TXpro() {
               <div>
                 <Hero total={totalFact} conductor={conductorMes} pct={pct} />
                 <Desglose entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} etiqueta={capitalizar(monthLabel(selectedMonth))} />
+                {(() => { const ant = mesAnterior(selectedMonth); return <Reparto entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} previo={desgloseDe(Object.entries(days).filter(([d]) => monthKey(d) === ant), plats).totalFact} frente={new Date(Number(ant.slice(0, 4)), Number(ant.slice(5)) - 1).toLocaleDateString("es-ES", { month: "long" })} />; })()}
                 <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfg.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
@@ -1388,6 +1522,7 @@ function TXpro() {
           {diasTrabajados === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin días registrados en este periodo.</div> : <>
             <Hero total={totalFact} conductor={conductorMes} pct={pct} />
             <Desglose entries={Object.entries(days).filter(([d]) => d >= lo && d <= hi)} plats={plats} etiqueta={`del ${dayMonth(lo)} al ${dayMonth(hi)}`} />
+            {(() => { const largo = diasEntre(lo, hi) + 1; const pLo = shiftDays(lo, -largo), pHi = shiftDays(lo, -1); return <Reparto entries={Object.entries(days).filter(([d]) => d >= lo && d <= hi)} plats={plats} previo={desgloseDe(Object.entries(days).filter(([d]) => d >= pLo && d <= pHi), plats).totalFact} frente={modoResumen === "semana" ? "la semana anterior" : `los ${largo} días anteriores`} />; })()}
             {(() => { const porDia = Object.fromEntries(rows.map((r) => [r.date, r.s.facturacion])); const cal = daysBetween(lo, hi); const tope = Math.max(1, ...cal.map((d) => porDia[d] || 0)); return (
               <div style={{ ...card, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Facturación por día</div>
