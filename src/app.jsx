@@ -277,8 +277,36 @@ const carrerasDe = (d) => Math.max(0, Math.round(evalSuma(d && d.carreras)));
 // cuadrícula del calendario: a 5 px el dorado se perdía sobre las casillas que
 // la facturación tiñe de ámbar. El resto de los eventos sigue en dorado.
 const ROJO_TX = "#D8232A";
-const C = { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8a6a17", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8" };
-const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: "0 2px 10px rgba(30,34,54,0.08)" };
+// COLORES · claro y oscuro
+//
+// La app pinta con C.* en cada render, así que cambiar de tema es cambiar los
+// valores de C (y de card, que sale de C) antes de pintar. El tema es cosa del
+// móvil, no de las cuentas: va en su propia clave y no viaja en las copias.
+// "auto" sigue al modo oscuro del teléfono.
+const PALETAS = {
+  claro: { bg: "#f5f6fa", surf: "#ffffff", border: "#e3e6f0", acc: "#f0c040", accDim: "#8a6a17", green: "#189a5f", red: "#d63b3b", blue: "#2f6fe0", evento: "#8a6a17", t1: "#1a1d29", t2: "#5c6178", t3: "#8f93a8",
+    inp: "#f6f7fb", cabecera: "#eef0f7", linea: "#eef0f6", apagado: "#e7eaf2", sombra: "0 2px 10px rgba(30,34,54,0.08)",
+    mapaFondo: "#e8ebf2", mapaTierra: "#ffffff", mapaContorno: "#b6bccb", mapaBordes: "#d6dae4", mapaHalo: "#fff", puntoBorde: "#fff", puntoTexto: "#fff", grupoFondo: "#1a1d29", grupoTexto: "#fff" },
+  oscuro: { bg: "#0e1016", surf: "#181b24", border: "#2a2e3b", acc: "#f0c040", accDim: "#d9a92e", green: "#3cc785", red: "#f06262", blue: "#6b9bff", evento: "#e0b43c", t1: "#eef0f6", t2: "#a9aec0", t3: "#767b8e",
+    inp: "#0f1218", cabecera: "#12141b", linea: "#262a36", apagado: "#262a36", sombra: "0 2px 12px rgba(0,0,0,0.35)",
+    mapaFondo: "#0b0d12", mapaTierra: "#242836", mapaContorno: "#4b5266", mapaBordes: "#353a49", mapaHalo: "#0b0d12", puntoBorde: "#0b0d12", puntoTexto: "#0e1016", grupoFondo: "#eef0f6", grupoTexto: "#0e1016" },
+};
+const C = { ...PALETAS.claro };
+const card = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: C.sombra };
+const TEMA_KEY = "tc_tema";
+const TEMAS = [["auto", "Automático"], ["claro", "Claro"], ["oscuro", "Oscuro"]];
+const leerTema = () => { const t = loadStorage(TEMA_KEY, "auto"); return TEMAS.some(([k]) => k === t) ? t : "auto"; };
+const movilOscuro = () => { try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); } catch { return false; } };
+const temaReal = (pref, oscuroSistema) => (pref === "auto" ? (oscuroSistema ? "oscuro" : "claro") : pref);
+const aplicarTema = (nombre) => {
+  Object.assign(C, PALETAS[nombre] || PALETAS.claro);
+  Object.assign(card, { background: C.surf, border: `1px solid ${C.border}`, boxShadow: C.sombra });
+  try {
+    document.documentElement.dataset.tema = nombre;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", C.bg);
+  } catch {}
+};
 const BANDA = "M0 77 L100 27 L100 55 L0 105 Z";
 const Mono = ({ color }) => (
   <text x="50" y="62" textAnchor="middle" fill={color} fontFamily="'DM Sans', system-ui, sans-serif" fontSize="41" fontWeight="800" letterSpacing="-2">TX</text>
@@ -349,7 +377,7 @@ const Anillos = ({ datos, marcaMes, centro }) => {
           const r = radios[k]; const { c, osc } = ANILLOS[k]; const d = datos[k];
           return (
             <g key={k}>
-              <circle cx={cx} cy={cy} r={r} fill="none" stroke={d ? `${c}26` : "#eef0f6"} strokeWidth={G} />
+              <circle cx={cx} cy={cy} r={r} fill="none" stroke={d ? `${c}26` : C.linea} strokeWidth={G} />
               {d && d.frac > 0 && arco(r, Math.min(d.frac, 1), c, "a")}
               {d && d.frac > 1 && arco(r, Math.min(d.frac - 1, 1), osc, "b")}
             </g>
@@ -406,25 +434,25 @@ const MapaEventos = ({ mapa, puntos, marcado, setMarcado }) => {
     ocupado.push(caja); etiquetas.push({ ...n, s: [x, y] });
   }
   return (
-    <div ref={ref} style={{ position: "relative", width: "100%", height: alto, borderRadius: 12, overflow: "hidden", background: "#e8ebf2" }}>
+    <div ref={ref} style={{ position: "relative", width: "100%", height: alto, borderRadius: 12, overflow: "hidden", background: C.mapaFondo }}>
       <svg viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} aria-hidden="true">
-        <path d={mapa.tierra} fill="#ffffff" stroke="#b6bccb" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+        <path d={mapa.tierra} fill={C.mapaTierra} stroke={C.mapaContorno} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
         <path d={mapa.capital} fill={`${C.acc}24`} />
-        <path d={mapa.bordes} fill="none" stroke="#d6dae4" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+        <path d={mapa.bordes} fill="none" stroke={C.mapaBordes} strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
       </svg>
       {etiquetas.map((n) => (
-        <span key={n.n} style={{ position: "absolute", left: n.s[0], top: n.s[1], transform: "translate(-50%,-50%)", fontSize: 10, fontWeight: 700, color: C.t3, whiteSpace: "nowrap", textShadow: "0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff", pointerEvents: "none" }}>{n.n}</span>
+        <span key={n.n} style={{ position: "absolute", left: n.s[0], top: n.s[1], transform: "translate(-50%,-50%)", fontSize: 10, fontWeight: 700, color: C.t3, whiteSpace: "nowrap", textShadow: `0 0 3px ${C.mapaHalo}, 0 0 3px ${C.mapaHalo}, 0 0 3px ${C.mapaHalo}`, pointerEvents: "none" }}>{n.n}</span>
       ))}
       {grupos.map((g) => {
         const lugares = g.miembros.map((m) => m.lugar); const on = esMarcado(lugares);
         if (g.miembros.length > 1) return (
           <button key={`g${g.miembros[0].n}`} className="nb" onClick={() => setMarcado(on ? null : lugares)} aria-label={`${g.miembros.length} sitios juntos: ${lugares.join(", ")}`} aria-pressed={on}
-            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.15 : 1})`, minWidth: 32, height: 32, padding: "0 6px", borderRadius: 16, border: `2px solid ${on ? C.acc : "#fff"}`, background: C.t1, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s" }}>{g.miembros.length}</button>
+            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.15 : 1})`, minWidth: 32, height: 32, padding: "0 6px", borderRadius: 16, border: `2px solid ${on ? C.acc : C.puntoBorde}`, background: C.grupoFondo, color: C.grupoTexto, fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s" }}>{g.miembros.length}</button>
         );
         const m = g.miembros[0];
         return (
           <button key={`m${m.n}`} className="nb" onClick={() => setMarcado(on ? null : lugares)} aria-label={`${m.n}. ${m.lugar}`} aria-pressed={on}
-            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.2 : 1})`, width: 26, height: 26, borderRadius: 13, border: `2px solid ${on ? C.t1 : "#fff"}`, background: C.evento, color: "#fff", fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s", padding: 0 }}>{m.n}</button>
+            style={{ position: "absolute", left: g.s[0], top: g.s[1], transform: `translate(-50%,-50%) scale(${on ? 1.2 : 1})`, width: 26, height: 26, borderRadius: 13, border: `2px solid ${on ? C.t1 : C.puntoBorde}`, background: C.evento, color: C.puntoTexto, fontWeight: 900, fontSize: 12, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 2px 6px rgba(30,34,54,0.3)", transition: "transform .15s", padding: 0 }}>{m.n}</button>
         );
       })}
     </div>
@@ -468,13 +496,13 @@ const Desglose = ({ entries, plats, etiqueta }) => {
         <div style={{ ...col, fontSize: 10.5, color: C.blue, fontWeight: 700, letterSpacing: 0.5 }}>EFECTIVO</div>
       </div>
       {d.filas.map((f) => (
-        <div key={f.nombre} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 0", borderTop: "1px solid #eef0f6" }}>
+        <div key={f.nombre} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 0", borderTop: `1px solid ${C.linea}` }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.t1, wordBreak: "break-word" }}>{f.nombre}</span>
           <span style={{ ...col, fontSize: 13.5, fontWeight: 700, color: C.t1 }}>{fmt(f.fact)}</span>
           <span style={{ ...col, fontSize: 13.5, fontWeight: 700, color: C.t1 }}>{fmt(f.efec)}</span>
         </div>
       ))}
-      {d.tarjeta > 0 && <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 0", borderTop: "1px solid #eef0f6" }}>
+      {d.tarjeta > 0 && <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 0", borderTop: `1px solid ${C.linea}` }}>
         <span style={{ flex: 1, fontSize: 13, color: C.t2 }}>Tarjeta</span>
         <span style={{ ...col, fontSize: 13.5, fontWeight: 600, color: C.t2 }}>{fmt(d.tarjeta)}</span>
         <span style={col} />
@@ -546,6 +574,18 @@ const DayTable = ({ rows, pct }) => (
   </div>
 );
 function TXpro() {
+  const [tema, setTema] = useState(leerTema);
+  const [oscuroSistema, setOscuroSistema] = useState(movilOscuro);
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const cambia = (e) => setOscuroSistema(e.matches);
+    if (mq.addEventListener) mq.addEventListener("change", cambia); else if (mq.addListener) mq.addListener(cambia);
+    return () => { if (mq.removeEventListener) mq.removeEventListener("change", cambia); else if (mq.removeListener) mq.removeListener(cambia); };
+  }, []);
+  // Antes de pintar nada: así todo lo de abajo ya lee los colores buenos.
+  aplicarTema(temaReal(tema, oscuroSistema));
+  const elegirTema = (t) => { setTema(t); try { localStorage.setItem(TEMA_KEY, JSON.stringify(t)); } catch {} };
   const [days, setDays] = useState(loadDays);
   const [view, setView] = useState("diario");
   const [editDate, setEditDate] = useState(today);
@@ -754,10 +794,10 @@ function TXpro() {
     { key: "visa", nombre: "Tarjeta" },
   ];
   const colHead = { fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: 0.4, textTransform: "uppercase", textAlign: "right", flexShrink: 0 };
-  const inp = { width: "100%", background: "#f6f7fb", border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
+  const inp = { width: "100%", background: C.inp, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
-      <div style={{ background: `linear-gradient(180deg, ${C.surf}, #eef0f7)`, borderBottom: `2px solid ${C.acc}40`, padding: "18px 20px 14px", paddingTop: "calc(18px + env(safe-area-inset-top, 0px))", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 14px rgba(30,34,54,0.08)" }}>
+      <div style={{ background: `linear-gradient(180deg, ${C.surf}, ${C.cabecera})`, borderBottom: `2px solid ${C.acc}40`, padding: "18px 20px 14px", paddingTop: "calc(18px + env(safe-area-inset-top, 0px))", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 14px rgba(30,34,54,0.08)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <TXLogo size={52} />
           <div style={{ flex: 1 }}><div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1 }}>TX<span style={{ color: C.accDim }}>pro</span></div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
@@ -808,7 +848,7 @@ function TXpro() {
             </div>
             {filas.map((f) => (
               <React.Fragment key={f.key}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, borderTop: "1px solid #eef0f6", padding: "10px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, borderTop: `1px solid ${C.linea}`, padding: "10px 0" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     {f.oro && <TaxiLogo size={18} color={C.acc} />}
@@ -824,7 +864,7 @@ function TXpro() {
               {(enfoque === f.key || enfoque === f.cobKey) && ayudaSuma(enfoque)}
               </React.Fragment>
             ))}
-            <div style={{ borderTop: "1px solid #eef0f6", paddingTop: 10, fontSize: 10.5, color: C.t3, lineHeight: 1.45 }}>
+            <div style={{ borderTop: `1px solid ${C.linea}`, paddingTop: 10, fontSize: 10.5, color: C.t3, lineHeight: 1.45 }}>
               ¿Trabajas con otras aplicaciones? Enciende las que uses o añade la tuya en <button className="nb" onClick={() => setView("ajustes")} style={{ background: "none", border: "none", padding: 0, font: "inherit", color: C.accDim, fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>Ajustes</button>.
             </div>
           </div>
@@ -1150,7 +1190,7 @@ function TXpro() {
                         {alcance === "dia"
                           ? p.eventos.map((e, i) => <div key={i} style={{ fontSize: 12, color: C.t2, marginTop: 2 }}>{e.titulo}{(e.salida || e.hora) ? ` · ${textoHoras(e)}` : ""}</div>)
                           : <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>{p.eventos.map((e, i) => (
-                              <button key={i} className="nb" onClick={(ev) => { ev.stopPropagation(); setCalDia(e.fecha); setAlcanceMapa("dia"); setLugarMarcado(null); }} title={e.titulo} style={{ padding: "3px 7px", borderRadius: 6, border: `1px solid ${C.border}`, background: "#f6f7fb", fontSize: 11.5, fontWeight: 700, color: C.t1, cursor: "pointer", fontFamily: "inherit" }}>{capitalizar(weekday(e.fecha))} {Number(e.fecha.slice(8))}</button>
+                              <button key={i} className="nb" onClick={(ev) => { ev.stopPropagation(); setCalDia(e.fecha); setAlcanceMapa("dia"); setLugarMarcado(null); }} title={e.titulo} style={{ padding: "3px 7px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.inp, fontSize: 11.5, fontWeight: 700, color: C.t1, cursor: "pointer", fontFamily: "inherit" }}>{capitalizar(weekday(e.fecha))} {Number(e.fecha.slice(8))}</button>
                             ))}</div>}
                       </div>
                     </div>
@@ -1265,7 +1305,7 @@ function TXpro() {
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Con qué aplicaciones trabajas</div>
             <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 6 }}>Enciende solo las que uses: las demás desaparecen del parte diario. Apagar una <strong>no borra nada</strong>, lo que ya tengas apuntado sigue contando en tus meses.</div>
             {plats.map((pl) => (
-              <div key={pl.key} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: "1px solid #eef0f6", padding: "11px 0" }}>
+              <div key={pl.key} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: `1px solid ${C.linea}`, padding: "11px 0" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: pl.activa ? C.t1 : C.t3, wordBreak: "break-word" }}>{pl.nombre}</div>
                   <div style={{ fontSize: 10.5, color: C.t3, marginTop: 2, lineHeight: 1.35 }}>{pl.tipo === "cobrado" ? "2ª casilla: lo que ya cobró la empresa" : "2ª casilla: lo que cobras tú en mano"}</div>
@@ -1288,7 +1328,16 @@ function TXpro() {
                   <button key={t} className="nb" onClick={() => setAppNueva((a) => ({ ...a, tipo: t }))} aria-pressed={appNueva.tipo === t} style={{ flex: 1, padding: "9px 8px", borderRadius: 10, border: `1.5px solid ${appNueva.tipo === t ? C.acc : C.border}`, background: appNueva.tipo === t ? `${C.acc}1c` : C.surf, color: appNueva.tipo === t ? C.accDim : C.t2, fontWeight: 700, fontSize: 11.5, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.3 }}>{etiqueta}</button>
                 ))}
               </div>
-              <button className="saveBtn" onClick={addPlat} disabled={!appNueva.nombre.trim()} style={{ width: "100%", padding: 11, borderRadius: 10, border: "none", background: appNueva.nombre.trim() ? `linear-gradient(135deg,${C.acc},${C.accDim})` : "#e7eaf2", color: appNueva.nombre.trim() ? "#0d0f14" : C.t3, fontWeight: 800, fontSize: 13, cursor: appNueva.nombre.trim() ? "pointer" : "default", fontFamily: "inherit" }}>Añadir aplicación</button>
+              <button className="saveBtn" onClick={addPlat} disabled={!appNueva.nombre.trim()} style={{ width: "100%", padding: 11, borderRadius: 10, border: "none", background: appNueva.nombre.trim() ? `linear-gradient(135deg,${C.acc},${C.accDim})` : C.apagado, color: appNueva.nombre.trim() ? "#0d0f14" : C.t3, fontWeight: 800, fontSize: 13, cursor: appNueva.nombre.trim() ? "pointer" : "default", fontFamily: "inherit" }}>Añadir aplicación</button>
+            </div>
+          </div>
+          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Apariencia</div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>En automático, la app se pone oscura cuando tu móvil está en modo oscuro.</div>
+            <div role="radiogroup" aria-label="Apariencia" style={{ display: "flex", gap: 7 }}>
+              {TEMAS.map(([t, etiqueta]) => (
+                <button key={t} className="nb" role="radio" aria-checked={tema === t} onClick={() => elegirTema(t)} style={{ flex: 1, padding: "10px 6px", borderRadius: 10, border: `1.5px solid ${tema === t ? C.acc : C.border}`, background: tema === t ? `${C.acc}1c` : C.surf, color: tema === t ? C.accDim : C.t2, fontWeight: tema === t ? 800 : 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>{etiqueta}</button>
+              ))}
             </div>
           </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>

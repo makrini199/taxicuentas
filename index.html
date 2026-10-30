@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="TXpro" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#f5f6fa" />
-  <meta name="color-scheme" content="light" />
+  <meta name="color-scheme" content="light dark" />
   <title>TXpro · Cuentas del taxi</title>
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/png" href="./icons/favicon.png" />
@@ -20,7 +20,9 @@
   <link rel="preload" as="font" type="font/woff2" href="./fonts/dmsans-latin.woff2" crossorigin />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; background: #f5f6fa; overflow-x: hidden; }
+    :root { --fondo: #f5f6fa; --fila: #f2f4fa; --barra: #d5d8e3; --gris: #8f93a8; color-scheme: light; }
+    html[data-tema="oscuro"] { --fondo: #0e1016; --fila: #1d212b; --barra: #3a3f4d; --gris: #767b8e; color-scheme: dark; }
+    html, body { height: 100%; background: var(--fondo); overflow-x: hidden; }
     body {
       font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
       -webkit-font-smoothing: antialiased;
@@ -33,13 +35,27 @@
     .saveBtn:active { opacity: 0.85; }
     .nb:active { opacity: 0.7; }
     button:focus-visible, .inp:focus-visible { outline: 2px solid #c08a06; outline-offset: 2px; }
-    tr:hover td { background: #f2f4fa; }
+    tr:hover td { background: var(--fila); }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #d5d8e3; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--barra); border-radius: 4px; }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-    #boot { display: flex; align-items: center; justify-content: center; height: 100%; color: #8f93a8; font-size: 14px; }
+    #boot { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--gris); font-size: 14px; }
   </style>
+  <script>
+    // El tema se decide antes de pintar nada, para que quien lo tiene oscuro
+    // no vea un fogonazo blanco al abrir. La app lo vuelve a aplicar al arrancar.
+    (function () {
+      try {
+        var t = JSON.parse(localStorage.getItem("tc_tema") || '"auto"');
+        var oscuro = t === "oscuro" || (t !== "claro" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (oscuro) {
+          document.documentElement.setAttribute("data-tema", "oscuro");
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0e1016");
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div id="root"><div id="boot">Cargando…</div></div>
