@@ -35,7 +35,13 @@ const PLATAFORMAS_BASE = [
 ];
 // Los cálculos recorren TODAS las plataformas, también las apagadas: si alguien
 // deja de trabajar con Bolt, sus meses de Bolt tienen que seguir cuadrando.
-const calcDay = (d, pct = 50, plats = PLATAFORMAS_BASE) => {
+// Cómo se reparte con la empresa: a porcentaje (un número, el % del conductor)
+// o con cuota fija, como un alquiler ({ cuotaDia }: lo que se queda la empresa
+// por cada día trabajado; 0 si la cuota va por mes y se resta en el mes).
+// parteEmpresa es lo que le toca a la empresa; diferencia = parteEmpresa menos
+// lo que ya cobró ella (apps y tarjeta): positiva, el conductor le debe;
+// negativa, la empresa le debe al conductor.
+const calcDay = (d, rep = 50, plats = PLATAFORMAS_BASE) => {
   const n = (v) => Number(v) || 0;
   let apps = 0;
   let empresa = n(d.visa);
@@ -45,8 +51,10 @@ const calcDay = (d, pct = 50, plats = PLATAFORMAS_BASE) => {
     empresa += p.tipo === "cobrado" ? n(d[p.cobKey]) : total - n(d[p.cobKey]);
   }
   const facturacion = n(d.taximetro) + apps;
-  const conductor50 = facturacion * (pct / 100);
-  return { facturacion, conductor50, cobradoEmpresa: empresa, diferencia: conductor50 - empresa };
+  const r = rep && typeof rep === "object" ? rep : { pct: Number(rep) || 0 };
+  const parteEmpresa = r.cuotaDia !== undefined ? (facturacion > 0 ? Number(r.cuotaDia) || 0 : 0) : facturacion * (1 - (Number(r.pct) || 0) / 100);
+  const conductor50 = facturacion - parteEmpresa;
+  return { facturacion, conductor50, parteEmpresa, cobradoEmpresa: empresa, diferencia: parteEmpresa - empresa };
 };
 // El combustible ya no se apunta aquí: va en el Diario, día a día, que es cuando
 // se reposta. Los repostajes que ya estaban en Gastos siguen contando igual.
@@ -80,7 +88,7 @@ const gastosEntre = (lista, dias, desde, hasta) => {
   diario = Math.round(diario * 100) / 100;
   return { ...g, total: g.total + diario, combustible: g.combustible + diario, combustibleDiario: diario };
 };
-const DEFAULT_CFG = { objetivos: { dia: "", semana: "", mes: "", diasTrabajo: 6 }, pctConductor: 50, incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
+const DEFAULT_CFG = { objetivos: { dia: "", semana: "", mes: "", diasTrabajo: 6 }, pctConductor: 50, modo: "porcentaje", cuota: "", cuotaPor: "dia", incentivo: "ninguno", umbral: "", bonoImporte: "", pctCombustible: "", plataformas: [] };
 // Deja la lista siempre completa y en orden: las cuatro de serie primero, con el
 // interruptor que tuviera cada una, y detrás las que haya añadido el conductor.
 // Quien nunca haya pasado por Ajustes las tiene las cuatro encendidas, que es
@@ -115,9 +123,22 @@ const normObjetivos = (o) => {
 const loadCfg = () => { const g = loadStorage("tc_cfg", {}); return { ...DEFAULT_CFG, ...g, plataformas: normPlataformas(g && g.plataformas), objetivos: normObjetivos(g && g.objetivos) }; };
 const num = (v) => Number(v) || 0;
 const incentivoDe = (cfg, totalFact, combustible) => { const meta = num(cfg.umbral); const llega = totalFact >= meta; if (cfg.incentivo === "bono") { const importe = num(cfg.bonoImporte); if (meta <= 0 || importe <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "bono", llega, importe: llega ? importe : 0, etiqueta: `Bono al superar ${fmt0(meta)}`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para el bono de ${fmt0(importe)}`, logrado: `¡Superados los ${fmt0(meta)}! Bono de ${fmt0(importe)} desbloqueado` }; } if (cfg.incentivo === "combustible") { const pc = num(cfg.pctCombustible); if (meta <= 0 || pc <= 0) return { tipo: "incompleto", llega: false, importe: 0 }; return { tipo: "combustible", llega, importe: llega ? combustible * (pc / 100) : 0, etiqueta: `${pc}% del combustible`, pendiente: `Faltan ${fmt(Math.max(0, meta - totalFact))} para que te paguen el ${pc}% del combustible`, logrado: `¡Superados los ${fmt0(meta)}! Te pagan el ${pc}% del combustible` }; } return { tipo: "ninguno", llega: false, importe: 0 }; };
-const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, pct, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = acum * (pct / 100); const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; const jornada = { min: 0, diasConHoras: 0, ganadoConHoras: 0, carreras: 0, factConCarreras: 0, propinas: 0 };
-  entries.forEach(([, d], i) => { const s = rows[i].s; const min = minutosJornada(d); const prop = propinasDe(d); const car = carrerasDe(d); jornada.propinas += prop; if (car) { jornada.carreras += car; jornada.factConCarreras += s.facturacion; } if (min) { jornada.min += min; jornada.diasConHoras++; jornada.ganadoConHoras += s.conductor50 + prop; } });
-  return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0, jornada }; };
+// cuotaPeriodo: la cuota fija mensual que toca a este periodo (0 si no hay).
+// Para el "por hora" se reparte entre los días trabajados (o cuotaPorDia).
+const summarize = (entries, rep = 50, plats = PLATAFORMAS_BASE, cuotaPeriodo = 0, cuotaPorDia = null) => { let acum = 0; const rows = entries.map(([date, d]) => { const s = calcDay(d, rep, plats); acum += s.facturacion; return { date, s, acumFact: acum }; }); const conductor = rows.reduce((a, r) => a + r.s.conductor50, 0) - cuotaPeriodo; const parteEmpresa = rows.reduce((a, r) => a + r.s.parteEmpresa, 0) + cuotaPeriodo; const cobrado = rows.reduce((a, r) => a + r.s.cobradoEmpresa, 0); const efectivo = rows.reduce((a, r) => a + (r.s.facturacion - r.s.cobradoEmpresa), 0); const dias = rows.length; const cuotaDiaria = cuotaPorDia !== null ? cuotaPorDia : dias ? cuotaPeriodo / dias : 0; const jornada = { min: 0, diasConHoras: 0, ganadoConHoras: 0, carreras: 0, factConCarreras: 0, propinas: 0 };
+  entries.forEach(([, d], i) => { const s = rows[i].s; const min = minutosJornada(d); const prop = propinasDe(d); const car = carrerasDe(d); jornada.propinas += prop; if (car) { jornada.carreras += car; jornada.factConCarreras += s.facturacion; } if (min) { jornada.min += min; jornada.diasConHoras++; jornada.ganadoConHoras += s.conductor50 - cuotaDiaria + prop; } });
+  return { rows, totalFact: acum, conductorMes: conductor, parteEmpresaMes: parteEmpresa, cuotaPeriodo, totalCobradoEmpresa: cobrado, diferenciaMes: parteEmpresa - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0, jornada }; };
+// La cuota mensual que toca a un periodo cualquiera: la parte proporcional de
+// cada mes según los días del calendario que caen dentro.
+const cuotaMensualEntre = (cuota, lo, hi) => {
+  let total = 0, f = lo;
+  while (cuota > 0 && f <= hi) {
+    const [y, m] = f.split("-").map(Number); const diasMes = new Date(y, m, 0).getDate();
+    const fin = `${f.slice(0, 7)}-${String(diasMes).padStart(2, "0")}`; const hasta = fin < hi ? fin : hi;
+    total += (cuota * (Number(hasta.slice(8)) - Number(f.slice(8)) + 1)) / diasMes; f = shiftDays(hasta, 1);
+  }
+  return total;
+};
 const clavesDia = (plats) => ["taximetro", "visa", ...plats.flatMap((p) => [p.key, p.cobKey])];
 // En el Diario el taxímetro tiene su casilla de efectivo, como las apps: lo que
 // no se cobró en efectivo se cobró con tarjeta. Lo guardado sigue siendo la
@@ -563,10 +584,10 @@ const Desglose = ({ entries, plats, etiqueta }) => {
   );
 };
 
-const Hero = ({ total, conductor, pct }) => (
+const Hero = ({ total, conductor, etiqueta }) => (
   <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
     <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
-    <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · Conductor ({pct}%): <strong style={{ color: C.t1 }}>{fmt(conductor)}</strong></div>
+    <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · {etiqueta}: <strong style={{ color: C.t1 }}>{fmt(conductor)}</strong></div>
   </div>
 );
 const StatCard = ({ title, items, children }) => (
@@ -582,7 +603,7 @@ const StatCard = ({ title, items, children }) => (
 );
 // Horas, carreras y propinas del mes o del periodo. Solo sale si hay algo
 // apuntado: a quien no lleva la jornada no se le llena la pantalla de ceros.
-const JornadaResumen = ({ j, pct }) => {
+const JornadaResumen = ({ j, nota }) => {
   if (!j || (!j.min && !j.carreras && !j.propinas)) return null;
   const filas = [];
   if (j.min) filas.push({ label: `Horas trabajadas (${j.diasConHoras} ${j.diasConHoras === 1 ? "día" : "días"})`, val: duracion(j.min) });
@@ -598,7 +619,7 @@ const JornadaResumen = ({ j, pct }) => {
           <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontWeight: bold ? 800 : 600, fontSize: bold ? 16 : 14, color: color || C.t1 }}>{val}</span>
         </div>
       ))}
-      {j.min > 0 && <div style={{ fontSize: 11, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Por hora: tu {pct}% más las propinas, entre las horas de los días en que apuntaste la jornada.</div>}
+      {j.min > 0 && <div style={{ fontSize: 11, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Por hora: {nota} más las propinas, entre las horas de los días en que apuntaste la jornada.</div>}
     </div>
   );
 };
@@ -608,14 +629,16 @@ const Balance = ({ value, sub }) => { const neg = value <= 0; return (
     <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(value))}</div>
   </div>
 ); };
-const DayTable = ({ rows, pct }) => (
+// Con cuota mensual no hay saldo por día (la cuota se resta en el mes): la tabla
+// enseña lo que cobró la empresa cada día en lugar de "tu parte" y la diferencia.
+const DayTable = ({ rows, etiqueta, mensual }) => (
   <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
     <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-      <thead><tr>{["Fecha", "Fact.", "Acum.", `${pct}% día`, "Diferencia"].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
-      <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{dayMonth(date)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></tr>); })}</tbody>
+      <thead><tr>{["Fecha", "Fact.", "Acum.", ...(mensual ? ["Cobró empresa"] : [etiqueta, "Diferencia"])].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
+      <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{dayMonth(date)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td>{mensual ? <td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.cobradoEmpresa)}</td> : <><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></>}</tr>); })}</tbody>
     </table>
-    <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Verde (−) = empresa debe · Rojo (+) = conductor debe</div>
+    <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>{mensual ? "La cuota mensual se resta en el balance del mes, no día a día." : "Verde (−) = empresa debe · Rojo (+) = conductor debe"}</div>
   </div>
 );
 function TXpro() {
@@ -698,6 +721,32 @@ function TXpro() {
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
   const marcarCfgOk = () => { setCfgOk(true); try { localStorage.setItem("tc_cfg_ok", "true"); } catch {} };
   const pct = num(cfg.pctConductor);
+  // A porcentaje o con cuota fija (alquiler): por día trabajado o al mes.
+  const fijo = cfg.modo === "fijo";
+  const cuota = num(cfg.cuota);
+  const porMes = fijo && cfg.cuotaPor === "mes";
+  const rep = useMemo(() => (fijo ? { cuotaDia: porMes ? 0 : cuota } : pct), [fijo, porMes, cuota, pct]);
+  const cfgInc = fijo ? { ...cfg, incentivo: "ninguno" } : cfg;
+  // La parte de la cuota mensual que toca a cada día trabajado, para el "por
+  // hora". En un mes ya pasado, entre los días que trabajaste; en el mes en
+  // curso, entre los que vas a trabajar (tus días por semana), para que los
+  // primeros días no carguen con toda la cuota.
+  const cuotaPorDia = (ym, trabajados) => {
+    if (!porMes) return 0;
+    const [y, m] = ym.split("-").map(Number); const dt = (cfg.objetivos || {}).diasTrabajo;
+    const previstos = ym >= monthKey(todayStr()) ? (new Date(y, m, 0).getDate() * (dt >= 1 && dt <= 7 ? dt : 6)) / 7 : 0;
+    return cuota / Math.max(1, trabajados, previstos);
+  };
+  const etqParte = fijo ? "Para ti, quitada la cuota" : `Conductor (${pct}%)`;
+  const notaHora = fijo ? "lo que te queda tras la cuota" : `tu ${pct}%`;
+  const etqDia = fijo ? "Tuyo día" : `${pct}% día`;
+  // Las filas del reparto en las liquidaciones: el % o la cuota y lo que te queda.
+  const filasReparto = (s, periodo) => {
+    if (!fijo) return [{ label: `${pct}% conductor s/ facturación base`, val: s.conductorMes, color: C.accDim, bold: true }];
+    const dias = s.rows.filter((r) => r.s.facturacion > 0).length;
+    const etq = porMes ? (periodo ? "Cuota (parte del periodo)" : "Cuota mensual a la empresa") : `Cuota a la empresa (${fmt0(cuota)} × ${dias} ${dias === 1 ? "día" : "días"})`;
+    return [{ label: etq, val: s.parteEmpresaMes, color: C.t1 }, { label: "Para ti, quitada la cuota", val: s.conductorMes, color: C.accDim, bold: true }];
+  };
   const plats = cfg.plataformas;
   const platsActivas = plats.filter((p) => p.activa);
   const [appNueva, setAppNueva] = useState({ nombre: "", tipo: "efectivo" });
@@ -765,25 +814,34 @@ function TXpro() {
   const cancelarReloj = () => { if (window.confirm("¿Parar el cronómetro sin apuntar la hora de terminar?")) setReloj(null); };
   const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? conEfectivoTaxi({ ...days[d] }) : { ...EMPTY }); };
   const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
-  const dayStats = useMemo(() => { const raw = {}; const conT = conTarjeta(form); for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(conT[k])); return calcDay(raw, pct, plats); }, [form, pct, plats]);
+  const dayStats = useMemo(() => { const raw = {}; const conT = conTarjeta(form); for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(conT[k])); return calcDay(raw, rep, plats); }, [form, rep, plats]);
+  // Con cuota mensual: lo que lleva cobrado la empresa este mes frente a la
+  // cuota (saldo > 0: falta para cubrirla) y la parte de cuota que toca a cada
+  // día trabajado, para el "por hora". Con lo demás, el saldo es el del día.
+  const mesCuota = useMemo(() => {
+    if (!porMes) return { diasMes: 0, saldo: dayStats.diferencia, cuotaDelDia: 0 };
+    const otros = Object.entries(days).filter(([f]) => monthKey(f) === monthKey(editDate) && f !== editDate).map(([, d]) => calcDay(d, rep, plats)).filter((x) => x.facturacion > 0);
+    const diasMes = otros.length + (dayStats.facturacion > 0 ? 1 : 0);
+    return { diasMes, saldo: cuota - otros.reduce((a, x) => a + x.cobradoEmpresa, 0) - dayStats.cobradoEmpresa, cuotaDelDia: dayStats.facturacion > 0 ? cuotaPorDia(monthKey(editDate), diasMes) : 0 };
+  }, [porMes, cuota, cfg, days, editDate, dayStats, rep, plats]);
   // Facturación de cada día contando lo guardado, lo apuntado sin guardar y lo que
   // se está escribiendo ahora mismo: los anillos se llenan viaje a viaje.
   const factVivo = useMemo(() => {
-    const factDe = (d0) => { const raw = {}; const d = conTarjeta(d0); for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(d && d[k])); return calcDay(raw, pct, plats).facturacion; };
+    const factDe = (d0) => { const raw = {}; const d = conTarjeta(d0); for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(d && d[k])); return calcDay(raw, rep, plats).facturacion; };
     const mapa = {};
     for (const [f, d] of Object.entries(days)) mapa[f] = factDe(d);
     for (const [f, d] of Object.entries(borradores)) mapa[f] = factDe(d);
     mapa[editDate] = dayStats.facturacion;
     return mapa;
-  }, [days, borradores, editDate, dayStats, pct, plats]);
+  }, [days, borradores, editDate, dayStats, rep, plats]);
   const ponerObjetivo = (k, v) => setCfg((c) => ({ ...c, objetivos: { ...(c.objetivos || {}), [k]: v } }));
   const saveGasto = () => { const importe = parseFloat(gastoForm.importe) || 0; if (!importe) return; setGastos((prev) => [...prev, { id: Date.now(), date: gastoForm.date, concepto: gastoForm.concepto.trim() || "Otros", importe, reembolsable: !!gastoForm.reembolsable }]); setGastoForm((f) => ({ ...f, importe: "" })); setGastoSaved(true); setTimeout(() => setGastoSaved(false), 2000); };
   const borrarGasto = (id) => setGastos((prev) => prev.filter((g) => g.id !== id));
   const months = useMemo(() => [...new Set(Object.keys(days).map(monthKey))].sort().reverse(), [days]);
-  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const g = gastosEntre(gastos, days, ym + "-01", finDeMes(ym)); const s = summarize(entries, pct, plats); return { ym, ...s, gastos: g, combustibleMes: g.combustible, diferenciaMes: s.diferenciaMes - g.reembolsable, incentivo: incentivoDe(cfg, s.totalFact, g.combustible) }; }), [months, days, gastos, pct, cfg, plats]);
+  const monthData = useMemo(() => months.map((ym) => { const entries = Object.entries(days).filter(([d]) => monthKey(d) === ym).sort(([a], [b]) => a.localeCompare(b)); const g = gastosEntre(gastos, days, ym + "-01", finDeMes(ym)); const s = summarize(entries, rep, plats, porMes ? cuota : 0, porMes ? cuotaPorDia(ym, entries.length) : null); return { ym, ...s, gastos: g, combustibleMes: g.combustible, diferenciaMes: s.diferenciaMes - g.reembolsable, incentivo: incentivoDe(cfgInc, s.totalFact, g.combustible) }; }), [months, days, gastos, rep, porMes, cuota, cfg, plats]);
   useEffect(() => { if (months.length && !months.includes(selectedMonth)) setSelectedMonth(months[0]); }, [months]);
   const selectedData = monthData.find((m) => m.ym === selectedMonth);
-  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = gastosEntre(gastos, days, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), pct, plats); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, pct, plats]);
+  const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = gastosEntre(gastos, days, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), rep, plats, porMes ? cuotaMensualEntre(cuota, lo, hi) : 0); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, rep, porMes, cuota, plats]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
   const exportarCopia = async () => {
     const payload = { app: "txpro", formato: 3, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, gastos, notas, cfg };
@@ -906,7 +964,7 @@ function TXpro() {
         {view === "diario" && <>
           {!cfgOk && <div style={{ background: `${C.acc}12`, border: `1.5px solid ${C.acc}44`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, marginBottom: 4 }}>Ajusta la app a tu acuerdo</div>
-            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Pon el porcentaje que te paga tu empresa y, si te dan algún extra al llegar a cierta facturación, indícalo. Hasta que lo hagas, la app calcula con el 50% y sin extras.</div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Dinos cómo trabajas: <strong>a porcentaje</strong> (por ejemplo el 50%) o <strong>con cuota fija</strong> a la empresa, como un alquiler (por día trabajado o al mes). Hasta que lo hagas, la app calcula con el 50%.</div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="saveBtn" onClick={() => setView("ajustes")} style={{ flex: 1, padding: 10, borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Configurar ahora</button>
               <button className="nb" onClick={marcarCfgOk} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ahora no</button>
@@ -917,7 +975,11 @@ function TXpro() {
             const esHoy = editDate === todayStr();
             const relojAqui = reloj && reloj.fecha === editDate;
             const minVivos = relojAqui ? minutosReloj(reloj, ahora) : jornadaHoy.min;
-            const ganado = dayStats.conductor50 + jornadaHoy.propinas;
+            // Con cuota mensual el saldo es del mes: lo que lleva cobrado la empresa
+            // este mes frente a la cuota. Para el "por hora", la cuota se reparte
+            // entre los días trabajados del mes.
+            const { diasMes, saldo, cuotaDelDia } = mesCuota;
+            const ganado = dayStats.conductor50 - cuotaDelDia + jornadaHoy.propinas;
             const porHora = minVivos >= 15 && ganado > 0 ? ganado / (minVivos / 60) : 0;
             const lunes = lunesDe(editDate);
             const semana = ["L", "M", "X", "J", "V", "S", "D"].map((letra, i) => { const f = shiftDays(lunes, i); return { f, letra, v: factVivo[f] || 0 }; });
@@ -939,10 +1001,10 @@ function TXpro() {
                   {relojAqui && <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 9px", borderRadius: 20, background: reloj.pausaDesde ? `${C.acc}18` : `${C.green}18`, color: reloj.pausaDesde ? C.accDim : C.green, fontSize: 11.5, fontWeight: 800 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: reloj.pausaDesde ? C.acc : C.green }} />{reloj.pausaDesde ? "En pausa" : `En jornada desde las ${horaDe(reloj.inicio)}`}</div>}
                 </div>
                 <div style={{ fontSize: 34, fontWeight: 900, color: C.t1, letterSpacing: -0.5, lineHeight: 1.1 }}>{fmt(dayStats.facturacion)}</div>
-                <div style={{ fontSize: 12.5, color: C.t2, marginTop: 3 }}>Facturado · tu parte <strong style={{ color: C.t1 }}>{fmt(dayStats.conductor50)}</strong>{jornadaHoy.propinas > 0 ? <> + propinas <strong style={{ color: C.green }}>{fmt(jornadaHoy.propinas)}</strong></> : null}</div>
-                {dayStats.facturacion > 0 && Math.abs(dayStats.diferencia) >= 0.005 && (() => { const teDeben = dayStats.diferencia < 0; return (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, padding: "5px 10px", borderRadius: 20, background: teDeben ? `${C.green}14` : `${C.red}12`, fontSize: 12.5, fontWeight: 800, color: teDeben ? C.green : C.red }}>
-                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: teDeben ? C.green : C.red }} />{teDeben ? "La empresa te debe" : "Debes a la empresa"} {fmt(Math.abs(dayStats.diferencia))}
+                <div style={{ fontSize: 12.5, color: C.t2, marginTop: 3 }}>Facturado · {porMes ? <>cuota de <strong style={{ color: C.t1 }}>{fmt0(cuota)}</strong> al mes</> : <>tu parte <strong style={{ color: C.t1 }}>{fmt(dayStats.conductor50)}</strong></>}{jornadaHoy.propinas > 0 ? <> + propinas <strong style={{ color: C.green }}>{fmt(jornadaHoy.propinas)}</strong></> : null}</div>
+                {(porMes ? diasMes > 0 && cuota > 0 : dayStats.facturacion > 0) && Math.abs(saldo) >= 0.005 && (() => { const teDeben = saldo < 0; const col = teDeben ? C.green : porMes ? C.accDim : C.red; return (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, padding: "5px 10px", borderRadius: 20, background: teDeben ? `${C.green}14` : porMes ? `${C.acc}18` : `${C.red}12`, fontSize: 12.5, fontWeight: 800, color: col }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: col }} />{porMes ? (teDeben ? "Cuota del mes cubierta · la empresa te debe" : "Faltan para cubrir la cuota del mes") : teDeben ? "La empresa te debe" : "Debes a la empresa"} {fmt(Math.abs(saldo))}
                   </div>
                 ); })()}
                 {(() => { const piezas = [jornadaHoy.carreras ? `${jornadaHoy.carreras} carreras` : null, minVivos ? duracion(minVivos) : null, porHora ? `${fmt0(porHora)}/h` : null].filter(Boolean); return piezas.length ? <div style={{ fontSize: 12.5, color: C.t2, marginTop: 8, fontWeight: 600 }}>{piezas.join(" · ")}</div> : null; })()}
@@ -1014,17 +1076,18 @@ function TXpro() {
           {verCalculo && <>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
-            {[{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (cobrado en apps + tarjeta)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
+            {[...(porMes ? [] : fijo ? [{ label: "Cuota para la empresa", val: dayStats.parteEmpresa, color: C.t1 }, { label: "Para ti, quitada la cuota", val: dayStats.conductor50, color: C.accDim, bold: true }] : [{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }]), { label: "Cobrado por empresa (cobrado en apps + tarjeta)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : "none" }}>
                 <span style={{ fontSize: 13, color: C.t2 }}>{label}</span><span style={{ fontSize: bold ? 16 : 14, fontWeight: bold ? 800 : 600, color }}>{fmt(val)}</span>
               </div>
             ))}
+            {porMes && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Tu cuota de {fmt0(cuota)} es mensual: se cuenta con todo lo que cobre la empresa en el mes. Lo verás en Resumen.</div>}
           </div>
           </>}
           {(() => {
             const etiqueta = { fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" };
             const campo = { ...inp, padding: "10px 11px", fontSize: 15 };
-            const porHora = jornadaHoy.min ? (dayStats.conductor50 + jornadaHoy.propinas) / (jornadaHoy.min / 60) : 0;
+            const porHora = jornadaHoy.min ? (dayStats.conductor50 - mesCuota.cuotaDelDia + jornadaHoy.propinas) / (jornadaHoy.min / 60) : 0;
             const datos = [
               jornadaHoy.min ? `${duracion(jornadaHoy.min)}${jornadaHoy.cruza ? " (pasas la medianoche)" : ""}` : null,
               porHora > 0 ? `ganas ${fmt(porHora)}/h` : null,
@@ -1095,8 +1158,8 @@ function TXpro() {
           }
           const lider = datos.mes ? "mes" : datos.semana ? "semana" : datos.dia ? "dia" : null;
           const ritmo = datos.mes ? datos.mes.meta * (diaMes / total) : 0;
-          const mesPasado = Object.entries(days).filter(([f]) => monthKey(f) === mesVecino(mk, -1)).reduce((a, [, d]) => a + calcDay(d, pct, plats).facturacion, 0);
-          const umbralBono = cfg.incentivo === "bono" ? num(cfg.umbral) : 0;
+          const mesPasado = Object.entries(days).filter(([f]) => monthKey(f) === mesVecino(mk, -1)).reduce((a, [, d]) => a + calcDay(d, rep, plats).facturacion, 0);
+          const umbralBono = cfgInc.incentivo === "bono" ? num(cfg.umbral) : 0;
           const lineaPie = (k) => {
             const d = datos[k]; const falta = d.meta - d.hecho;
             if (falta <= 0) return <span style={{ color: C.green, fontWeight: 800 }}>✓ Superado por {fmt(-falta)}</span>;
@@ -1226,14 +1289,14 @@ function TXpro() {
           const celdas = [...Array(huecos).fill(null), ...Array.from({ length: total }, (_, i) => `${calMes}-${String(i + 1).padStart(2, "0")}`)];
           const delMes = celdas.filter(Boolean);
           const trabajados = delMes.filter((f) => days[f]).length;
-          const facturado = delMes.reduce((a, f) => a + (days[f] ? calcDay(days[f], pct, plats).facturacion : 0), 0);
-          const tope = Math.max(1, ...delMes.map((f) => (days[f] ? calcDay(days[f], pct, plats).facturacion : 0)));
+          const facturado = delMes.reduce((a, f) => a + (days[f] ? calcDay(days[f], rep, plats).facturacion : 0), 0);
+          const tope = Math.max(1, ...delMes.map((f) => (days[f] ? calcDay(days[f], rep, plats).facturacion : 0)));
           const sel = calDia && monthKey(calDia) === calMes ? calDia : null;
           // El botón del día o de todo el mes manda en el mapa.
           // Si no se ha tocado, se enseña el día elegido cuando tiene algo.
           const delDiaCal = sel ? (eventosPorDia[sel] || []) : [];
           const alcanceCal = alcanceMapa === "mes" || !sel ? "mes" : alcanceMapa === "dia" ? "dia" : delDiaCal.length ? "dia" : "mes";
-          const datosSel = sel && days[sel] ? calcDay(days[sel], pct, plats) : null;
+          const datosSel = sel && days[sel] ? calcDay(days[sel], rep, plats) : null;
           const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 36, height: 36, fontSize: 18, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 };
           return (<>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
@@ -1253,7 +1316,7 @@ function TXpro() {
                 {celdas.map((f, i) => {
                   if (!f) return <div key={`h${i}`} />;
                   const d = days[f];
-                  const fact = d ? calcDay(d, pct, plats).facturacion : 0;
+                  const fact = d ? calcDay(d, rep, plats).facturacion : 0;
                   const esHoy = f === today;
                   const elegido = f === sel;
                   const intensidad = fact > 0 ? 0.18 + 0.55 * (fact / tope) : 0;
@@ -1281,7 +1344,7 @@ function TXpro() {
                   {datosSel ? <div style={{ fontSize: 17, fontWeight: 900, color: C.accDim }}>{fmt(datosSel.facturacion)}</div>
                     : <div style={{ fontSize: 12.5, color: C.t3 }}>Sin datos</div>}
                 </div>
-                {datosSel && <div style={{ fontSize: 12.5, color: C.t2, marginBottom: 12 }}>{pct}% para ti: <strong style={{ color: C.t1 }}>{fmt(datosSel.conductor50)}</strong> · efectivo: <strong style={{ color: C.blue }}>{fmt(datosSel.facturacion - datosSel.cobradoEmpresa)}</strong></div>}
+                {datosSel && <div style={{ fontSize: 12.5, color: C.t2, marginBottom: 12 }}>{porMes ? <>cobró la empresa: <strong style={{ color: C.t1 }}>{fmt(datosSel.cobradoEmpresa)}</strong></> : <>{fijo ? "para ti, quitada la cuota" : `${pct}% para ti`}: <strong style={{ color: C.t1 }}>{fmt(datosSel.conductor50)}</strong></>} · efectivo: <strong style={{ color: C.blue }}>{fmt(datosSel.facturacion - datosSel.cobradoEmpresa)}</strong></div>}
                 {(eventosPorDia[sel] || []).map((e, i) => (
                   <div key={i} style={{ background: `${C.evento}12`, border: `1px solid ${C.evento}33`, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{e.titulo}</div>
@@ -1393,16 +1456,16 @@ function TXpro() {
             })()}
             {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria, gastos: gastosMes } = selectedData; return (
               <div>
-                <Hero total={totalFact} conductor={conductorMes} pct={pct} />
+                <Hero total={totalFact} conductor={conductorMes} etiqueta={etqParte} />
                 <Desglose entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} etiqueta={capitalizar(monthLabel(selectedMonth))} />
                 {(() => { const ant = mesAnterior(selectedMonth); return <Reparto entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} previo={desgloseDe(Object.entries(days).filter(([d]) => monthKey(d) === ant), plats).totalFact} frente={new Date(Number(ant.slice(0, 4)), Number(ant.slice(5)) - 1).toLocaleDateString("es-ES", { month: "long" })} />; })()}
-                <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfg.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
+                <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, ...filasReparto(selectedData, false), { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfgInc.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                 </StatCard>
-                <JornadaResumen j={selectedData.jornada} pct={pct} />
+                <JornadaResumen j={selectedData.jornada} nota={notaHora} />
                 <Balance value={diferenciaMes} sub={gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
-                <DayTable rows={rows} pct={pct} />
+                <DayTable rows={rows} etiqueta={etqDia} mensual={porMes} />
               </div>
             ); })()}
           </>}
@@ -1411,14 +1474,32 @@ function TXpro() {
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Ajustes</div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Adapta la app a lo que te paga tu empresa. Se guarda en este móvil.</div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu porcentaje</div>
-            <label htmlFor="cfgPct" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Qué % de la facturación te llevas</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <input className="inp" type="number" min="0" max="100" step="0.5" id="cfgPct" aria-label="Porcentaje del conductor" style={{ ...inp, flex: 1 }} value={cfg.pctConductor} onChange={(e) => set("pctConductor", e.target.value)} />
-              <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cómo trabajas con la empresa</div>
+            <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
+              {[["porcentaje", "A porcentaje"], ["fijo", "Cuota fija (alquiler)"]].map(([v, lb]) => { const on = (cfg.modo === "fijo" ? "fijo" : "porcentaje") === v; return (
+                <button key={v} className="nb" aria-pressed={on} onClick={() => set("modo", v)} style={{ flex: 1, padding: "10px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>{lb}</button>
+              ); })}
             </div>
+            {fijo ? <>
+              <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
+                {[["dia", "Por día trabajado"], ["mes", "Al mes"]].map(([v, lb]) => { const on = (cfg.cuotaPor === "mes" ? "mes" : "dia") === v; return (
+                  <button key={v} className="nb" aria-pressed={on} onClick={() => set("cuotaPor", v)} style={{ flex: 1, padding: "8px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>{lb}</button>
+                ); })}
+              </div>
+              <label htmlFor="cfgCuota" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>{porMes ? "Cuánto pagas a la empresa al mes" : "Cuánto pagas a la empresa por cada día que trabajas"}</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input className="inp" type="number" min="0" step={porMes ? 50 : 5} id="cfgCuota" aria-label="Cuota a la empresa" placeholder={porMes ? "2800" : "125"} style={{ ...inp, flex: 1 }} value={cfg.cuota} onChange={(e) => set("cuota", e.target.value)} />
+                <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>€</span>
+              </div>
+            </> : <>
+              <label htmlFor="cfgPct" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Qué % de la facturación te llevas</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input className="inp" type="number" min="0" max="100" step="0.5" id="cfgPct" aria-label="Porcentaje del conductor" style={{ ...inp, flex: 1 }} value={cfg.pctConductor} onChange={(e) => set("pctConductor", e.target.value)} />
+                <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
+              </div>
+            </>}
           </div>
-          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+          {!fijo && <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Incentivo por facturación</div>
             <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
               {tipos.map(([v, lb]) => { const on = cfg.incentivo === v; return (
@@ -1439,10 +1520,11 @@ function TXpro() {
                 </div>
               </>}
             </>}
-          </div>
+          </div>}
           <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 16, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Así queda tu acuerdo</div>
-            <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>Te llevas el <strong>{pct}%</strong> de todo lo que factures.{ej.tipo === "incompleto" ? <> Te falta rellenar los dos datos del incentivo para que cuente.</> : cfg.incentivo === "bono" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te dan <strong>{fmt0(num(cfg.bonoImporte))}</strong> de bono.</> : cfg.incentivo === "combustible" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te pagan el <strong>{num(cfg.pctCombustible)}%</strong> del combustible (con {fmt0(400)} de gasolina serían {fmt(ej.importe)}).</> : <> Sin extras por facturación.</>}</div>
+            {fijo ? <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>{cuota > 0 ? <>Pagas a la empresa <strong>{fmt0(cuota)}</strong> {porMes ? "al mes" : "por cada día que trabajes"}. Todo lo demás es para ti, y el combustible lo pones tú. Al hacer cuentas, la empresa se queda la cuota de lo que ha cobrado ella (apps y tarjeta) y te paga el resto; si ha cobrado menos que la cuota, le pagas tú la diferencia.</> : <>Pon cuánto pagas a la empresa para que la app haga las cuentas.</>}</div>
+            : <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.6 }}>Te llevas el <strong>{pct}%</strong> de todo lo que factures.{ej.tipo === "incompleto" ? <> Te falta rellenar los dos datos del incentivo para que cuente.</> : cfg.incentivo === "bono" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te dan <strong>{fmt0(num(cfg.bonoImporte))}</strong> de bono.</> : cfg.incentivo === "combustible" ? <> Al pasar de <strong>{fmt0(num(cfg.umbral))}</strong> en el mes, te pagan el <strong>{num(cfg.pctCombustible)}%</strong> del combustible (con {fmt0(400)} de gasolina serían {fmt(ej.importe)}).</> : <> Sin extras por facturación.</>}</div>}
           </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Con qué aplicaciones trabajas</div>
@@ -1529,7 +1611,7 @@ function TXpro() {
             </div>
           ); })()}
           {diasTrabajados === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin días registrados en este periodo.</div> : <>
-            <Hero total={totalFact} conductor={conductorMes} pct={pct} />
+            <Hero total={totalFact} conductor={conductorMes} etiqueta={etqParte} />
             <Desglose entries={Object.entries(days).filter(([d]) => d >= lo && d <= hi)} plats={plats} etiqueta={`del ${dayMonth(lo)} al ${dayMonth(hi)}`} />
             {(() => { const largo = diasEntre(lo, hi) + 1; const pLo = shiftDays(lo, -largo), pHi = shiftDays(lo, -1); return <Reparto entries={Object.entries(days).filter(([d]) => d >= lo && d <= hi)} plats={plats} previo={desgloseDe(Object.entries(days).filter(([d]) => d >= pLo && d <= pHi), plats).totalFact} frente={modoResumen === "semana" ? "la semana anterior" : `los ${largo} días anteriores`} />; })()}
             {(() => { const porDia = Object.fromEntries(rows.map((r) => [r.date, r.s.facturacion])); const cal = daysBetween(lo, hi); const tope = Math.max(1, ...cal.map((d) => porDia[d] || 0)); return (
@@ -1547,10 +1629,10 @@ function TXpro() {
                 </div>
               </div>
             ); })()}
-            <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, { label: `${pct}% conductor s/ facturación base`, val: conductorMes, color: C.accDim, bold: true }, { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosPeriodo.total > 0 ? [{ label: "Gastos del periodo", val: gastosPeriodo.total, color: C.red, neg: true }] : []), ...(gastosPeriodo.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosPeriodo.reembolsable, color: C.green }] : [])]} />
-            <JornadaResumen j={rangeData.jornada} pct={pct} />
+            <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, ...filasReparto(rangeData, true), { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosPeriodo.total > 0 ? [{ label: "Gastos del periodo", val: gastosPeriodo.total, color: C.red, neg: true }] : []), ...(gastosPeriodo.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosPeriodo.reembolsable, color: C.green }] : [])]} />
+            <JornadaResumen j={rangeData.jornada} nota={notaHora} />
             <Balance value={diferenciaMes} sub={gastosPeriodo.reembolsable > 0 ? "Balance del periodo · incluye los gastos a devolver" : "Balance del periodo seleccionado"} />
-            <DayTable rows={rows} pct={pct} />
+            <DayTable rows={rows} etiqueta={etqDia} mensual={porMes} />
           </>}
         </>); })()}
       </div>
