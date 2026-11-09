@@ -623,10 +623,12 @@ const JornadaResumen = ({ j, nota }) => {
     </div>
   );
 };
-const Balance = ({ value, sub }) => { const neg = value <= 0; return (
-  <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-    <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}><><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: neg ? C.green : C.red, marginRight: 7, verticalAlign: "middle" }} />{neg ? "Empresa debe al conductor" : "Conductor debe a empresa"}</></div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
-    <div style={{ fontSize: 24, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14 }}>{neg ? "−" : "+"}{fmt(Math.abs(value))}</div>
+// pendiente: mes en curso con cuota mensual. Mientras la empresa no ha cobrado
+// la cuota no se dice "debes", sino lo que falta para cubrirla.
+const Balance = ({ value, sub, pendiente }) => { const neg = value <= 0; const falta = pendiente && !neg; const col = neg ? C.green : falta ? C.accDim : C.red; return (
+  <div style={{ background: neg ? `${C.green}14` : falta ? `${C.acc}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : falta ? C.acc : C.red}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+    <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}><><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: col, marginRight: 7, verticalAlign: "middle" }} />{neg ? (pendiente ? "Cuota cubierta · la empresa te debe" : "Empresa debe al conductor") : falta ? "Faltan para cubrir la cuota del mes" : "Conductor debe a empresa"}</></div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>{sub}</div></div>
+    <div style={{ fontSize: 24, fontWeight: 900, color: col, marginLeft: 14 }}>{falta ? "" : neg ? "−" : "+"}{fmt(Math.abs(value))}</div>
   </div>
 ); };
 // Con cuota mensual no hay saldo por día (la cuota se resta en el mes): la tabla
@@ -1464,7 +1466,7 @@ function TXpro() {
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                 </StatCard>
                 <JornadaResumen j={selectedData.jornada} nota={notaHora} />
-                <Balance value={diferenciaMes} sub={gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
+                <Balance value={diferenciaMes} pendiente={porMes && selectedMonth >= monthKey(todayStr())} sub={porMes && selectedMonth >= monthKey(todayStr()) && diferenciaMes > 0 ? `Lo que le falta cobrar a la empresa para llegar a los ${fmt0(cuota)}` : gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
                 <DayTable rows={rows} etiqueta={etqDia} mensual={porMes} />
               </div>
             ); })()}
