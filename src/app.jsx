@@ -119,6 +119,11 @@ const summarize = (entries, pct = 50, plats = PLATAFORMAS_BASE) => { let acum = 
   entries.forEach(([, d], i) => { const s = rows[i].s; const min = minutosJornada(d); const prop = propinasDe(d); const car = carrerasDe(d); jornada.propinas += prop; if (car) { jornada.carreras += car; jornada.factConCarreras += s.facturacion; } if (min) { jornada.min += min; jornada.diasConHoras++; jornada.ganadoConHoras += s.conductor50 + prop; } });
   return { rows, totalFact: acum, conductorMes: conductor, totalCobradoEmpresa: cobrado, diferenciaMes: conductor - cobrado, efectivoMes: efectivo, diasTrabajados: dias, mediaDiaria: dias ? acum / dias : 0, jornada }; };
 const clavesDia = (plats) => ["taximetro", "visa", ...plats.flatMap((p) => [p.key, p.cobKey])];
+// En el Diario el taxímetro tiene su casilla de efectivo, como las apps: lo que
+// no se cobró en efectivo se cobró con tarjeta. Lo guardado sigue siendo la
+// tarjeta (visa); taxEfec solo vive mientras se escribe. Vacía = todo en efectivo.
+const conTarjeta = (d) => { if (!d || d.taxEfec === undefined || String(d.taxEfec).trim() === "") return d; const t = Math.max(0, evalSuma(d.taximetro)); const e = Math.max(0, evalSuma(d.taxEfec)); return { ...d, visa: Math.max(0, Math.round((t - e) * 100) / 100) }; };
+const conEfectivoTaxi = (d) => (d && Number(d.visa) > 0 && d.taxEfec === undefined ? { ...d, taxEfec: String(Math.round(((Number(d.taximetro) || 0) - Number(d.visa)) * 100) / 100) } : d);
 const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
 const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
 const today = todayStr();
@@ -633,7 +638,7 @@ function TXpro() {
   // viaje no va a darle a "Guardar día" tras cada carrera: si se le cierra la app
   // o se reinicia el móvil, lo apuntado tiene que seguir ahí.
   const [borradores, setBorradores] = useState(() => { const b = loadStorage("tc_borradores", {}); return b && typeof b === "object" && !Array.isArray(b) ? Object.fromEntries(Object.entries(b).filter(([f, v]) => /^\d{4}-\d{2}-\d{2}$/.test(f) && v && typeof v === "object")) : {}; });
-  const [form, setForm] = useState(() => { const b = loadStorage("tc_borradores", {}); if (b && b[today] && typeof b[today] === "object") return { ...b[today] }; const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
+  const [form, setForm] = useState(() => { const b = loadStorage("tc_borradores", {}); if (b && b[today] && typeof b[today] === "object") return { ...b[today] }; const s = loadDays(); return s[today] ? conEfectivoTaxi({ ...s[today] }) : { ...EMPTY }; });
   const [enfoque, setEnfoque] = useState(null);
   const [saved, setSaved] = useState(false);
   const [notas, setNotas] = useState(() => { const n = loadStorage("tc_notas", {}); return n && typeof n === "object" ? n : {}; });
@@ -684,6 +689,8 @@ function TXpro() {
   const [reloj, setReloj] = useState(() => relojValido(loadStorage(RELOJ_KEY, null)));
   const [ahora, setAhora] = useState(() => Date.now());
   const [avisoReloj, setAvisoReloj] = useState("");
+  const [verCalculo, setVerCalculo] = useState(false);
+  const [verJornada, setVerJornada] = useState(false);
   useEffect(() => { try { if (reloj) localStorage.setItem(RELOJ_KEY, JSON.stringify(reloj)); else localStorage.removeItem(RELOJ_KEY); } catch {} }, [reloj]);
   useEffect(() => { if (!reloj) return; setAhora(Date.now()); const t = setInterval(() => setAhora(Date.now()), 15000); return () => clearInterval(t); }, [reloj]);
   const cerrarAvisoIOS = () => { setAvisarIOS(false); try { localStorage.setItem(AVISO_IOS_KEY, JSON.stringify(Date.now())); } catch {} };
@@ -714,14 +721,14 @@ function TXpro() {
   useEffect(() => { try { localStorage.setItem("tc_notas", JSON.stringify(notas)); } catch {} }, [notas]);
   const ponerNota = (fecha, texto) => setNotas((prev) => { const next = { ...prev }; if (texto.trim()) next[fecha] = texto.slice(0, 120); else delete next[fecha]; return next; });
   useEffect(() => { try { localStorage.setItem("tc_cfg", JSON.stringify(cfg)); } catch {} }, [cfg]);
-  const saveDay = () => { const parsed = {}; for (const k of clavesDia(plats)) parsed[k] = Math.max(0, evalSuma(form[k]));
+  const saveDay = () => { const parsed = {}; const conT = conTarjeta(form); for (const k of clavesDia(plats)) parsed[k] = Math.max(0, evalSuma(conT[k]));
     const prop = propinasDe(form); if (prop) parsed.propinas = prop;
     const comb = combustibleDe(form); if (comb) parsed.combustible = comb;
     const car = carrerasDe(form); if (car) parsed.carreras = car;
     if (ES_HORA.test(form.inicio || "")) parsed.inicio = form.inicio;
     if (ES_HORA.test(form.fin || "")) parsed.fin = form.fin;
     if (parsed.inicio && parsed.fin && descansoDe(form)) parsed.descanso = descansoDe(form);
-    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setForm(vacio ? { ...EMPTY } : { ...parsed }); quitarBorrador(editDate); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
+    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setForm(vacio ? { ...EMPTY } : conEfectivoTaxi({ ...parsed })); quitarBorrador(editDate); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
   const quitarBorrador = (f) => setBorradores((b) => { if (!b[f]) return b; const n = { ...b }; delete n[f]; return n; });
   const descartarBorrador = () => { if (!window.confirm("¿Descartar lo que has apuntado sin guardar en este día?")) return; quitarBorrador(editDate); setForm(days[editDate] ? { ...days[editDate] } : { ...EMPTY }); };
   // Todo lo que teclea el conductor pasa por aquí, para que quede en el borrador.
@@ -741,7 +748,7 @@ function TXpro() {
   };
   const empezarJornada = () => {
     const t = Date.now(); const fecha = todayStr();
-    const base = fecha === editDate ? form : borradores[fecha] ? { ...borradores[fecha] } : days[fecha] ? { ...days[fecha] } : { ...EMPTY };
+    const base = fecha === editDate ? form : borradores[fecha] ? { ...borradores[fecha] } : days[fecha] ? conEfectivoTaxi({ ...days[fecha] }) : { ...EMPTY };
     const n = { ...base, inicio: horaDe(t), fin: "", descanso: "" };
     setEditDate(fecha); setEnfoque(null); setForm(n); setBorradores((b) => ({ ...b, [fecha]: n }));
     setReloj({ fecha, inicio: t, pausado: 0, pausaDesde: null }); setAvisoReloj("");
@@ -756,13 +763,13 @@ function TXpro() {
     setReloj(null); setAvisoReloj(reloj.fecha === editDate ? "Jornada terminada: revisa las cifras y guarda el día." : `Jornada terminada y apuntada en el ${weekday(reloj.fecha)} ${Number(reloj.fecha.slice(8))}: ábrelo y guárdalo.`);
   };
   const cancelarReloj = () => { if (window.confirm("¿Parar el cronómetro sin apuntar la hora de terminar?")) setReloj(null); };
-  const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? { ...days[d] } : { ...EMPTY }); };
+  const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? conEfectivoTaxi({ ...days[d] }) : { ...EMPTY }); };
   const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
-  const dayStats = useMemo(() => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(form[k])); return calcDay(raw, pct, plats); }, [form, pct, plats]);
+  const dayStats = useMemo(() => { const raw = {}; const conT = conTarjeta(form); for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(conT[k])); return calcDay(raw, pct, plats); }, [form, pct, plats]);
   // Facturación de cada día contando lo guardado, lo apuntado sin guardar y lo que
   // se está escribiendo ahora mismo: los anillos se llenan viaje a viaje.
   const factVivo = useMemo(() => {
-    const factDe = (d) => { const raw = {}; for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(d && d[k])); return calcDay(raw, pct, plats).facturacion; };
+    const factDe = (d0) => { const raw = {}; const d = conTarjeta(d0); for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(d && d[k])); return calcDay(raw, pct, plats).facturacion; };
     const mapa = {};
     for (const [f, d] of Object.entries(days)) mapa[f] = factDe(d);
     for (const [f, d] of Object.entries(borradores)) mapa[f] = factDe(d);
@@ -829,8 +836,8 @@ function TXpro() {
   const ANCHO = 84;
   // Casilla de dinero con calculadora. Texto y no number: el campo numérico del
   // navegador no deja escribir "+" ni coma. Enter hace la cuenta, como el "=".
-  const casilla = (k, etiqueta, estilo) => (
-    <input className="inp" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" placeholder="0.00" data-casilla={k} aria-label={etiqueta}
+  const casilla = (k, etiqueta, estilo, pista) => (
+    <input className="inp" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" placeholder={pista || "0.00"} data-casilla={k} aria-label={etiqueta}
       style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", ...estilo }}
       value={form[k] || ""} onFocus={() => setEnfoque(k)} onBlur={() => cerrarCasilla(k)}
       onChange={(e) => editar(k, limpiarCasilla(e.target.value))}
@@ -858,9 +865,8 @@ function TXpro() {
   // todas alineadas en columna. Sin distintivos de las plataformas: el nombre en
   // texto dice de qué es la casilla y las marcas son de quien son.
   const filas = [
-    { key: "taximetro", nombre: "Taxímetro", oro: true },
+    { key: "taximetro", cobKey: "taxEfec", nombre: "Taxímetro", oro: true },
     ...platsActivas.map((pl) => ({ key: pl.key, cobKey: pl.cobKey, nombre: pl.nombre, cobrado: pl.tipo === "cobrado" })),
-    { key: "visa", nombre: "Tarjeta" },
   ];
   const colHead = { fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: 0.4, textTransform: "uppercase", textAlign: "right", flexShrink: 0 };
   const inp = { width: "100%", background: C.inp, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
@@ -925,18 +931,23 @@ function TXpro() {
             return (
               <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Resumen del día">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{esHoy ? "Hoy" : `${weekday(editDate)} ${Number(editDate.slice(8))}/${editDate.slice(5, 7)}`}</div>
+                  <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <span style={{ fontSize: 11, color: C.t2, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1 }}>{esHoy ? "Hoy" : `${weekday(editDate)} ${Number(editDate.slice(8))}/${editDate.slice(5, 7)}`}</span>
+                    <span style={{ fontSize: 11.5, color: C.accDim, fontWeight: 700 }}>{esHoy ? `${weekday(editDate)} ${Number(editDate.slice(8))}/${editDate.slice(5, 7)}` : "· volver a hoy"} ▾</span>
+                    <input type="date" aria-label="Fecha del día" value={editDate} onChange={(e) => e.target.value && changeDate(e.target.value)} style={{ position: "absolute", inset: 0, opacity: 0, width: "100%", cursor: "pointer" }} />
+                  </label>
                   {relojAqui && <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 9px", borderRadius: 20, background: reloj.pausaDesde ? `${C.acc}18` : `${C.green}18`, color: reloj.pausaDesde ? C.accDim : C.green, fontSize: 11.5, fontWeight: 800 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: reloj.pausaDesde ? C.acc : C.green }} />{reloj.pausaDesde ? "En pausa" : `En jornada desde las ${horaDe(reloj.inicio)}`}</div>}
                 </div>
                 <div style={{ fontSize: 34, fontWeight: 900, color: C.t1, letterSpacing: -0.5, lineHeight: 1.1 }}>{fmt(dayStats.facturacion)}</div>
-                <div style={{ fontSize: 12.5, color: C.t2, marginTop: 3 }}>Facturado · tu parte ({pct}%) <strong style={{ color: C.t1 }}>{fmt(dayStats.conductor50)}</strong>{jornadaHoy.propinas > 0 ? <> + propinas <strong style={{ color: C.green }}>{fmt(jornadaHoy.propinas)}</strong></> : null}</div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  <div style={ficha}><div style={fichaTit}>Carreras</div><div style={fichaVal}>{jornadaHoy.carreras || 0}</div></div>
-                  <div style={ficha}><div style={fichaTit}>Horas</div><div style={fichaVal}>{minVivos ? duracion(minVivos) : "—"}</div></div>
-                  <div style={ficha}><div style={fichaTit}>Ganas/hora</div><div style={{ ...fichaVal, color: porHora ? C.accDim : C.t1 }}>{porHora ? fmt0(porHora) : "—"}</div></div>
-                </div>
+                <div style={{ fontSize: 12.5, color: C.t2, marginTop: 3 }}>Facturado · tu parte <strong style={{ color: C.t1 }}>{fmt(dayStats.conductor50)}</strong>{jornadaHoy.propinas > 0 ? <> + propinas <strong style={{ color: C.green }}>{fmt(jornadaHoy.propinas)}</strong></> : null}</div>
+                {dayStats.facturacion > 0 && Math.abs(dayStats.diferencia) >= 0.005 && (() => { const teDeben = dayStats.diferencia < 0; return (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, padding: "5px 10px", borderRadius: 20, background: teDeben ? `${C.green}14` : `${C.red}12`, fontSize: 12.5, fontWeight: 800, color: teDeben ? C.green : C.red }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: teDeben ? C.green : C.red }} />{teDeben ? "La empresa te debe" : "Debes a la empresa"} {fmt(Math.abs(dayStats.diferencia))}
+                  </div>
+                ); })()}
+                {(() => { const piezas = [jornadaHoy.carreras ? `${jornadaHoy.carreras} carreras` : null, minVivos ? duracion(minVivos) : null, porHora ? `${fmt0(porHora)}/h` : null].filter(Boolean); return piezas.length ? <div style={{ fontSize: 12.5, color: C.t2, marginTop: 8, fontWeight: 600 }}>{piezas.join(" · ")}</div> : null; })()}
                 {relojAqui ? <>
-                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                     {reloj.pausaDesde
                       ? <button className="saveBtn" onClick={seguirJornada} style={boton(false)}>▶ Seguir</button>
                       : <button className="saveBtn" onClick={pausarJornada} style={boton(false)}>❚❚ Pausa</button>}
@@ -949,10 +960,10 @@ function TXpro() {
                     <button className="nb" onClick={() => changeDate(reloj.fecha)} style={{ padding: "7px 12px", borderRadius: 9, border: `1px solid ${C.green}55`, background: C.surf, color: C.green, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Ver</button>
                   </div>
                 ) : esHoy && !form.fin ? (
-                  <button className="saveBtn" onClick={empezarJornada} style={{ ...boton(true), width: "100%", marginTop: 12 }}>▶ Empezar jornada</button>
+                  <button className="saveBtn" onClick={empezarJornada} style={{ ...boton(true), width: "100%", marginTop: 10, padding: 10 }}>▶ Empezar jornada</button>
                 ) : null}
                 {avisoReloj && <div style={{ marginTop: 10, fontSize: 12.5, color: C.green, fontWeight: 700 }}>{avisoReloj}</div>}
-                <div style={{ borderTop: `1px solid ${C.linea}`, marginTop: 14, paddingTop: 12 }}>
+                <div style={{ borderTop: `1px solid ${C.linea}`, marginTop: 12, paddingTop: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
                     <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>{esEstaSemana ? "Esta semana" : `Semana del ${Number(lunes.slice(8))}/${lunes.slice(5, 7)}`}</div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: C.t1 }}>{fmt(totalSemana)}</div>
@@ -960,7 +971,7 @@ function TXpro() {
                   <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
                     {semana.map((x) => { const sel = x.f === editDate; return (
                       <button key={x.f} className="nb" onClick={() => changeDate(x.f)} aria-label={`${weekday(x.f)} ${Number(x.f.slice(8))}: ${fmt(x.v)}`} aria-pressed={sel} style={{ flex: 1, background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, fontFamily: "inherit" }}>
-                        <div style={{ width: "100%", height: 56, display: "flex", alignItems: "flex-end" }}><div style={{ width: "100%", height: Math.max(4, Math.round((x.v / maximo) * 56)), borderRadius: 6, background: x.v ? (sel ? C.acc : `${C.acc}66`) : C.linea }} /></div>
+                        <div style={{ width: "100%", height: 40, display: "flex", alignItems: "flex-end" }}><div style={{ width: "100%", height: Math.max(4, Math.round((x.v / maximo) * 40)), borderRadius: 6, background: x.v ? (sel ? C.acc : `${C.acc}66`) : C.linea }} /></div>
                         <span style={{ fontSize: 11, fontWeight: sel ? 900 : 700, color: sel ? C.t1 : C.t3 }}>{x.letra}</span>
                       </button>
                     ); })}
@@ -969,7 +980,6 @@ function TXpro() {
               </div>
             );
           })()}
-          <input type="date" className="inp" style={{ ...inp, fontSize: 14, marginBottom: 14 }} value={editDate} onChange={(e) => changeDate(e.target.value)} />
           {saved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>{saved === "borrado" ? "Día eliminado" : "Día guardado"}</div>}
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Ingresos del día</div>
@@ -990,20 +1000,18 @@ function TXpro() {
                 </div>
                 {casilla(f.key, f.nombre)}
                 {f.cobKey
-                  ? casilla(f.cobKey, `${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`, { background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` })
+                  ? casilla(f.cobKey, `${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`, { background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` }, f.key === "taximetro" && evalSuma(form.taximetro) > 0 ? String(evalSuma(form.taximetro)) : undefined)
                   : <div style={{ width: ANCHO, flexShrink: 0 }} />}
               </div>
               {(enfoque === f.key || enfoque === f.cobKey) && ayudaSuma(enfoque)}
               </React.Fragment>
             ))}
-            <div style={{ borderTop: `1px solid ${C.linea}`, paddingTop: 10, fontSize: 10.5, color: C.t3, lineHeight: 1.45 }}>
-              ¿Trabajas con otras aplicaciones? Enciende las que uses o añade la tuya en <button className="nb" onClick={() => setView("ajustes")} style={{ background: "none", border: "none", padding: 0, font: "inherit", color: C.accDim, fontWeight: 800, cursor: "pointer", textDecoration: "underline" }}>Ajustes</button>.
-            </div>
+            {evalSuma(form.taxEfec) > 0 && <div style={{ borderTop: `1px solid ${C.linea}`, paddingTop: 8, fontSize: 11, color: C.t3 }}>Con tarjeta en el taxímetro: <strong style={{ color: C.t2 }}>{fmt(Math.max(0, evalSuma(form.taximetro) - evalSuma(form.taxEfec)))}</strong></div>}
           </div>
-          <div style={{ background: `linear-gradient(135deg, ${C.acc}18, ${C.acc}08)`, border: `2px solid ${C.acc}55`, borderRadius: 16, padding: "14px 18px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: `0 4px 16px ${C.acc}1a` }}>
-            <div><div style={{ fontSize: 11, color: C.accDim, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Total facturación día</div><div style={{ fontSize: 11, color: C.t3, marginTop: 3 }}>Taxímetro + apps</div></div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: C.accDim }}>{fmt(dayStats.facturacion)}</div>
-          </div>
+          <button className="nb" onClick={() => setVerCalculo((v) => !v)} aria-expanded={verCalculo} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", marginBottom: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+            <span>Cálculo con la empresa</span><span>{verCalculo ? "▴" : "▾"}</span>
+          </button>
+          {verCalculo && <>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cálculo del día</div>
             {[{ label: `${pct}% conductor (sobre fact. base)`, val: dayStats.conductor50, color: C.accDim, bold: true }, { label: "Cobrado por empresa (cobrado en apps + tarjeta)", val: dayStats.cobradoEmpresa, color: C.t2 }, { label: "Cobrado en efectivo por el conductor", val: dayStats.facturacion - dayStats.cobradoEmpresa, color: C.blue }].map(({ label, val, color, bold }, i, arr) => (
@@ -1012,12 +1020,7 @@ function TXpro() {
               </div>
             ))}
           </div>
-          {(() => { const neg = dayStats.diferencia <= 0; return (
-            <div style={{ background: neg ? `${C.green}14` : `${C.red}14`, border: `1.5px solid ${neg ? C.green : C.red}44`, borderRadius: 16, padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}><><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: neg ? C.green : C.red, marginRight: 7, verticalAlign: "middle" }} />{neg ? "Empresa debe al conductor" : "Conductor debe a empresa"}</></div><div style={{ fontSize: 11, color: C.t3, marginTop: 4 }}>{neg ? "Empresa cobró más → paga diferencia" : "Conductor cobró más efectivo → descuenta"}</div></div>
-              <div style={{ fontSize: 26, fontWeight: 900, color: neg ? C.green : C.red, marginLeft: 14, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(dayStats.diferencia))}</div>
-            </div>
-          ); })()}
+          </>}
           {(() => {
             const etiqueta = { fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" };
             const campo = { ...inp, padding: "10px 11px", fontSize: 15 };
@@ -1028,8 +1031,13 @@ function TXpro() {
               jornadaHoy.carreras && dayStats.facturacion > 0 ? `${fmt(dayStats.facturacion / jornadaHoy.carreras)} por carrera` : null,
             ].filter(Boolean);
             return (
-              <div style={{ ...card, padding: 16, marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Tu jornada</div>
+              <div style={{ ...card, padding: verJornada ? 16 : "13px 16px", marginBottom: 14 }}>
+                <button className="nb" onClick={() => setVerJornada((v) => !v)} aria-expanded={verJornada} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                  <span style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, flexShrink: 0 }}>Tu jornada</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.t3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "right" }}>{verJornada ? "" : [form.inicio && form.fin ? `${form.inicio}–${form.fin}` : form.inicio ? `desde ${form.inicio}` : null, jornadaHoy.carreras ? `${jornadaHoy.carreras} carreras` : null, jornadaHoy.propinas ? `propinas ${fmt0(jornadaHoy.propinas)}` : null, combustibleDe(form) ? `combustible ${fmt0(combustibleDe(form))}` : null].filter(Boolean).join(" · ") || "horas, carreras, propinas, combustible"}</span>
+                  <span style={{ color: C.t2, flexShrink: 0 }}>{verJornada ? "▴" : "▾"}</span>
+                </button>
+                {verJornada && <div style={{ marginTop: 12 }}>
                 <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                   <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Empiezas</span><input className="inp" type="time" aria-label="Hora de empezar" style={campo} value={form.inicio || ""} onChange={(e) => editar("inicio", e.target.value)} /></label>
                   <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Terminas</span><input className="inp" type="time" aria-label="Hora de terminar" style={campo} value={form.fin || ""} onChange={(e) => editar("fin", e.target.value)} /></label>
@@ -1048,6 +1056,7 @@ function TXpro() {
                 </div>
                 {enfoque === "combustible" && <div style={{ marginTop: 8 }}>{ayudaSuma("combustible", "repostaje")}</div>}
                 {datos.length > 0 && <div style={{ marginTop: 10, background: `${C.acc}10`, border: `1px solid ${C.acc}33`, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 700, color: C.t1, lineHeight: 1.5 }}>{datos.join(" · ")}</div>}
+                </div>}
               </div>
             );
           })()}
