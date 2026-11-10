@@ -1,8 +1,10 @@
 const { useState, useMemo, useEffect, useRef } = React;
 const APP_VERSION = "__APP_VERSION__";
-const fmt = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
+// useGrouping "always": en español los miles de cuatro cifras no llevan punto
+// por defecto (2269,40 €); con esto sí (2.269,40 €), que se lee mejor.
+const fmt = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, useGrouping: "always" }).format(n);
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const fmt0 = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+const fmt0 = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0, useGrouping: "always" }).format(n);
 const todayStr = () => ymd(new Date());
 const shiftDays = (s, n) => { const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y, m - 1, d + n)); };
 const weekStart = (s) => { const [y, m, d] = s.split("-").map(Number); return ymd(new Date(y, m - 1, d - ((new Date(y, m - 1, d).getDay() + 6) % 7))); };
@@ -584,12 +586,29 @@ const Desglose = ({ entries, plats, etiqueta }) => {
   );
 };
 
-const Hero = ({ total, conductor, etiqueta }) => (
-  <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }}>
-    <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
-    <div style={{ fontSize: 13, color: C.t2, marginTop: 6 }}>Facturación base · {etiqueta}: <strong style={{ color: C.t1 }}>{fmt(conductor)}</strong></div>
-  </div>
-);
+// LO PRIMERO DEL RESUMEN: lo facturado y, debajo, la cuenta que importa: tu
+// parte, lo que has gastado tú y lo que te queda limpio (con propinas y extras).
+const Hero = ({ total, dias, media, parte, etiqueta, propinas = 0, extra = 0, gastos = 0 }) => {
+  const limpio = parte + propinas + extra - gastos;
+  const corto = (v) => (Math.abs(v) >= 10000 ? fmt0(v) : fmt(v));
+  const ficha = { flex: 1, minWidth: 0, background: C.surf, border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 6px", textAlign: "center" };
+  const tit = { fontSize: 10.5, color: C.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+  const val = { fontSize: 13.5, fontWeight: 900, whiteSpace: "nowrap" };
+  const colLimpio = limpio >= 0 ? C.green : C.red;
+  const suma = [propinas > 0 ? `${fmt(propinas)} de propinas` : null, extra > 0 ? `${fmt(extra)} de extra` : null].filter(Boolean);
+  return (
+    <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }} aria-label="Resumen del periodo">
+      <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(total)}</div>
+      <div style={{ fontSize: 13, color: C.t2, marginTop: 4 }}>Facturado{dias > 0 ? <> · {dias} {dias === 1 ? "día" : "días"} · media <strong style={{ color: C.t1 }}>{fmt0(media)}</strong> al día</> : null}</div>
+      <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
+        <div style={ficha}><div style={tit}>{etiqueta}</div><div style={{ ...val, color: parte >= 0 ? C.t1 : C.red }}>{corto(parte)}</div></div>
+        <div style={ficha}><div style={tit}>Tus gastos</div><div style={{ ...val, color: gastos > 0 ? C.red : C.t3 }}>{gastos > 0 ? "−" : ""}{corto(gastos)}</div></div>
+        <div style={{ ...ficha, background: `${colLimpio}12`, border: `1px solid ${colLimpio}44` }}><div style={{ ...tit, color: colLimpio }}>Te queda</div><div style={{ ...val, color: colLimpio }}>{corto(limpio)}</div></div>
+      </div>
+      {suma.length > 0 && <div style={{ fontSize: 11, color: C.t3, marginTop: 8 }}>«Te queda» incluye {suma.join(" y ")}.</div>}
+    </div>
+  );
+};
 const StatCard = ({ title, items, children }) => (
   <div style={{ ...card, padding: 16, marginBottom: 12 }}>
     <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>{title}</div>
@@ -739,7 +758,7 @@ function TXpro() {
     const previstos = ym >= monthKey(todayStr()) ? (new Date(y, m, 0).getDate() * (dt >= 1 && dt <= 7 ? dt : 6)) / 7 : 0;
     return cuota / Math.max(1, trabajados, previstos);
   };
-  const etqParte = fijo ? "Para ti, quitada la cuota" : `Conductor (${pct}%)`;
+  const etqParte = fijo ? "Tras la cuota" : `Tu ${pct}%`;
   const notaHora = fijo ? "lo que te queda tras la cuota" : `tu ${pct}%`;
   const etqDia = fijo ? "Tuyo día" : `${pct}% día`;
   // Las filas del reparto en las liquidaciones: el % o la cuota y lo que te queda.
@@ -785,7 +804,11 @@ function TXpro() {
   // Todo lo que teclea el conductor pasa por aquí, para que quede en el borrador.
   const editar = (k, val) => { const n = { ...form, [k]: val }; setForm(n); setBorradores((b) => ({ ...b, [editDate]: n })); };
   // Al salir de la casilla se hace la cuenta y queda solo el total.
-  const cerrarCasilla = (k) => { setEnfoque(null); const raw = form[k]; if (typeof raw !== "string" || !/[+\-,]/.test(raw)) return; const t = Math.max(0, evalSuma(raw)); editar(k, t > 0 ? String(t) : ""); };
+  // Al salir de una casilla, su ayuda ("+ Sumar otro viaje") se quita un instante
+  // después: si se quitara ya, lo de debajo subiría de golpe y el toque que
+  // estaba cayendo en un botón (Guardar, desplegar…) iría a parar a otro sitio.
+  const soltarEnfoque = (k) => setTimeout(() => setEnfoque((e) => (e === k ? null : e)), 160);
+  const cerrarCasilla = (k) => { soltarEnfoque(k); const raw = form[k]; if (typeof raw !== "string" || !/[+\-,]/.test(raw)) return; const t = Math.max(0, evalSuma(raw)); editar(k, t > 0 ? String(t) : ""); };
   const sumarOtro = (k) => {
     const raw = String(form[k] ?? "").trim();
     if (raw && !/[+-]$/.test(raw)) editar(k, raw + "+");
@@ -811,6 +834,7 @@ function TXpro() {
     const pausado = reloj.pausado + (reloj.pausaDesde ? t - reloj.pausaDesde : 0);
     const descanso = Math.round(pausado / 60000);
     ponerEnDia(reloj.fecha, { inicio: horaDe(reloj.inicio), fin: horaDe(t), descanso: descanso > 0 ? descanso : "" });
+    if (reloj.fecha === editDate) setVerJornada(true);  // toca apuntar carreras y propinas
     setReloj(null); setAvisoReloj(reloj.fecha === editDate ? "Jornada terminada: revisa las cifras y guarda el día." : `Jornada terminada y apuntada en el ${weekday(reloj.fecha)} ${Number(reloj.fecha.slice(8))}: ábrelo y guárdalo.`);
   };
   const cancelarReloj = () => { if (window.confirm("¿Parar el cronómetro sin apuntar la hora de terminar?")) setReloj(null); };
@@ -1108,7 +1132,7 @@ function TXpro() {
                   <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Terminas</span><input className="inp" type="time" aria-label="Hora de terminar" style={campo} value={form.fin || ""} onChange={(e) => editar("fin", e.target.value)} /></label>
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
-                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Carreras</span><input className="inp" type="number" min="0" step="1" inputMode="numeric" placeholder="0" aria-label="Número de carreras" style={{ ...campo, textAlign: "right" }} value={form.carreras || ""} onFocus={() => setEnfoque("carreras")} onBlur={() => setEnfoque(null)} onChange={(e) => editar("carreras", e.target.value.replace(/\D/g, ""))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Carreras</span><input className="inp" type="number" min="0" step="1" inputMode="numeric" placeholder="0" aria-label="Número de carreras" style={{ ...campo, textAlign: "right" }} value={form.carreras || ""} onFocus={() => setEnfoque("carreras")} onBlur={() => soltarEnfoque("carreras")} onChange={(e) => editar("carreras", e.target.value.replace(/\D/g, ""))} /></label>
                   <label style={{ flex: 1, minWidth: 0 }}><span style={etiqueta}>Propinas</span>{casilla("propinas", "Propinas", { width: "100%", padding: "10px 11px", fontSize: 15 })}</label>
                 </div>
                 {enfoque === "propinas" && <div style={{ marginTop: 8 }}>{ayudaSuma("propinas")}</div>}
@@ -1458,15 +1482,15 @@ function TXpro() {
             })()}
             {selectedData && (() => { const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, incentivo, combustibleMes, diasTrabajados, mediaDiaria, gastos: gastosMes } = selectedData; return (
               <div>
-                <Hero total={totalFact} conductor={conductorMes} etiqueta={etqParte} />
+                <Hero total={totalFact} dias={diasTrabajados} media={mediaDiaria} parte={conductorMes} etiqueta={etqParte} propinas={selectedData.jornada.propinas} extra={incentivo.importe} gastos={gastosMes.total - gastosMes.reembolsable} />
+                <Balance value={diferenciaMes} pendiente={porMes && selectedMonth >= monthKey(todayStr())} sub={porMes && selectedMonth >= monthKey(todayStr()) && diferenciaMes > 0 ? `Lo que le falta cobrar a la empresa para llegar a los ${fmt0(cuota)}` : gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
                 <Desglose entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} etiqueta={capitalizar(monthLabel(selectedMonth))} />
                 {(() => { const ant = mesAnterior(selectedMonth); return <Reparto entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} previo={desgloseDe(Object.entries(days).filter(([d]) => monthKey(d) === ant), plats).totalFact} frente={new Date(Number(ant.slice(0, 4)), Number(ant.slice(5)) - 1).toLocaleDateString("es-ES", { month: "long" })} />; })()}
-                <StatCard title="Liquidación mensual" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, ...filasReparto(selectedData, false), { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfgInc.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
+                <StatCard title="Liquidación mensual" items={[...filasReparto(selectedData, false), { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfgInc.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
                   : <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>{incentivo.pendiente}</div>}
                 </StatCard>
                 <JornadaResumen j={selectedData.jornada} nota={notaHora} />
-                <Balance value={diferenciaMes} pendiente={porMes && selectedMonth >= monthKey(todayStr())} sub={porMes && selectedMonth >= monthKey(todayStr()) && diferenciaMes > 0 ? `Lo que le falta cobrar a la empresa para llegar a los ${fmt0(cuota)}` : gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
                 <DayTable rows={rows} etiqueta={etqDia} mensual={porMes} />
               </div>
             ); })()}
@@ -1613,7 +1637,8 @@ function TXpro() {
             </div>
           ); })()}
           {diasTrabajados === 0 ? <div style={{ color: C.t2, textAlign: "center", padding: 32, fontSize: 14 }}>Sin días registrados en este periodo.</div> : <>
-            <Hero total={totalFact} conductor={conductorMes} etiqueta={etqParte} />
+            <Hero total={totalFact} dias={diasTrabajados} media={mediaDiaria} parte={conductorMes} etiqueta={etqParte} propinas={rangeData.jornada.propinas} gastos={gastosPeriodo.total - gastosPeriodo.reembolsable} />
+            <Balance value={diferenciaMes} sub={gastosPeriodo.reembolsable > 0 ? "Balance del periodo · incluye los gastos a devolver" : "Balance del periodo seleccionado"} />
             <Desglose entries={Object.entries(days).filter(([d]) => d >= lo && d <= hi)} plats={plats} etiqueta={`del ${dayMonth(lo)} al ${dayMonth(hi)}`} />
             {(() => { const largo = diasEntre(lo, hi) + 1; const pLo = shiftDays(lo, -largo), pHi = shiftDays(lo, -1); return <Reparto entries={Object.entries(days).filter(([d]) => d >= lo && d <= hi)} plats={plats} previo={desgloseDe(Object.entries(days).filter(([d]) => d >= pLo && d <= pHi), plats).totalFact} frente={modoResumen === "semana" ? "la semana anterior" : `los ${largo} días anteriores`} />; })()}
             {(() => { const porDia = Object.fromEntries(rows.map((r) => [r.date, r.s.facturacion])); const cal = daysBetween(lo, hi); const tope = Math.max(1, ...cal.map((d) => porDia[d] || 0)); return (
@@ -1631,9 +1656,8 @@ function TXpro() {
                 </div>
               </div>
             ); })()}
-            <StatCard title="Resumen del periodo" items={[{ label: `Media diaria (${diasTrabajados} ${diasTrabajados === 1 ? "día" : "días"})`, val: mediaDiaria, color: C.t1 }, ...filasReparto(rangeData, true), { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosPeriodo.total > 0 ? [{ label: "Gastos del periodo", val: gastosPeriodo.total, color: C.red, neg: true }] : []), ...(gastosPeriodo.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosPeriodo.reembolsable, color: C.green }] : [])]} />
+            <StatCard title="Resumen del periodo" items={[...filasReparto(rangeData, true), { label: "Cobrado por empresa (acumulado periodo)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosPeriodo.total > 0 ? [{ label: "Gastos del periodo", val: gastosPeriodo.total, color: C.red, neg: true }] : []), ...(gastosPeriodo.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosPeriodo.reembolsable, color: C.green }] : [])]} />
             <JornadaResumen j={rangeData.jornada} nota={notaHora} />
-            <Balance value={diferenciaMes} sub={gastosPeriodo.reembolsable > 0 ? "Balance del periodo · incluye los gastos a devolver" : "Balance del periodo seleccionado"} />
             <DayTable rows={rows} etiqueta={etqDia} mensual={porMes} />
           </>}
         </>); })()}
