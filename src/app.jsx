@@ -382,7 +382,7 @@ const TRAZOS = {
 };
 TRAZOS.resumen = TRAZOS.mensual;
 TRAZOS.flota = <><circle cx="9" cy="8.2" r="3.2" /><path d="M2.8 19.6c.6-3.4 3-5.4 6.2-5.4s5.6 2 6.2 5.4" /><circle cx="17.2" cy="9.2" r="2.5" /><path d="M17 14.4c2.3.3 3.8 1.800 4.300 4.400" /></>;
-TRAZOS.alta = <><circle cx="10" cy="8.2" r="3.4" /><path d="M3.400 19.800c.700-3.600 3.200-5.600 6.600-5.600 1.300 0 2.500.300 3.500.900" /><path d="M18 14.200v6.200M14.900 17.300h6.200" /></>;
+TRAZOS.coche = <><path d="M4.4 16.4v-4.2l1.8-4.4a2 2 0 0 1 1.900-1.300h7.800a2 2 0 0 1 1.900 1.300l1.800 4.400v4.200" /><path d="M3.2 16.400h17.600" /><path d="M5.800 16.400v2.300M18.200 16.400v2.300" /><path d="M5 11.900h14" /><circle cx="7.700" cy="14.100" r="0.900" /><circle cx="16.300" cy="14.100" r="0.900" /></>;
 const Icono = ({ name, size = 23 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}>{TRAZOS[name]}</svg>
 );
@@ -781,14 +781,19 @@ const DayTable = ({ rows, etiqueta, mensual, empresa }) => (
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS DOS CARAS DE TXPRO: CONDUCTOR Y EMPRESA O FLOTA
 // El conductor lleva sus cuentas como siempre. La empresa da de alta a sus
-// conductores y ve las cuentas de cada uno y las de toda la flota, con las
-// mismas operaciones que el Resumen del conductor (cuentasMes).
+// conductores y sus coches, ve las cuentas de cada uno y las de toda la flota
+// (con las mismas operaciones que el Resumen del conductor: cuentasMes), y
+// puede apuntar o corregir un día.
+// El conductor que pertenece a una flota (vínculo) tiene el acuerdo que le
+// pone la empresa y no lo puede cambiar; el que va por libre pone el suyo.
 // Hoy todo vive en el móvil: las cuentas de un conductor llegan con su copia
-// de seguridad. Cuando haya servidor e inicio de sesión llegarán solas, y lo
-// único que cambia es de dónde sale `flota` (leerFlota / guardar).
+// de seguridad y el vínculo, con un enlace de invitación. Cuando haya servidor
+// e inicio de sesión llegarán solos, y lo único que cambia es de dónde salen
+// `flota` (leerFlota) y el vínculo (leerVinculo).
 // ═══════════════════════════════════════════════════════════════════════════
 const ROL_KEY = "tc_rol";
 const FLOTA_KEY = "tc_flota";
+const VINCULO_KEY = "tc_vinculo";
 // Sin rol guardado: quien ya tiene cuentas apuntadas es conductor; quien abre
 // la app por primera vez elige.
 const leerRol = () => {
@@ -798,17 +803,26 @@ const leerRol = () => {
 };
 const guardarRol = (r) => { try { localStorage.setItem(ROL_KEY, JSON.stringify(r)); } catch {} };
 const ACUERDO_BASE = { modo: "porcentaje", pctConductor: 50, cuota: "", cuotaPor: "dia" };
+const normAcuerdo = (a) => { const x = a && typeof a === "object" ? a : {}; return { modo: x.modo === "fijo" ? "fijo" : "porcentaje", pctConductor: Math.min(100, Math.max(0, num(x.pctConductor === undefined ? 50 : x.pctConductor))), cuota: Math.max(0, num(x.cuota)), cuotaPor: x.cuotaPor === "mes" ? "mes" : "dia" }; };
+const acuerdoTxt = (a) => (a.modo === "fijo" ? `Cuota de ${fmt0(num(a.cuota))} ${a.cuotaPor === "mes" ? "al mes" : "por día"}` : `Al ${num(a.pctConductor)} %`);
 const diasLimpios = (dias) => Object.fromEntries(Object.entries(dias && typeof dias === "object" ? dias : {}).filter(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && v && typeof v === "object" && hasData(v)).map(([d, v]) => [d, migrateDay(v)]));
 const normConductor = (c) => ({
   id: String(c.id), nombre: String(c.nombre || "").trim(), telefono: String(c.telefono || "").trim(), alta: /^\d{4}-\d{2}-\d{2}$/.test(c.alta || "") ? c.alta : todayStr(),
   acuerdo: { ...ACUERDO_BASE, ...(c.acuerdo && typeof c.acuerdo === "object" ? c.acuerdo : {}) }, plataformas: normPlataformas(c.plataformas),
   days: diasLimpios(c.days), gastos: Array.isArray(c.gastos) ? c.gastos.filter(gastoValido) : [], actualizado: typeof c.actualizado === "string" ? c.actualizado : "", ejemplo: !!c.ejemplo,
 });
+// Los coches de la empresa: matrícula, licencia, quién lo lleva y sus gastos.
+const CONCEPTOS_COCHE = ["Seguro", "Taller", "ITV", "Neumáticos", "Gestoría", "Letra", "Otros"];
+const normVehiculo = (v) => ({ id: String(v.id), matricula: String(v.matricula || "").trim().toUpperCase().slice(0, 12), licencia: String(v.licencia || "").trim().slice(0, 16), modelo: String(v.modelo || "").trim().slice(0, 40), conductorId: v.conductorId ? String(v.conductorId) : "", gastos: Array.isArray(v.gastos) ? v.gastos.filter(gastoValido) : [], ejemplo: !!v.ejemplo });
+const gastosCocheMes = (v, ym) => v.gastos.reduce((a, g) => (monthKey(g.date) === ym ? a + (Number(g.importe) || 0) : a), 0);
 const leerFlota = () => {
   const f = loadStorage(FLOTA_KEY, null);
-  return { empresa: f && typeof f.empresa === "string" ? f.empresa : "", conductores: (f && Array.isArray(f.conductores) ? f.conductores : []).filter((c) => c && c.id && c.nombre).map(normConductor) };
+  return {
+    empresa: f && typeof f.empresa === "string" ? f.empresa : "",
+    conductores: (f && Array.isArray(f.conductores) ? f.conductores : []).filter((c) => c && c.id && c.nombre).map(normConductor),
+    vehiculos: (f && Array.isArray(f.vehiculos) ? f.vehiculos : []).filter((v) => v && v.id && v.matricula).map(normVehiculo),
+  };
 };
-const acuerdoTxt = (a) => (a.modo === "fijo" ? `Cuota de ${fmt0(num(a.cuota))} ${a.cuotaPor === "mes" ? "al mes" : "por día"}` : `Al ${num(a.pctConductor)} %`);
 // Las cuentas de un mes de un conductor con su acuerdo: lo mismo que ve él.
 const cuentasMes = (c, ym) => {
   const a = c.acuerdo; const fijo = a.modo === "fijo"; const cuota = num(a.cuota); const porMes = fijo && a.cuotaPor === "mes";
@@ -819,18 +833,41 @@ const cuentasMes = (c, ym) => {
 };
 // Una flota de ejemplo, para ver cómo queda el panel antes de dar de alta a nadie.
 const flotaDeEjemplo = () => {
-  const hoy = new Date(); const f = (x) => ymd(x);
+  const hoy = new Date();
   const hacer = (i, nombre, acuerdo, semilla, libra) => {
     const days = {};
     for (let k = 0; k < 45; k++) {
       const x = new Date(hoy); x.setDate(hoy.getDate() - k); if (x.getDay() === libra) continue;
       const r = (k * semilla + i * 11) % 60; const finde = x.getDay() === 5 || x.getDay() === 6 ? 40 : 0;
-      days[f(x)] = { taximetro: 120 + r + finde, visa: 30 + (r % 40), uber: 30 + (r % 25), uberEfec: 5 + (r % 10), cabify: 10 + (r % 20), cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, carreras: 10 + (r % 7), inicio: "07:00", fin: "16:00" };
+      days[ymd(x)] = { taximetro: 120 + r + finde, visa: 30 + (r % 40), uber: 30 + (r % 25), uberEfec: 5 + (r % 10), cabify: 10 + (r % 20), cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, carreras: 10 + (r % 7), inicio: "07:00", fin: "16:00" };
     }
     return normConductor({ id: `ejemplo-${i}`, nombre, telefono: "", acuerdo, days, gastos: [], actualizado: new Date().toISOString(), ejemplo: true });
   };
-  return [hacer(1, "Antonio García", { modo: "porcentaje", pctConductor: 50 }, 37, 2), hacer(2, "Karim Benali", { modo: "fijo", cuota: "125", cuotaPor: "dia" }, 29, 3), hacer(3, "Lucía Fernández", { modo: "porcentaje", pctConductor: 45 }, 41, 1)];
+  const dia = (n) => ymd(new Date(hoy.getFullYear(), hoy.getMonth(), Math.min(n, hoy.getDate())));
+  return {
+    conductores: [hacer(1, "Antonio García", { modo: "porcentaje", pctConductor: 50 }, 37, 2), hacer(2, "Karim Benali", { modo: "fijo", cuota: "125", cuotaPor: "dia" }, 29, 3), hacer(3, "Lucía Fernández", { modo: "porcentaje", pctConductor: 45 }, 41, 1)],
+    vehiculos: [
+      normVehiculo({ id: "ejemplo-v1", matricula: "1234 LBC", licencia: "05123", modelo: "Toyota Corolla", conductorId: "ejemplo-1", ejemplo: true, gastos: [{ id: 1, date: dia(2), concepto: "Seguro", importe: 142 }, { id: 2, date: dia(6), concepto: "Taller", importe: 95.5 }] }),
+      normVehiculo({ id: "ejemplo-v2", matricula: "5678 MDF", licencia: "11870", modelo: "Dacia Jogger", conductorId: "ejemplo-2", ejemplo: true, gastos: [{ id: 3, date: dia(3), concepto: "Seguro", importe: 138 }] }),
+      normVehiculo({ id: "ejemplo-v3", matricula: "9012 KXH", licencia: "08456", modelo: "Toyota Prius+", conductorId: "ejemplo-3", ejemplo: true, gastos: [{ id: 4, date: dia(4), concepto: "ITV", importe: 48 }] }),
+    ],
+  };
 };
+// EL VÍNCULO CON UNA FLOTA. La empresa manda al conductor un enlace de
+// invitación con su acuerdo; al aceptarlo, el acuerdo queda fijado por ella.
+// Lo que llega en el enlace viene de fuera: se limpia y se recorta todo.
+const normVinculo = (v) => { const x = v && typeof v === "object" ? v : {}; return { empresa: String(x.empresa || "").trim().slice(0, 60), nombre: String(x.nombre || "").trim().slice(0, 60), acuerdo: normAcuerdo(x.acuerdo), desde: /^\d{4}-\d{2}-\d{2}$/.test(x.desde || "") ? x.desde : todayStr() }; };
+const leerVinculo = () => { const v = loadStorage(VINCULO_KEY, null); return v && typeof v === "object" && v.acuerdo ? normVinculo(v) : null; };
+const codificarInvitacion = (empresa, c) => { const json = JSON.stringify({ v: 1, e: empresa, n: c.nombre, a: normAcuerdo(c.acuerdo) }); return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const leerInvitacion = () => {
+  try {
+    const p = new URLSearchParams(window.location.search).get("alta"); if (!p || p.length > 2000) return null;
+    const d = JSON.parse(decodeURIComponent(escape(atob(p.replace(/-/g, "+").replace(/_/g, "/")))));
+    if (!d || d.v !== 1 || !d.a || typeof d.a !== "object") return null;
+    return normVinculo({ empresa: d.e, nombre: d.n, acuerdo: d.a });
+  } catch { return null; }
+};
+const quitarInvitacionDeLaUrl = () => { try { window.history.replaceState(null, "", window.location.pathname); } catch {} };
 // El tema (claro, oscuro o el del móvil), igual para las dos caras.
 const useTema = () => {
   const [tema, setTema] = useState(leerTema);
@@ -854,6 +891,13 @@ const SelectorTema = ({ tema, elegirTema }) => (
     ))}
   </div>
 );
+const Portada = ({ children }) => (
+  <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", padding: "calc(44px + env(safe-area-inset-top, 0px)) 20px 32px" }}>
+    <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><TXLogo size={68} /></div>
+    <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: -0.5, textAlign: "center" }}>TX<span style={{ color: C.accDim }}>pro</span></div>
+    {children}
+  </div>
+);
 // LA ENTRADA: la primera vez se elige cómo se va a usar la app. Aquí irá el
 // inicio de sesión cuando haya cuentas en la nube.
 const Entrada = ({ alElegir }) => {
@@ -861,9 +905,7 @@ const Entrada = ({ alElegir }) => {
   const opcion = { width: "100%", display: "flex", alignItems: "center", gap: 14, textAlign: "left", padding: 16, borderRadius: 16, border: `1.5px solid ${C.border}`, background: C.surf, boxShadow: C.sombra, cursor: "pointer", fontFamily: "inherit", color: C.t1, marginBottom: 12 };
   const icono = { width: 46, height: 46, borderRadius: 14, background: `${C.acc}1c`, color: C.accDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", padding: "calc(44px + env(safe-area-inset-top, 0px)) 20px 32px" }}>
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><TXLogo size={68} /></div>
-      <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: -0.5, textAlign: "center" }}>TX<span style={{ color: C.accDim }}>pro</span></div>
+    <Portada>
       <div style={{ fontSize: 14, color: C.t2, textAlign: "center", margin: "6px 0 28px" }}>Las cuentas del taxi, claras y al día.</div>
       <div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>¿Cómo vas a usar TXpro?</div>
       <button className="nb" onClick={() => alElegir("conductor")} style={opcion}>
@@ -873,11 +915,30 @@ const Entrada = ({ alElegir }) => {
       </button>
       <button className="nb" onClick={() => alElegir("empresa")} style={opcion}>
         <span style={icono}><Icono name="flota" size={25} /></span>
-        <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 16, fontWeight: 900 }}>Soy empresa o flota</span><span style={{ display: "block", fontSize: 12.5, color: C.t2, marginTop: 2, lineHeight: 1.4 }}>Doy de alta a mis conductores y llevo las cuentas de cada uno.</span></span>
+        <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 16, fontWeight: 900 }}>Soy empresa o flota</span><span style={{ display: "block", fontSize: 12.5, color: C.t2, marginTop: 2, lineHeight: 1.4 }}>Doy de alta a mis conductores y mis coches, y llevo las cuentas de cada uno.</span></span>
         <span style={{ color: C.t3, fontSize: 20 }}>›</span>
       </button>
       <div style={{ fontSize: 12, color: C.t3, textAlign: "center", lineHeight: 1.5, marginTop: 14 }}>Podrás cambiarlo cuando quieras en Ajustes.<br />Tus datos se guardan en este móvil.</div>
-    </div>
+    </Portada>
+  );
+};
+// LA INVITACIÓN: lo que ve el conductor al abrir el enlace de su empresa.
+const Invitacion = ({ inv, alAceptar, alRechazar }) => {
+  useTema();
+  return (
+    <Portada>
+      <div style={{ ...card, padding: 18, marginTop: 24 }} aria-label="Invitación a una flota">
+        <div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Invitación a una flota</div>
+        <div style={{ fontSize: 17, fontWeight: 900, lineHeight: 1.3, marginBottom: 10 }}>{inv.empresa || "Tu empresa"} te ha dado de alta{inv.nombre ? ` como ${inv.nombre}` : ""}</div>
+        <div style={{ background: `${C.acc}12`, border: `1px solid ${C.acc}33`, borderRadius: 12, padding: "10px 12px", marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Tu acuerdo</div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: C.accDim, marginTop: 2 }}>{acuerdoTxt(inv.acuerdo)}</div>
+        </div>
+        <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 14 }}>Si aceptas, tus cuentas se harán con este acuerdo, que <strong style={{ color: C.t1 }}>lo fija la empresa</strong>: no podrás cambiarlo desde tu app. Tus días apuntados no se tocan. Podrás salir de la flota en Ajustes.</div>
+        <button className="saveBtn" onClick={alAceptar} style={{ width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" }}>Aceptar y unirme</button>
+        <button className="nb" onClick={alRechazar} style={{ width: "100%", marginTop: 10, padding: 11, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ahora no</button>
+      </div>
+    </Portada>
   );
 };
 // EL PANEL DE LA EMPRESA
@@ -889,15 +950,23 @@ function Flota({ alCambiarRol }) {
   const [mes, setMes] = useState(() => monthKey(todayStr()));
   const NUEVO = { id: null, nombre: "", telefono: "", ...ACUERDO_BASE };
   const [ficha, setFicha] = useState(NUEVO);
+  const [diaForm, setDiaForm] = useState({ fecha: todayStr(), v: {} });
+  const COCHE_NUEVO = { id: null, matricula: "", licencia: "", modelo: "", conductorId: "" };
+  const [coche, setCoche] = useState(COCHE_NUEVO);
+  const [gastoCoche, setGastoCoche] = useState({ date: todayStr(), concepto: CONCEPTOS_COCHE[0], importe: "" });
   const [aviso, setAviso] = useState("");
+  const [enlace, setEnlace] = useState("");
   useEffect(() => { try { localStorage.setItem(FLOTA_KEY, JSON.stringify(flota)); } catch {} }, [flota]);
-  const conductores = flota.conductores;
+  const conductores = flota.conductores; const vehiculos = flota.vehiculos;
   const sel = conductores.find((c) => c.id === idSel) || null;
+  const cocheSel = vehiculos.find((v) => v.id === coche.id) || null;
   const mesHoy = monthKey(todayStr());
   const cuentas = useMemo(() => conductores.map((c) => ({ c, m: cuentasMes(c, mes) })), [conductores, mes]);
-  const hayEjemplo = conductores.some((c) => c.ejemplo);
-  const ir = (v) => { setVista(v); setAviso(""); try { window.scrollTo(0, 0); } catch {} };
+  const hayEjemplo = conductores.some((c) => c.ejemplo) || vehiculos.some((v) => v.ejemplo);
+  const ir = (v) => { setVista(v); setAviso(""); setEnlace(""); setTimeout(() => { try { window.scrollTo(0, 0); } catch {} }, 0); };
   const abrir = (id) => { setIdSel(id); ir("conductor"); };
+  const cambiaConductor = (id, f) => setFlota((fl) => ({ ...fl, conductores: fl.conductores.map((c) => (c.id === id ? f(c) : c)) }));
+  const cambiaCoche = (id, f) => setFlota((fl) => ({ ...fl, vehiculos: fl.vehiculos.map((v) => (v.id === id ? f(v) : v)) }));
   const nuevaFicha = () => { setFicha(NUEVO); ir("ficha"); };
   const editarFicha = (c) => { setFicha({ id: c.id, nombre: c.nombre, telefono: c.telefono, ...c.acuerdo }); ir("ficha"); };
   const guardarFicha = () => {
@@ -907,7 +976,7 @@ function Flota({ alCambiarRol }) {
     setFlota((f) => ({ ...f, conductores: ficha.id ? f.conductores.map((c) => (c.id === id ? { ...c, nombre, telefono: ficha.telefono.trim(), acuerdo } : c)) : [...f.conductores, normConductor({ id, nombre, telefono: ficha.telefono, acuerdo })] }));
     abrir(id);
   };
-  const darDeBaja = (c) => { if (!window.confirm(`¿Dar de baja a ${c.nombre}? Se borran sus cuentas de este móvil.`)) return; setFlota((f) => ({ ...f, conductores: f.conductores.filter((x) => x.id !== c.id) })); ir("panel"); };
+  const darDeBaja = (c) => { if (!window.confirm(`¿Dar de baja a ${c.nombre}? Se borran sus cuentas de este móvil.`)) return; setFlota((f) => ({ ...f, conductores: f.conductores.filter((x) => x.id !== c.id), vehiculos: f.vehiculos.map((v) => (v.conductorId === c.id ? { ...v, conductorId: "" } : v)) })); ir("panel"); };
   // Hasta que haya inicio de sesión, las cuentas de un conductor llegan con su
   // copia de seguridad (Ajustes → Copia de seguridad, en su móvil).
   const cargarCuentas = async (c, file) => {
@@ -916,22 +985,88 @@ function Flota({ alCambiarRol }) {
       const datos = JSON.parse(await file.text());
       if (!datos || !["txpro", "taxicuentas"].includes(datos.app) || typeof datos.days !== "object" || datos.days === null) { setAviso("Ese archivo no es una copia de TXpro."); return; }
       const days = diasLimpios(datos.days);
-      setFlota((f) => ({ ...f, conductores: f.conductores.map((x) => (x.id === c.id ? { ...x, days, gastos: Array.isArray(datos.gastos) ? datos.gastos.filter(gastoValido) : [], plataformas: normPlataformas(datos.cfg && datos.cfg.plataformas), actualizado: new Date().toISOString(), ejemplo: false } : x)) }));
+      cambiaConductor(c.id, (x) => ({ ...x, days, gastos: Array.isArray(datos.gastos) ? datos.gastos.filter(gastoValido) : [], plataformas: normPlataformas(datos.cfg && datos.cfg.plataformas), actualizado: new Date().toISOString(), ejemplo: false }));
       setAviso(`Cargados ${Object.keys(days).length} días de ${c.nombre}.`);
     } catch { setAviso("No se pudo leer el archivo."); }
   };
+  // La empresa también puede apuntar o corregir un día del conductor.
+  const valoresDia = (c, fecha) => { const d = c.days[fecha] || {}; const v = {}; for (const k of clavesDia(c.plataformas)) v[k] = Number(d[k]) ? String(d[k]) : ""; return v; };
+  const abrirDia = (c, fecha) => { setDiaForm({ fecha, v: valoresDia(c, fecha) }); ir("dia"); };
+  const guardarDia = () => {
+    if (!sel) return; const { fecha } = diaForm;
+    const limpio = {}; for (const k of clavesDia(sel.plataformas)) limpio[k] = Math.max(0, evalSuma(diaForm.v[k]));
+    const nuevo = { ...(sel.days[fecha] || {}), ...limpio };
+    cambiaConductor(sel.id, (x) => { const days = { ...x.days }; if (hasData(nuevo)) days[fecha] = nuevo; else delete days[fecha]; return { ...x, days, actualizado: new Date().toISOString(), ejemplo: false }; });
+    setMes(monthKey(fecha)); ir("conductor"); setAviso(`Guardado el ${dayMonth(fecha)}.`);
+  };
+  // El informe en PDF de un conductor, con las cuentas de la empresa con él.
+  const informeConductor = async (c) => {
+    if (aviso === "Preparando el informe…") return; setAviso("Preparando el informe…"); let fin = "";
+    try {
+      const m = cuentasMes(c, mes); const a = c.acuerdo; const d = desgloseDe(m.entries, c.plataformas); const dif = m.saldo;
+      const dias = m.rows.filter((r) => r.s.facturacion > 0).length;
+      const balance = Math.abs(dif) < 0.005 ? null : dif < 0 ? { label: "La empresa debe al conductor", val: fmt(-dif), color: "verde" } : m.porMes && mes >= mesHoy ? { label: "Faltan para cubrir la cuota del mes", val: fmt(dif), color: "oro" } : { label: "El conductor debe a la empresa", val: fmt(dif), color: "rojo" };
+      if (balance && m.gastos.reembolsable > 0) balance.sub = "Incluye los gastos que devuelve la empresa";
+      const reparto = m.fijo
+        ? [{ label: m.porMes ? "Cuota mensual a la empresa" : `Cuota a la empresa (${fmt0(num(a.cuota))} × ${dias} ${dias === 1 ? "día" : "días"})`, val: fmt(m.parteEmpresaMes) }, { label: "Para el conductor, quitada la cuota", val: fmt(m.conductorMes), fuerte: true, color: "oro" }]
+        : [{ label: `${num(a.pctConductor)}% conductor s/ facturación base`, val: fmt(m.conductorMes), fuerte: true, color: "oro" }, { label: "Parte de la empresa", val: fmt(m.parteEmpresaMes) }];
+      const coches = vehiculos.filter((v) => v.conductorId === c.id).map((v) => `${v.matricula}${v.licencia ? ` (licencia ${v.licencia})` : ""}`).join(", ");
+      const inf = {
+        titulo: `${c.nombre} · ${monthLabel(mes)}`, sub: `${flota.empresa || "Liquidación con la empresa"}${coches ? ` · ${coches}` : ""} · generado el ${new Date().toLocaleDateString("es-ES")}`,
+        total: fmt(m.totalFact), totalSub: `Facturado · ${m.diasTrabajados} ${m.diasTrabajados === 1 ? "día" : "días"} · media ${fmt0(m.mediaDiaria)} al día · ${acuerdoTxt(a).toLowerCase()}`,
+        fichas: [{ label: "Parte de la empresa", val: fmt(m.parteEmpresaMes) }, { label: "Cobrado por la empresa", val: fmt(m.totalCobradoEmpresa) }, { label: "Efectivo del conductor", val: fmt(m.efectivoMes) }],
+        nota: "", balance,
+        desglose: { filas: d.filas.map((f) => ({ nombre: f.nombre, fact: fmt(f.fact), efec: fmt(f.efec) })), tarjeta: d.tarjeta ? fmt(d.tarjeta) : "", totalFact: fmt(d.totalFact), totalEfec: fmt(d.totalEfec) },
+        liquidacionTitulo: "Liquidación del mes",
+        liquidacion: [...reparto, { label: "Cobrado por la empresa (apps y tarjeta)", val: fmt(m.totalCobradoEmpresa) }, { label: "Efectivo cobrado por el conductor", val: fmt(m.efectivoMes), color: "azul" }, ...(m.gastos.reembolsable > 0 ? [{ label: "Gastos que devuelve la empresa", val: fmt(m.gastos.reembolsable), color: "verde" }] : [])],
+        jornada: [],
+        gastos: c.gastos.filter((g) => monthKey(g.date) === mes && g.reembolsable).sort((x, y) => x.date.localeCompare(y.date)).map((g) => ({ label: `${g.concepto} · ${dayMonth(g.date)} · lo devuelve la empresa`, val: "−" + fmt(Number(g.importe) || 0) })),
+        dias: m.porMes
+          ? { cols: ["Fecha", "Facturado", "Cobró empresa", "Efectivo"], filas: m.rows.map((r) => [`${weekday(r.date)} ${dayMonth(r.date)}`, fmt(r.s.facturacion), fmt(r.s.cobradoEmpresa), fmt(r.s.facturacion - r.s.cobradoEmpresa)]) }
+          : { cols: ["Fecha", "Facturado", "Cobró empresa", "Efectivo", "Conductor", "Diferencia"], filas: m.rows.map((r) => [`${weekday(r.date)} ${dayMonth(r.date)}`, fmt(r.s.facturacion), fmt(r.s.cobradoEmpresa), fmt(r.s.facturacion - r.s.cobradoEmpresa), fmt(r.s.conductor50), { v: (r.s.diferencia <= 0 ? "−" : "+") + fmt(Math.abs(r.s.diferencia)), color: r.s.diferencia <= 0 ? "verde" : "rojo" }]) },
+      };
+      const limpio = c.nombre.normalize("NFD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "conductor";
+      const como = await entregarArchivo(await crearInformePDF(inf), `TXpro-${mes}-${limpio}.pdf`, inf.titulo);
+      fin = como === "descargado" ? "Informe descargado" : "";
+    } catch { fin = "No se pudo crear el informe en este móvil"; }
+    setAviso(fin);
+  };
+  // La invitación: un enlace con el acuerdo, para que el conductor quede
+  // vinculado a la flota desde su TXpro.
+  const invitar = async (c) => {
+    const url = `${window.location.origin}${window.location.pathname}?alta=${codificarInvitacion(flota.empresa.trim(), c)}`;
+    setEnlace(url);
+    const texto = `${flota.empresa.trim() || "Tu empresa"} te ha dado de alta en TXpro. Abre este enlace en tu móvil para unirte a la flota:`;
+    try { if (navigator.share) { await navigator.share({ title: "Invitación a TXpro", text: texto, url }); return; } } catch (e) { if (e && e.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(`${texto} ${url}`); setAviso("Invitación copiada: pégala en WhatsApp"); } catch { setAviso("Copia el enlace de abajo y mándaselo al conductor"); }
+  };
+  // Coches
+  const nuevoCoche = () => { setCoche(COCHE_NUEVO); ir("coche"); };
+  const abrirCoche = (v) => { setCoche({ id: v.id, matricula: v.matricula, licencia: v.licencia, modelo: v.modelo, conductorId: v.conductorId }); setGastoCoche({ date: todayStr(), concepto: CONCEPTOS_COCHE[0], importe: "" }); ir("coche"); };
+  const guardarCoche = () => {
+    const matricula = coche.matricula.trim().toUpperCase(); if (!matricula) return;
+    const id = coche.id || `v${Date.now()}`; const datos = { matricula, licencia: coche.licencia.trim(), modelo: coche.modelo.trim(), conductorId: coche.conductorId };
+    setFlota((f) => ({ ...f, vehiculos: coche.id ? f.vehiculos.map((v) => (v.id === id ? { ...v, ...datos, ejemplo: false } : v)) : [...f.vehiculos, normVehiculo({ id, ...datos })] }));
+    if (coche.id) { ir("coches"); } else { setCoche({ id, ...datos }); setAviso("Coche añadido. Ya puedes apuntar sus gastos."); }
+  };
+  const quitarCoche = (v) => { if (!window.confirm(`¿Quitar el coche ${v.matricula}? Se borran sus gastos.`)) return; setFlota((f) => ({ ...f, vehiculos: f.vehiculos.filter((x) => x.id !== v.id) })); ir("coches"); };
+  const anadirGastoCoche = () => { const importe = Math.max(0, evalSuma(gastoCoche.importe)); if (!cocheSel || !importe) return; cambiaCoche(cocheSel.id, (v) => ({ ...v, gastos: [...v.gastos, { id: Date.now(), date: gastoCoche.date, concepto: gastoCoche.concepto, importe }] })); setGastoCoche((g) => ({ ...g, importe: "" })); };
   const inp = { width: "100%", background: C.inp, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
   const tit = { fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 };
   const etq = { fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" };
   const principal = { width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" };
+  const apagado = { background: C.apagado, color: C.t3, cursor: "default" };
   const secundario = { flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
+  const dorado = { ...secundario, borderColor: `${C.acc}66`, background: `${C.acc}14`, color: C.accDim };
   const seg = (on) => ({ flex: 1, padding: "10px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" });
   const flecha = (on) => ({ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: on ? "pointer" : "default", fontFamily: "inherit", flexShrink: 0, opacity: on ? 1 : 0.35 });
   const fichaNum = { flex: 1, minWidth: 0, background: C.surf, border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 6px", textAlign: "center" };
   const fichaTit = { fontSize: 10.5, color: C.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
   const fichaVal = { fontSize: 13.5, fontWeight: 900, whiteSpace: "nowrap", color: C.t1 };
+  const volver = { background: "none", border: "none", padding: 0, marginBottom: 10, color: C.accDim, fontWeight: 800, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" };
   const corto = (v) => (Math.abs(v) >= 10000 ? fmt0(v) : fmt(v));
   const inicial = (n) => (n.trim()[0] || "?").toUpperCase();
+  const nombreDe = (id) => { const c = conductores.find((x) => x.id === id); return c ? c.nombre : ""; };
   // Desde la empresa: saldo > 0, el conductor le debe; saldo < 0, ella le debe.
   const saldoTxt = (v) => (Math.abs(v) < 0.005 ? "En paz" : v > 0 ? `Te debe ${fmt(v)}` : `Le debes ${fmt(-v)}`);
   const saldoCol = (v) => (Math.abs(v) < 0.005 ? C.t3 : v > 0 ? C.green : C.red);
@@ -940,6 +1075,12 @@ function Flota({ alCambiarRol }) {
       <button className="nb" onClick={() => setMes(mesVecino(mes, -1))} aria-label="Mes anterior" style={flecha(true)}>‹</button>
       <div style={{ fontSize: 15, fontWeight: 900, color: C.t1, textAlign: "center" }}>{capitalizar(monthLabel(mes))}</div>
       <button className="nb" disabled={mes >= mesHoy} onClick={() => mes < mesHoy && setMes(mesVecino(mes, 1))} aria-label="Mes siguiente" style={flecha(mes < mesHoy)}>›</button>
+    </div>
+  );
+  const bandaEjemplo = hayEjemplo && (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: `${C.blue}0f`, border: `1px solid ${C.blue}44`, borderRadius: 12, padding: "9px 12px", marginBottom: 12 }}>
+      <div style={{ flex: 1, fontSize: 12.5, color: C.t1 }}>Estás viendo una <strong>flota de ejemplo</strong>.</div>
+      <button className="nb" onClick={() => setFlota((f) => ({ ...f, conductores: f.conductores.filter((c) => !c.ejemplo), vehiculos: f.vehiculos.filter((v) => !v.ejemplo) }))} style={{ background: "none", border: "none", color: C.blue, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Quitar</button>
     </div>
   );
   return (
@@ -960,6 +1101,7 @@ function Flota({ alCambiarRol }) {
           const t = conDatos.reduce((a, x) => ({ fact: a.fact + x.m.totalFact, empresa: a.empresa + x.m.parteEmpresaMes, cobrado: a.cobrado + x.m.totalCobradoEmpresa, dias: a.dias + x.m.diasTrabajados }), { fact: 0, empresa: 0, cobrado: 0, dias: 0 });
           const teDeben = conDatos.filter((x) => x.m.saldo > 0.005); const debes = conDatos.filter((x) => x.m.saldo < -0.005);
           const sumaTeDeben = teDeben.reduce((a, x) => a + x.m.saldo, 0); const sumaDebes = debes.reduce((a, x) => a - x.m.saldo, 0);
+          const gCoches = vehiculos.reduce((a, v) => a + gastosCocheMes(v, mes), 0);
           const orden = [...cuentas].sort((a, b) => b.m.totalFact - a.m.totalFact || a.c.nombre.localeCompare(b.c.nombre));
           if (!conductores.length) return (
             <div style={{ ...card, padding: 22, textAlign: "center" }} aria-label="Flota vacía">
@@ -967,14 +1109,11 @@ function Flota({ alCambiarRol }) {
               <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 6 }}>Aún no tienes conductores</div>
               <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.5, marginBottom: 16 }}>Da de alta a cada conductor con su acuerdo (porcentaje o cuota fija) y verás aquí sus cuentas y las de toda la flota.</div>
               <button className="saveBtn" onClick={nuevaFicha} style={principal}>Dar de alta un conductor</button>
-              <button className="nb" onClick={() => setFlota((f) => ({ ...f, conductores: flotaDeEjemplo() }))} style={{ marginTop: 12, background: "none", border: "none", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>Ver con una flota de ejemplo</button>
+              <button className="nb" onClick={() => setFlota((f) => ({ ...f, ...flotaDeEjemplo() }))} style={{ marginTop: 12, background: "none", border: "none", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>Ver con una flota de ejemplo</button>
             </div>
           );
           return (<>
-            {hayEjemplo && <div style={{ display: "flex", alignItems: "center", gap: 10, background: `${C.blue}0f`, border: `1px solid ${C.blue}44`, borderRadius: 12, padding: "9px 12px", marginBottom: 12 }}>
-              <div style={{ flex: 1, fontSize: 12.5, color: C.t1 }}>Estás viendo una <strong>flota de ejemplo</strong>.</div>
-              <button className="nb" onClick={() => setFlota((f) => ({ ...f, conductores: f.conductores.filter((c) => !c.ejemplo) }))} style={{ background: "none", border: "none", color: C.blue, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Quitar</button>
-            </div>}
+            {bandaEjemplo}
             {selectorMes}
             <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }} aria-label="Resumen de la flota">
               <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(t.fact)}</div>
@@ -984,9 +1123,10 @@ function Flota({ alCambiarRol }) {
                 <div style={fichaNum}><div style={fichaTit}>Ya cobrado</div><div style={fichaVal}>{corto(t.cobrado)}</div></div>
                 <div style={fichaNum}><div style={fichaTit}>Conductores</div><div style={fichaVal}>{corto(t.fact - t.empresa)}</div></div>
               </div>
-              {(teDeben.length > 0 || debes.length > 0) && <div style={{ fontSize: 12.5, color: C.t2, marginTop: 10, lineHeight: 1.5 }}>
+              {(teDeben.length > 0 || debes.length > 0 || gCoches > 0) && <div style={{ fontSize: 12.5, color: C.t2, marginTop: 10, lineHeight: 1.6 }}>
                 {teDeben.length > 0 && <div><span style={{ color: C.green, fontWeight: 800 }}>Te deben {fmt(sumaTeDeben)}</span> · {teDeben.length} {teDeben.length === 1 ? "conductor" : "conductores"}</div>}
                 {debes.length > 0 && <div><span style={{ color: C.red, fontWeight: 800 }}>Debes {fmt(sumaDebes)}</span> · {debes.length} {debes.length === 1 ? "conductor" : "conductores"}</div>}
+                {gCoches > 0 && <div>Gastos de los coches <span style={{ color: C.red, fontWeight: 800 }}>−{fmt(gCoches)}</span> · a la empresa le quedan <strong style={{ color: C.t1 }}>{fmt(t.empresa - gCoches)}</strong></div>}
               </div>}
             </div>
             <div style={{ ...card, padding: "8px 16px", marginBottom: 12 }} aria-label="Conductores">
@@ -1011,13 +1151,15 @@ function Flota({ alCambiarRol }) {
         {vista === "conductor" && sel && (() => {
           const m = cuentasMes(sel, mes);
           const etiqueta = sel.acuerdo.modo === "fijo" ? "Suyo día" : `${num(sel.acuerdo.pctConductor)}% día`;
+          const suyos = vehiculos.filter((v) => v.conductorId === sel.id);
           return (<>
-            <button className="nb" onClick={() => ir("panel")} style={{ background: "none", border: "none", padding: 0, marginBottom: 10, color: C.accDim, fontWeight: 800, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" }}>‹ Flota</button>
+            <button className="nb" onClick={() => ir("panel")} style={volver}>‹ Flota</button>
             <div style={{ ...card, padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }} aria-label="Ficha del conductor">
               <span style={{ width: 46, height: 46, borderRadius: 14, background: `${C.acc}22`, color: C.accDim, fontWeight: 900, fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{inicial(sel.nombre)}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 17, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sel.nombre}</div>
                 <div style={{ fontSize: 12.5, color: C.t2, marginTop: 1 }}>{acuerdoTxt(sel.acuerdo)}{sel.telefono ? ` · ${sel.telefono}` : ""}</div>
+                {suyos.length > 0 && <div style={{ fontSize: 12, color: C.t3, marginTop: 1 }}>{suyos.map((v) => `${v.matricula}${v.licencia ? ` · licencia ${v.licencia}` : ""}`).join(" / ")}</div>}
               </div>
               <button className="nb" onClick={() => editarFicha(sel)} style={{ ...secundario, flex: "none", padding: "8px 12px" }}>Editar</button>
             </div>
@@ -1036,25 +1178,69 @@ function Flota({ alCambiarRol }) {
                 <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{Math.abs(m.saldo) < 0.005 ? "Estáis en paz" : m.saldo > 0 ? "Te debe el conductor" : "Le debes al conductor"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 2 }}>{m.porMes && mes >= mesHoy ? "Mes en curso: aún puede cubrir la cuota" : m.gastos.reembolsable > 0 ? "Incluye los gastos que le devuelves" : "Saldo del mes"}</div></div>
                 <div style={{ fontSize: 24, fontWeight: 900, color: saldoCol(m.saldo), marginLeft: 14, whiteSpace: "nowrap" }}>{fmt(Math.abs(m.saldo))}</div>
               </div>
+            </> : <div style={{ ...card, padding: 20, textAlign: "center", color: C.t2, fontSize: 13.5, marginBottom: 12 }}>Sin cuentas en {monthLabel(mes)}.</div>}
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <button className="nb" onClick={() => abrirDia(sel, mes === mesHoy ? todayStr() : `${mes}-01`)} style={dorado}>Apuntar un día</button>
+              {m.totalFact > 0 && <button className="nb" onClick={() => informeConductor(sel)} style={secundario}>Informe en PDF</button>}
+            </div>
+            {aviso && <div role="status" style={{ fontSize: 12.5, color: C.t2, fontWeight: 700, margin: "-4px 0 12px" }}>{aviso}</div>}
+            {m.totalFact > 0 && <>
               <Desglose entries={m.entries} plats={sel.plataformas} etiqueta={`${sel.nombre} · ${capitalizar(monthLabel(mes))}`} boton="Copiar el desglose" />
               <DayTable rows={m.rows} etiqueta={etiqueta} mensual={m.porMes} empresa />
-            </> : <div style={{ ...card, padding: 20, textAlign: "center", color: C.t2, fontSize: 13.5, marginBottom: 12 }}>Sin cuentas en {monthLabel(mes)}.</div>}
-            <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Cuentas del conductor: cargar">
-              <div style={{ ...tit, marginBottom: 6 }}>Sus cuentas</div>
-              <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>{sel.actualizado ? <>Actualizadas el <strong style={{ color: C.t1 }}>{new Date(sel.actualizado).toLocaleDateString("es-ES")}</strong>. </> : null}El conductor te manda su copia desde su TXpro (Ajustes → Copia de seguridad) y la cargas aquí. Con las cuentas en la nube llegarán solas.</div>
-              <label className="nb" style={{ ...secundario, display: "block", textAlign: "center", borderColor: `${C.acc}66`, background: `${C.acc}14`, color: C.accDim }}>
+            </>}
+            <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Vincular al conductor">
+              <div style={{ ...tit, marginBottom: 6 }}>Su TXpro</div>
+              <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Mándale la invitación: al aceptarla en su móvil queda en tu flota con este acuerdo (<strong style={{ color: C.t1 }}>{acuerdoTxt(sel.acuerdo).toLowerCase()}</strong>) y no podrá cambiarlo. Si cambias el acuerdo, mándale una invitación nueva.</div>
+              <button className="nb" onClick={() => invitar(sel)} style={{ ...dorado, display: "block", width: "100%" }}>Enviar invitación</button>
+              {enlace && <div aria-label="Enlace de invitación" style={{ marginTop: 9, padding: "8px 10px", borderRadius: 9, background: C.inp, border: `1px solid ${C.border}`, fontSize: 11, color: C.t2, wordBreak: "break-all", userSelect: "all" }}>{enlace}</div>}
+              <div style={{ borderTop: `1px solid ${C.linea}`, margin: "12px 0 10px" }} />
+              <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>{sel.actualizado ? <>Cuentas actualizadas el <strong style={{ color: C.t1 }}>{new Date(sel.actualizado).toLocaleDateString("es-ES")}</strong>. </> : null}Para traer lo que apunta él, que te mande su copia (Ajustes → Copia de seguridad) y la cargas aquí. Con las cuentas en la nube llegarán solas.</div>
+              <label className="nb" style={{ ...secundario, display: "block", textAlign: "center" }}>
                 Cargar la copia del conductor
                 <input type="file" accept="application/json,.json" aria-label="Copia del conductor" style={{ display: "none" }} onChange={(e) => { cargarCuentas(sel, e.target.files && e.target.files[0]); e.target.value = ""; }} />
               </label>
-              {aviso && <div role="status" style={{ fontSize: 12.5, color: C.t2, fontWeight: 700, marginTop: 9 }}>{aviso}</div>}
             </div>
             <button className="nb" onClick={() => darDeBaja(sel)} style={{ width: "100%", padding: 11, borderRadius: 10, border: `1px solid ${C.red}44`, background: `${C.red}0e`, color: C.red, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Dar de baja</button>
+          </>);
+        })()}
+        {vista === "dia" && sel && (() => {
+          const activas = sel.plataformas.filter((p) => p.activa || Number(diaForm.v[p.key]) > 0);
+          const pon = (k, val) => setDiaForm((f) => ({ ...f, v: { ...f.v, [k]: val.replace(/[^0-9.,+\-]/g, "") } }));
+          const crudo = {}; for (const k of clavesDia(sel.plataformas)) crudo[k] = Math.max(0, evalSuma(diaForm.v[k]));
+          const a = sel.acuerdo; const fijo = a.modo === "fijo"; const pm = fijo && a.cuotaPor === "mes";
+          const s = calcDay(crudo, fijo ? { cuotaDia: pm ? 0 : num(a.cuota) } : num(a.pctConductor), sel.plataformas);
+          const casilla = (k, etiqueta, estilo) => <input className="inp" type="text" inputMode="decimal" autoComplete="off" placeholder="0.00" aria-label={etiqueta} style={{ ...inp, width: 84, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", ...estilo }} value={diaForm.v[k] || ""} onChange={(e) => pon(k, e.target.value)} />;
+          const filas = [{ key: "taximetro", nombre: "Taxímetro" }, ...activas.map((p) => ({ key: p.key, cobKey: p.cobKey, nombre: p.nombre, cobrado: p.tipo === "cobrado" })), { key: "visa", nombre: "Tarjeta", nota: "Cierre del datáfono" }];
+          const cab = { fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: 0.4, textTransform: "uppercase", textAlign: "right", flexShrink: 0, width: 84 };
+          return (<>
+            <button className="nb" onClick={() => ir("conductor")} style={volver}>‹ {sel.nombre}</button>
+            <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 12 }}>Apuntar o corregir un día</div>
+            <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+              <label htmlFor="dFecha" style={etq}>Día</label>
+              <input id="dFecha" className="inp" type="date" max={todayStr()} style={inp} value={diaForm.fecha} onChange={(e) => e.target.value && setDiaForm({ fecha: e.target.value, v: valoresDia(sel, e.target.value) })} />
+              {sel.days[diaForm.fecha] && <div style={{ fontSize: 11.5, color: C.t3, marginTop: 6 }}>Este día ya tiene cuentas: las que guardes sustituyen a las que había.</div>}
+            </div>
+            <div style={{ ...card, padding: "12px 16px", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, paddingBottom: 8 }}><div style={{ ...tit, flex: 1 }}>Ingresos del día</div><div style={cab}>Facturado</div><div style={{ ...cab, color: C.blue }}>Efectivo</div></div>
+              {filas.map((f) => (
+                <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 7, borderTop: `1px solid ${C.linea}`, padding: "9px 0" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 800 }}>{f.nombre}</div>{f.cobrado && <div style={{ fontSize: 9.5, fontWeight: 700, color: C.green, marginTop: 2 }}>2ª casilla: ya cobrado</div>}{f.nota && <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>{f.nota}</div>}</div>
+                  {casilla(f.key, f.nombre)}
+                  {f.cobKey ? casilla(f.cobKey, `${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`, { background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` }) : <div style={{ width: 84, flexShrink: 0 }} />}
+                </div>
+              ))}
+            </div>
+            <div style={{ ...card, padding: "12px 16px", marginBottom: 12, fontSize: 13, color: C.t2, lineHeight: 1.7 }} aria-label="Cuenta del día">
+              Facturado <strong style={{ color: C.t1 }}>{fmt(s.facturacion)}</strong> · efectivo del conductor <strong style={{ color: C.blue }}>{fmt(s.facturacion - s.cobradoEmpresa)}</strong>
+              {!pm && s.facturacion > 0 && <div style={{ fontWeight: 800, color: saldoCol(s.diferencia) }}>{saldoTxt(s.diferencia)}</div>}
+            </div>
+            <button className="saveBtn" onClick={guardarDia} style={principal}>Guardar el día</button>
           </>);
         })()}
         {vista === "ficha" && (() => {
           const fijo = ficha.modo === "fijo"; const porMes = ficha.cuotaPor === "mes"; const pon = (k, v) => setFicha((f) => ({ ...f, [k]: v }));
           return (<>
-            <button className="nb" onClick={() => (ficha.id ? abrir(ficha.id) : ir("panel"))} style={{ background: "none", border: "none", padding: 0, marginBottom: 10, color: C.accDim, fontWeight: 800, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" }}>‹ Volver</button>
+            <button className="nb" onClick={() => (ficha.id ? abrir(ficha.id) : ir("panel"))} style={volver}>‹ Volver</button>
             <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 12 }}>{ficha.id ? "Editar conductor" : "Dar de alta un conductor"}</div>
             <div style={{ ...card, padding: 16, marginBottom: 12 }}>
               <label htmlFor="fNombre" style={etq}>Nombre</label>
@@ -1077,15 +1263,96 @@ function Flota({ alCambiarRol }) {
                 <label htmlFor="fPct" style={etq}>Qué % de la facturación se lleva el conductor</label>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input id="fPct" className="inp" type="number" min="0" max="100" step="0.5" style={{ ...inp, flex: 1 }} value={ficha.pctConductor} onChange={(e) => pon("pctConductor", e.target.value)} /><span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span></div>
               </>}
+              <div style={{ fontSize: 11.5, color: C.t3, marginTop: 10, lineHeight: 1.45 }}>Este acuerdo lo fijas tú: el conductor que se una a tu flota no podrá cambiarlo.</div>
             </div>
-            <button className="saveBtn" disabled={!ficha.nombre.trim()} onClick={guardarFicha} style={{ ...principal, ...(ficha.nombre.trim() ? {} : { background: C.apagado, color: C.t3, cursor: "default" }) }}>{ficha.id ? "Guardar cambios" : "Dar de alta"}</button>
+            <button className="saveBtn" disabled={!ficha.nombre.trim()} onClick={guardarFicha} style={{ ...principal, ...(ficha.nombre.trim() ? {} : apagado) }}>{ficha.id ? "Guardar cambios" : "Dar de alta"}</button>
+          </>);
+        })()}
+        {vista === "coches" && (() => {
+          const total = vehiculos.reduce((a, v) => a + gastosCocheMes(v, mes), 0);
+          if (!vehiculos.length) return (
+            <div style={{ ...card, padding: 22, textAlign: "center" }} aria-label="Sin coches">
+              <div style={{ width: 54, height: 54, borderRadius: 16, background: `${C.acc}1c`, color: C.accDim, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}><Icono name="coche" size={28} /></div>
+              <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 6 }}>Aún no tienes coches</div>
+              <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.5, marginBottom: 16 }}>Añade cada coche con su matrícula y su licencia, dile quién lo lleva y apunta sus gastos: seguro, taller, ITV…</div>
+              <button className="saveBtn" onClick={nuevoCoche} style={principal}>Añadir un coche</button>
+            </div>
+          );
+          return (<>
+            {bandaEjemplo}
+            {selectorMes}
+            <div style={{ ...card, padding: "8px 16px", marginBottom: 12 }} aria-label="Coches">
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "8px 0 4px" }}><div style={tit}>Coches y licencias</div><div style={{ fontSize: 12, color: C.t2 }}>Gastos del mes: <strong style={{ color: total > 0 ? C.red : C.t3 }}>{total > 0 ? "−" : ""}{fmt(total)}</strong></div></div>
+              {vehiculos.map((v) => { const g = gastosCocheMes(v, mes); return (
+                <button key={v.id} className="nb" onClick={() => abrirCoche(v)} aria-label={`Ver el coche ${v.matricula}`} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, padding: "11px 0", background: "none", border: "none", borderTop: `1px solid ${C.linea}`, cursor: "pointer", fontFamily: "inherit", color: C.t1, textAlign: "left" }}>
+                  <span style={{ width: 38, height: 38, borderRadius: 12, background: `${C.acc}22`, color: C.accDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icono name="coche" size={21} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 14, fontWeight: 900, letterSpacing: 0.3 }}>{v.matricula}{v.licencia ? <span style={{ fontWeight: 600, color: C.t2, letterSpacing: 0 }}> · licencia {v.licencia}</span> : null}</span>
+                    <span style={{ display: "block", fontSize: 11.5, color: C.t3, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[v.modelo, nombreDe(v.conductorId) || "Sin conductor"].filter(Boolean).join(" · ")}</span>
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: g > 0 ? C.red : C.t3, flexShrink: 0, whiteSpace: "nowrap" }}>{g > 0 ? `−${fmt(g)}` : "Sin gastos"}</span>
+                  <span style={{ color: C.t3, fontSize: 17, flexShrink: 0 }}>›</span>
+                </button>
+              ); })}
+            </div>
+            <button className="saveBtn" onClick={nuevoCoche} style={principal}>Añadir un coche</button>
+          </>);
+        })()}
+        {vista === "coche" && (() => {
+          const pon = (k, v) => setCoche((c) => ({ ...c, [k]: v }));
+          const delMes = cocheSel ? cocheSel.gastos.filter((g) => monthKey(g.date) === mes).sort((a, b) => b.date.localeCompare(a.date)) : [];
+          return (<>
+            <button className="nb" onClick={() => ir("coches")} style={volver}>‹ Coches</button>
+            <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 12 }}>{coche.id ? `Coche ${cocheSel ? cocheSel.matricula : ""}` : "Añadir un coche"}</div>
+            <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                <label style={{ flex: 1, minWidth: 0 }}><span style={etq}>Matrícula</span><input id="vMatricula" className="inp" type="text" autoComplete="off" autoCapitalize="characters" placeholder="1234 ABC" style={{ ...inp, textTransform: "uppercase" }} value={coche.matricula} onChange={(e) => pon("matricula", e.target.value)} /></label>
+                <label style={{ flex: 1, minWidth: 0 }}><span style={etq}>Nº de licencia</span><input id="vLicencia" className="inp" type="text" inputMode="numeric" autoComplete="off" placeholder="05123" style={inp} value={coche.licencia} onChange={(e) => pon("licencia", e.target.value)} /></label>
+              </div>
+              <label htmlFor="vModelo" style={etq}>Modelo (opcional)</label>
+              <input id="vModelo" className="inp" type="text" autoComplete="off" placeholder="Toyota Corolla" style={{ ...inp, marginBottom: 12 }} value={coche.modelo} onChange={(e) => pon("modelo", e.target.value)} />
+              <label htmlFor="vConductor" style={etq}>Quién lo lleva</label>
+              <select id="vConductor" className="inp" style={{ ...inp, marginBottom: 14 }} value={coche.conductorId} onChange={(e) => pon("conductorId", e.target.value)}>
+                <option value="">Sin conductor</option>
+                {conductores.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+              <button className="saveBtn" disabled={!coche.matricula.trim()} onClick={guardarCoche} style={{ ...principal, ...(coche.matricula.trim() ? {} : apagado) }}>{coche.id ? "Guardar cambios" : "Añadir el coche"}</button>
+              {aviso && <div role="status" style={{ fontSize: 12.5, color: C.green, fontWeight: 700, marginTop: 9 }}>{aviso}</div>}
+            </div>
+            {cocheSel && <>
+              <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Nuevo gasto del coche">
+                <div style={{ ...tit, marginBottom: 10 }}>Apuntar un gasto del coche</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                  {CONCEPTOS_COCHE.map((k) => { const on = gastoCoche.concepto === k; return <button key={k} className="nb" aria-pressed={on} onClick={() => setGastoCoche((g) => ({ ...g, concepto: k }))} style={{ padding: "7px 11px", borderRadius: 18, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>{k}</button>; })}
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                  <label style={{ flex: 1.3, minWidth: 0 }}><span style={etq}>Fecha</span><input className="inp" type="date" max={todayStr()} aria-label="Fecha del gasto" style={inp} value={gastoCoche.date} onChange={(e) => e.target.value && setGastoCoche((g) => ({ ...g, date: e.target.value }))} /></label>
+                  <label style={{ flex: 1, minWidth: 0 }}><span style={etq}>Importe (€)</span><input className="inp" type="text" inputMode="decimal" autoComplete="off" placeholder="0.00" aria-label="Importe del gasto" style={{ ...inp, textAlign: "right" }} value={gastoCoche.importe} onChange={(e) => setGastoCoche((g) => ({ ...g, importe: e.target.value.replace(/[^0-9.,+\-]/g, "") }))} /></label>
+                </div>
+                <button className="nb" disabled={!(evalSuma(gastoCoche.importe) > 0)} onClick={anadirGastoCoche} style={{ ...dorado, display: "block", width: "100%", opacity: evalSuma(gastoCoche.importe) > 0 ? 1 : 0.5 }}>Guardar gasto</button>
+              </div>
+              {selectorMes}
+              <div style={{ ...card, padding: "8px 16px", marginBottom: 12 }} aria-label="Gastos del coche">
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "8px 0 4px" }}><div style={tit}>Gastos del mes</div><div style={{ fontSize: 14, fontWeight: 900, color: delMes.length ? C.red : C.t3 }}>{delMes.length ? "−" : ""}{fmt(gastosCocheMes(cocheSel, mes))}</div></div>
+                {delMes.length === 0 && <div style={{ fontSize: 12.5, color: C.t3, padding: "8px 0 10px" }}>Sin gastos en {monthLabel(mes)}.</div>}
+                {delMes.map((g) => (
+                  <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${C.linea}` }}>
+                    <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800 }}>{g.concepto}</div><div style={{ fontSize: 11.5, color: C.t3 }}>{dayMonth(g.date)}</div></div>
+                    <div style={{ fontSize: 13.5, fontWeight: 800 }}>{fmt(Number(g.importe) || 0)}</div>
+                    <button className="nb" onClick={() => cambiaCoche(cocheSel.id, (v) => ({ ...v, gastos: v.gastos.filter((x) => x.id !== g.id) }))} aria-label={`Borrar ${g.concepto} de ${dayMonth(g.date)}`} style={{ background: `${C.red}14`, border: `1px solid ${C.red}33`, borderRadius: 8, padding: "5px 9px", color: C.red, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>✕</button>
+                  </div>
+                ))}
+              </div>
+              <button className="nb" onClick={() => quitarCoche(cocheSel)} style={{ width: "100%", padding: 11, borderRadius: 10, border: `1px solid ${C.red}44`, background: `${C.red}0e`, color: C.red, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Quitar este coche</button>
+            </>}
           </>);
         })()}
         {vista === "ajustes" && <>
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 12 }}>Ajustes de la empresa</div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <label htmlFor="eNombre" style={etq}>Nombre de la empresa o flota</label>
-            <input id="eNombre" className="inp" type="text" autoComplete="off" placeholder="Taxis Ejemplo, S.L." style={inp} value={flota.empresa} onChange={(e) => setFlota((f) => ({ ...f, empresa: e.target.value }))} />
+            <input id="eNombre" className="inp" type="text" autoComplete="off" placeholder="Taxis Ejemplo, S.L." style={inp} value={flota.empresa} onChange={(e) => setFlota((f) => ({ ...f, empresa: e.target.value.slice(0, 60) }))} />
+            <div style={{ fontSize: 11.5, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Sale en las invitaciones y en los informes de tus conductores.</div>
           </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ ...tit, marginBottom: 8 }}>Apariencia</div>
@@ -1100,8 +1367,8 @@ function Flota({ alCambiarRol }) {
         </>}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["panel", "Flota", "flota"], ["ficha", "Dar de alta", "alta"], ["ajustes", "Ajustes", "ajustes"]].map(([v, lb, ic]) => { const on = vista === v || (v === "panel" && vista === "conductor"); return (
-          <button key={v} className="nb" onClick={() => (v === "ficha" ? nuevaFicha() : ir(v))} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${on ? C.acc : "transparent"}`, cursor: "pointer", color: on ? C.accDim : C.t3, fontWeight: on ? 800 : 500, fontSize: 10, fontFamily: "inherit" }}>
+        {[["panel", "Flota", "flota", ["conductor", "ficha", "dia"]], ["coches", "Coches", "coche", ["coche"]], ["ajustes", "Ajustes", "ajustes", []]].map(([v, lb, ic, hijas]) => { const on = vista === v || hijas.includes(vista); return (
+          <button key={v} className="nb" onClick={() => ir(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${on ? C.acc : "transparent"}`, cursor: "pointer", color: on ? C.accDim : C.t3, fontWeight: on ? 800 : 500, fontSize: 10, fontFamily: "inherit" }}>
             <Icono name={ic} />{lb}
           </button>
         ); })}
@@ -1109,14 +1376,21 @@ function Flota({ alCambiarRol }) {
     </div>
   );
 }
-// LA RAÍZ: decide qué cara se enseña.
+// LA RAÍZ: decide qué cara se enseña. Si se abre con un enlace de invitación,
+// primero se enseña la invitación.
 function Raiz() {
   const [rol, setRol] = useState(leerRol);
+  const [vinculo, setVinculo] = useState(leerVinculo);
+  const [invitacion, setInvitacion] = useState(leerInvitacion);
   const cambiar = (r) => { guardarRol(r); setRol(r); try { window.scrollTo(0, 0); } catch {} };
+  const cerrarInvitacion = () => { quitarInvitacionDeLaUrl(); setInvitacion(null); };
+  const aceptar = () => { const v = { ...invitacion, desde: todayStr() }; try { localStorage.setItem(VINCULO_KEY, JSON.stringify(v)); } catch {} setVinculo(v); cerrarInvitacion(); cambiar("conductor"); };
+  const salirDeFlota = () => { try { localStorage.removeItem(VINCULO_KEY); } catch {} setVinculo(null); };
+  if (invitacion) return <Invitacion inv={invitacion} alAceptar={aceptar} alRechazar={cerrarInvitacion} />;
   if (!rol) return <Entrada alElegir={cambiar} />;
-  return rol === "empresa" ? <Flota alCambiarRol={cambiar} /> : <TXpro alCambiarRol={cambiar} />;
+  return rol === "empresa" ? <Flota alCambiarRol={cambiar} /> : <TXpro alCambiarRol={cambiar} vinculo={vinculo} alSalirDeFlota={salirDeFlota} />;
 }
-function TXpro({ alCambiarRol }) {
+function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
   const [tema, elegirTema] = useTema();
   const [days, setDays] = useState(loadDays);
   const [view, setView] = useState("diario");
@@ -1184,11 +1458,14 @@ function TXpro({ alCambiarRol }) {
   useEffect(() => { const h = () => setHayUpdate(true); window.addEventListener("tc:update-ready", h); return () => window.removeEventListener("tc:update-ready", h); }, []);
   const [cfgOk, setCfgOk] = useState(() => loadStorage("tc_cfg_ok", false) === true);
   const marcarCfgOk = () => { setCfgOk(true); try { localStorage.setItem("tc_cfg_ok", "true"); } catch {} };
-  const pct = num(cfg.pctConductor);
+  // El acuerdo: el que pone el conductor en Ajustes o, si pertenece a una flota,
+  // el que le fija la empresa (y entonces él no lo puede cambiar).
+  const acuerdo = vinculo ? vinculo.acuerdo : cfg;
+  const pct = num(acuerdo.pctConductor);
   // A porcentaje o con cuota fija (alquiler): por día trabajado o al mes.
-  const fijo = cfg.modo === "fijo";
-  const cuota = num(cfg.cuota);
-  const porMes = fijo && cfg.cuotaPor === "mes";
+  const fijo = acuerdo.modo === "fijo";
+  const cuota = num(acuerdo.cuota);
+  const porMes = fijo && acuerdo.cuotaPor === "mes";
   const rep = useMemo(() => (fijo ? { cuotaDia: porMes ? 0 : cuota } : pct), [fijo, porMes, cuota, pct]);
   const cfgInc = fijo ? { ...cfg, incentivo: "ninguno" } : cfg;
   // La parte de la cuota mensual que toca a cada día trabajado, para el "por
@@ -1484,7 +1761,7 @@ function TXpro({ alCambiarRol }) {
       </div>}
       <div style={{ padding: 16 }}>
         {view === "diario" && <>
-          {!cfgOk && <div style={{ background: `${C.acc}12`, border: `1.5px solid ${C.acc}44`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
+          {!cfgOk && !vinculo && <div style={{ background: `${C.acc}12`, border: `1.5px solid ${C.acc}44`, borderRadius: 14, padding: 14, marginBottom: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: C.t1, marginBottom: 4 }}>Ajusta la app a tu acuerdo</div>
             <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Dinos cómo trabajas: <strong>a porcentaje</strong> (por ejemplo el 50%) o <strong>con cuota fija</strong> a la empresa, como un alquiler (por día trabajado o al mes). Hasta que lo hagas, la app calcula con el 50%.</div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -2004,7 +2281,16 @@ function TXpro({ alCambiarRol }) {
         {view === "ajustes" && (() => { const set = (k, v) => { marcarCfgOk(); setCfg((c) => ({ ...c, [k]: v })); }; const tipos = [["bono", "Bono en €"], ["combustible", "% combustible"], ["ninguno", "Ninguno"]]; const ej = incentivoDe(cfg, num(cfg.umbral), 400); return (<>
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Ajustes</div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Adapta la app a lo que te paga tu empresa. Se guarda en este móvil.</div>
-          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+          {vinculo ? <div style={{ ...card, padding: 16, marginBottom: 12, borderColor: `${C.acc}66` }} aria-label="Tu flota">
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Tu flota</div>
+            <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 8 }}>{vinculo.empresa || "Tu empresa"}</div>
+            <div style={{ background: `${C.acc}12`, border: `1px solid ${C.acc}33`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: C.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Tu acuerdo</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: C.accDim, marginTop: 2 }}>{acuerdoTxt(vinculo.acuerdo)}</div>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>El acuerdo lo fija tu empresa y <strong style={{ color: C.t1 }}>no se puede cambiar desde aquí</strong>. Si ha cambiado, pídele una invitación nueva.</div>
+            <button className="nb" onClick={() => { if (window.confirm(`¿Salir de la flota de ${vinculo.empresa || "tu empresa"}? Volverás a poner tú tu acuerdo.`)) alSalirDeFlota(); }} style={{ width: "100%", padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Salir de la flota</button>
+          </div> : <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Cómo trabajas con la empresa</div>
             <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
               {[["porcentaje", "A porcentaje"], ["fijo", "Cuota fija (alquiler)"]].map(([v, lb]) => { const on = (cfg.modo === "fijo" ? "fijo" : "porcentaje") === v; return (
@@ -2029,7 +2315,7 @@ function TXpro({ alCambiarRol }) {
                 <span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span>
               </div>
             </>}
-          </div>
+          </div>}
           {!fijo && <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Incentivo por facturación</div>
             <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>

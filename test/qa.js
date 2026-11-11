@@ -902,6 +902,85 @@ const { chromium } = require('playwright');
   comprobar('quien ya tenía cuentas entra directo como conductor', directo);
   await cv.close();
 
+  console.log('\n— EMPRESA: APUNTAR DÍAS, INFORME, COCHES E INVITACIÓN —');
+  const ce = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
+  await ce.addInitScript(() => {
+    if (sessionStorage.getItem('sembrado')) return; sessionStorage.setItem('sembrado', '1');
+    localStorage.setItem('tc_rol', JSON.stringify('empresa'));
+    localStorage.setItem('tc_flota', JSON.stringify({ empresa: 'Taxis Prueba', conductores: [{ id: 'c1', nombre: 'Ana Gil', acuerdo: { modo: 'fijo', cuota: '100', cuotaPor: 'dia' } }], vehiculos: [] }));
+  });
+  const pe = await ce.newPage(); const errEmp = []; pe.on('pageerror', (e) => errEmp.push(e.message));
+  pe.on('dialog', (d) => d.accept());
+  await pe.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pe.waitForSelector('text=Facturado por la flota');
+  await pe.getByLabel('Conductores').getByRole('button').first().click(); await pe.waitForTimeout(300);
+  // La empresa apunta un día: 300 € de taxímetro, 250 con tarjeta. Cuota de 100
+  // al día: la empresa cobró 250, se queda 100 y le debe 150 al conductor.
+  await pe.getByRole('button', { name: 'Apuntar un día' }).click(); await pe.waitForTimeout(300);
+  await pe.locator('input[aria-label="Taxímetro"]').fill('300'); await pe.locator('input[aria-label="Tarjeta"]').fill('250'); await pe.waitForTimeout(200);
+  const cuentaDia = await pe.getByLabel('Cuenta del día').innerText();
+  comprobar('la empresa ve la cuenta del día mientras apunta', /Facturado 300,00\s€/.test(cuentaDia) && /efectivo del conductor 50,00\s€/.test(cuentaDia) && /Le debes 150,00\s€/.test(cuentaDia), cuentaDia.replace(/\n/g, ' '));
+  await pe.getByRole('button', { name: 'Guardar el día' }).click(); await pe.waitForTimeout(400);
+  const trasDia = await pe.locator('body').innerText();
+  comprobar('y el día queda en las cuentas del conductor', /Guardado el \d\d\/\d\d/.test(trasDia) && /EMPRESA\s+100,00\s€/i.test(await pe.getByLabel('Cuentas del conductor', { exact: true }).innerText()) && /LE DEBES AL CONDUCTOR[\s\S]*150,00\s€/i.test(await pe.getByLabel('Saldo con el conductor').innerText()));
+  // El informe en PDF de ese conductor.
+  const [dlEmp] = await Promise.all([pe.waitForEvent('download'), pe.getByRole('button', { name: 'Informe en PDF' }).click()]);
+  const pdfEmp = require('fs').readFileSync(await dlEmp.path()).toString('latin1');
+  comprobar('la empresa saca el informe en PDF del conductor', /^TXpro-\d{4}-\d{2}-Ana-Gil\.pdf$/.test(dlEmp.suggestedFilename()) && pdfEmp.startsWith('%PDF-1.4') && pdfEmp.trimEnd().endsWith('%%EOF'), dlEmp.suggestedFilename());
+  // La invitación: un enlace con el acuerdo.
+  await pe.getByRole('button', { name: 'Enviar invitación' }).click(); await pe.waitForTimeout(400);
+  const enlaceInv = (await pe.getByLabel('Enlace de invitación').innerText()).trim();
+  comprobar('la invitación es un enlace a la app', /^http:\/\/localhost:8080\/.*\?alta=[A-Za-z0-9_-]+$/.test(enlaceInv), enlaceInv.slice(0, 60));
+  // Coches: alta, quién lo lleva y un gasto.
+  await pe.getByRole('button', { name: /^Coches/ }).click(); await pe.waitForTimeout(300);
+  comprobar('la empresa empieza sin coches', (await pe.getByLabel('Sin coches').count()) === 1);
+  await pe.getByRole('button', { name: 'Añadir un coche' }).click(); await pe.waitForTimeout(300);
+  await pe.locator('#vMatricula').fill('1234 abc'); await pe.locator('#vLicencia').fill('05123'); await pe.locator('#vConductor').selectOption('c1');
+  await pe.getByRole('button', { name: 'Añadir el coche' }).click(); await pe.waitForTimeout(300);
+  await pe.locator('input[aria-label="Importe del gasto"]').fill('120,50');
+  await pe.getByRole('button', { name: 'Guardar gasto' }).click(); await pe.waitForTimeout(300);
+  comprobar('se apuntan los gastos de un coche', /Seguro[\s\S]*120,50\s€/.test(await pe.getByLabel('Gastos del coche').innerText()));
+  await pe.getByRole('button', { name: '‹ Coches' }).click(); await pe.waitForTimeout(300);
+  const cochesTxt = await pe.getByLabel('Coches', { exact: true }).innerText();
+  comprobar('el coche sale con su matrícula, licencia y conductor', /1234 ABC · licencia 05123/.test(cochesTxt) && /Ana Gil/.test(cochesTxt) && /−120,50\s€/.test(cochesTxt), cochesTxt.replace(/\n/g, ' '));
+  await pe.getByRole('button', { name: /^Flota/ }).click(); await pe.waitForTimeout(300);
+  const panelEmp = await pe.getByLabel('Resumen de la flota').innerText();
+  comprobar('el panel resta los gastos de los coches', /Gastos de los coches −120,50\s€/.test(panelEmp) && /le quedan .?20,50\s€/.test(panelEmp), panelEmp.replace(/\n/g, ' ').slice(-120));
+  await pe.getByLabel('Conductores').getByRole('button').first().click(); await pe.waitForTimeout(300);
+  comprobar('y la ficha del conductor dice qué coche lleva', /1234 ABC · licencia 05123/.test(await pe.getByLabel('Ficha del conductor').innerText()));
+  comprobar('empresa (días, coches, informe) sin errores', errEmp.length === 0, errEmp.join(' | '));
+  await ce.close();
+
+  // El conductor abre la invitación en su móvil: queda en la flota, con el
+  // acuerdo de la empresa (100 € al día) y sin poder cambiarlo.
+  const ci = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  const pi = await ci.newPage(); const errInv = []; pi.on('pageerror', (e) => errInv.push(e.message));
+  pi.on('dialog', (d) => d.accept());
+  await pi.goto(enlaceInv, { waitUntil: 'load' });
+  await pi.waitForSelector('text=Invitación a una flota');
+  const invTxt = await pi.getByLabel('Invitación a una flota').innerText();
+  comprobar('el conductor ve quién le invita y con qué acuerdo', /Taxis Prueba te ha dado de alta como Ana Gil/.test(invTxt) && /Cuota de 100\s€ por día/.test(invTxt), invTxt.replace(/\n/g, ' ').slice(0, 140));
+  await pi.getByRole('button', { name: 'Aceptar y unirme' }).click();
+  await pi.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('al aceptar, el enlace desaparece de la dirección', !/alta=/.test(pi.url()), pi.url());
+  await pi.locator('input[aria-label="Taxímetro"]').fill('300'); await pi.waitForTimeout(300);
+  const hoyInv = await hoyTxt(pi);
+  comprobar('sus cuentas van con el acuerdo de la flota', /tu parte 200,00/.test(hoyInv) && /Debes a la empresa 100,00/.test(hoyInv), hoyInv.slice(0, 120).replace(/\n/g, ' '));
+  await pi.getByLabel('Ajustes').click(); await pi.waitForTimeout(300);
+  const ajInv = await pi.locator('body').innerText();
+  comprobar('y en Ajustes no puede cambiar el acuerdo', /TU FLOTA/i.test(ajInv) && /Taxis Prueba/.test(ajInv) && /no se puede cambiar desde aquí/.test(ajInv) && (await pi.locator('#cfgPct').count()) === 0 && (await pi.locator('#cfgCuota').count()) === 0);
+  await pi.reload({ waitUntil: 'load' }); await pi.waitForSelector('text=INGRESOS DEL DÍA');
+  await pi.getByLabel('Ajustes').click(); await pi.waitForTimeout(300);
+  comprobar('el vínculo sigue al volver a abrir', (await pi.getByLabel('Tu flota').count()) === 1);
+  await pi.getByRole('button', { name: 'Salir de la flota' }).click(); await pi.waitForTimeout(300);
+  comprobar('si sale de la flota, vuelve a poner él su acuerdo', (await pi.getByLabel('Tu flota').count()) === 0 && (await pi.locator('#cfgPct').count()) === 1);
+  comprobar('invitación sin errores', errInv.length === 0, errInv.join(' | '));
+  // Un enlace roto o trucado no rompe nada: la app abre como siempre.
+  await pi.goto('http://localhost:8080/index.html?alta=esto-no-es-una-invitacion', { waitUntil: 'load' });
+  const abreIgual = await pi.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('una invitación rota se ignora', abreIgual && (await pi.getByLabel('Invitación a una flota').count()) === 0);
+  await ci.close();
+
   console.log('\n— MODO OSCURO —');
   const fondo = (pg) => pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const oscuroSis = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', colorScheme: 'dark' });
