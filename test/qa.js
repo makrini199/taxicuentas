@@ -268,6 +268,8 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(600);
   comprobar('no se puede quitar una con cifras dentro', await p.getByRole('button', { name: 'Quitar RTI' }).count() === 0);
   const comentarios = await p.getByRole('link', { name: 'Enviar comentarios' }).getAttribute('href').catch(() => null);
+  const grupoWa = p.getByLabel('Grupo de conductores').getByRole('link', { name: 'Entrar al grupo de WhatsApp' });
+  comprobar('enlace al grupo de WhatsApp de conductores', (await grupoWa.getAttribute('href').catch(() => null)) === 'https://chat.whatsapp.com/BF8BL89IBtE8BcqoRXg413' && (await grupoWa.getAttribute('target')) === '_blank');
   comprobar('botón para mandar ideas o fallos', !!comentarios && comentarios.startsWith('mailto:proyecto.txpro@gmail.com?subject=') && decodeURIComponent(comentarios).includes('Ideas o fallos'), comentarios || 'no está');
 
   console.log('\n— SIN CONEXIÓN —');

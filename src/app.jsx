@@ -183,6 +183,9 @@ const PLAY_URL = "https://play.google.com/apps/testing/com.txpro.cuentas";
 // A dónde llegan las ideas y los fallos. Es el mismo correo que figura en
 // Play Console para los probadores.
 const CORREO_COMENTARIOS = "proyecto.txpro@gmail.com";
+// El grupo de WhatsApp de los conductores. No hay foro dentro de la app: para
+// hablar entre compañeros está el grupo, y aquí solo va su enlace.
+const GRUPO_WHATSAPP = "https://chat.whatsapp.com/BF8BL89IBtE8BcqoRXg413";
 const enlaceComentarios = () => `mailto:${CORREO_COMENTARIOS}?subject=${encodeURIComponent(`TXpro ${APP_VERSION} · Ideas o fallos`)}&body=${encodeURIComponent("Cuéntanos qué te falta, qué cambiarías o qué ha fallado:\n\n")}`;
 const AVISO_PLAY_KEY = "tc_aviso_play";
 const AVISO_PLAY_DIAS = 7;
@@ -2753,6 +2756,12 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
             <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Estás usando TXpro como <strong style={{ color: C.t1 }}>conductor</strong>. Si llevas una empresa o una flota, puedes dar de alta a tus conductores y ver las cuentas de cada uno. Tus cuentas de conductor se quedan guardadas.</div>
             <button className="nb" onClick={() => alCambiarRol("empresa")} style={{ width: "100%", padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cambiar a empresa o flota</button>
           </div>}
+          <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Grupo de conductores">
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Grupo de conductores</div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Para hablar con otros compañeros que usan TXpro: dudas, avisos y trucos del día a día.</div>
+            <a href={GRUPO_WHATSAPP} target="_blank" rel="noopener noreferrer" style={{ display: "block", padding: 11, borderRadius: 10, background: "#1faa59", color: "#fff", fontWeight: 800, fontSize: 13, fontFamily: "inherit", textAlign: "center", textDecoration: "none" }}>Entrar al grupo de WhatsApp</a>
+            <div style={{ fontSize: 11, color: C.t3, marginTop: 8, textAlign: "center" }}>Se abre WhatsApp. En el grupo, los demás ven tu número.</div>
+          </div>
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>¿Ideas o fallos?</div>
             <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>TXpro la hacemos con lo que nos pedís los compañeros. Cuéntanos qué te falta, qué cambiarías o qué ha fallado.</div>
