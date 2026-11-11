@@ -586,6 +586,117 @@ const Desglose = ({ entries, plats, etiqueta }) => {
   );
 };
 
+// EL INFORME EN PDF: para mandárselo a la empresa o al gestor por WhatsApp.
+// Se pinta cada página en un lienzo (con la letra de la app, y así no hay que
+// meter ninguna librería ni tipografías en el PDF) y el PDF lleva una imagen
+// por página. Siempre en claro: es para imprimir o leer en cualquier móvil.
+const pintarInforme = (inf, escala = 2) => {
+  const P = PALETAS.claro; const W = 595, H = 842, M = 42, DER = W - M;
+  const lienzos = []; let ctx, y;
+  const letra = (peso, t) => `${peso} ${t}px "DM Sans", system-ui, sans-serif`;
+  const txt = (s, x, yy, { t = 10.5, peso = 400, color = P.t1, al = "left" } = {}) => { ctx.font = letra(peso, t); ctx.fillStyle = color; ctx.textAlign = al; ctx.fillText(String(s), x, yy); };
+  const raya = (yy, color = P.border, grosor = 1) => { ctx.fillStyle = color; ctx.fillRect(M, yy, W - 2 * M, grosor); };
+  const caja = (x, yy, w, h, r, fondo, borde) => {
+    ctx.beginPath(); ctx.moveTo(x + r, yy); ctx.arcTo(x + w, yy, x + w, yy + h, r); ctx.arcTo(x + w, yy + h, x, yy + h, r); ctx.arcTo(x, yy + h, x, yy, r); ctx.arcTo(x, yy, x + w, yy, r); ctx.closePath();
+    if (fondo) { ctx.fillStyle = fondo; ctx.fill(); }
+    if (borde) { ctx.strokeStyle = borde; ctx.lineWidth = 1; ctx.stroke(); }
+  };
+  const nueva = () => {
+    const cv = document.createElement("canvas"); cv.width = W * escala; cv.height = H * escala;
+    ctx = cv.getContext("2d"); ctx.scale(escala, escala); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H); ctx.textBaseline = "alphabetic";
+    lienzos.push({ cv, ctx });
+    txt("TX", M, 56, { t: 22, peso: 900 }); ctx.font = letra(900, 22); const ancho = ctx.measureText("TX").width; txt("pro", M + ancho, 56, { t: 22, peso: 900, color: P.accDim });
+    txt(inf.titulo, DER, 48, { t: 13, peso: 800, al: "right" }); txt(inf.sub, DER, 62, { t: 9, color: P.t3, al: "right" });
+    raya(72, P.acc, 2); y = 100;
+  };
+  const hueco = (alto) => { if (y + alto > H - 56) nueva(); };
+  const titulo = (s) => { hueco(60); txt(s.toUpperCase(), M, y, { t: 8.5, peso: 800, color: P.t3 }); y += 7; raya(y, P.t3); y += 17; };
+  const fila = (label, val, o = {}) => {
+    hueco(24); txt(label, M, y, { t: 10.5, peso: o.fuerte ? 800 : 400, color: o.fuerte ? P.t1 : P.t2 });
+    txt(val, DER, y, { t: o.fuerte ? 11.5 : 10.5, peso: o.fuerte ? 900 : 700, color: o.color || P.t1, al: "right" }); y += 8; raya(y); y += 16;
+  };
+  nueva();
+  // Lo facturado y la cuenta de lo que queda.
+  txt(inf.total, M, y + 20, { t: 30, peso: 900, color: P.accDim }); txt(inf.totalSub, M, y + 38, { t: 10.5, color: P.t2 }); y += 54;
+  const an = (W - 2 * M - 16) / 3;
+  inf.fichas.forEach((f, i) => {
+    const x = M + i * (an + 8); const col = f.color === "verde" ? P.green : f.color === "rojo" ? P.red : P.t1;
+    caja(x, y, an, 46, 8, f.destacada ? `${col}14` : "#ffffff", f.destacada ? `${col}66` : P.border);
+    txt(f.label.toUpperCase(), x + an / 2, y + 17, { t: 8, peso: 800, color: f.destacada ? col : P.t3, al: "center" });
+    txt(f.val, x + an / 2, y + 35, { t: 13.5, peso: 900, color: col, al: "center" });
+  });
+  y += 58;
+  if (inf.nota) { txt(inf.nota, M, y, { t: 8.5, color: P.t3 }); y += 14; }
+  if (inf.balance) {
+    const col = inf.balance.color === "verde" ? P.green : inf.balance.color === "oro" ? P.accDim : P.red;
+    caja(M, y, W - 2 * M, 40, 8, `${col}12`, `${col}55`);
+    txt(inf.balance.label.toUpperCase(), M + 14, y + (inf.balance.sub ? 18 : 25), { t: 9.5, peso: 800, color: P.t2 });
+    if (inf.balance.sub) txt(inf.balance.sub, M + 14, y + 31, { t: 8.5, color: P.t3 });
+    txt(inf.balance.val, DER - 14, y + 27, { t: 17, peso: 900, color: col, al: "right" }); y += 62;
+  } else y += 8;
+  // Desglose: cuánto de cada cosa y cuánto de ello en efectivo.
+  const C2 = DER - 120;
+  titulo("Desglose");
+  y -= 4; txt("FACTURADO", C2, y, { t: 8, peso: 800, color: P.t3, al: "right" }); txt("EFECTIVO", DER, y, { t: 8, peso: 800, color: P.blue, al: "right" }); y += 16;
+  for (const f of inf.desglose.filas) { txt(f.nombre, M, y, { t: 10.5, peso: 700 }); txt(f.fact, C2, y, { t: 10.5, peso: 700, al: "right" }); txt(f.efec, DER, y, { t: 10.5, peso: 700, al: "right" }); y += 8; raya(y); y += 16; }
+  if (inf.desglose.tarjeta) { txt("Tarjeta", M, y, { color: P.t2 }); txt(inf.desglose.tarjeta, C2, y, { peso: 700, color: P.t2, al: "right" }); y += 8; raya(y); y += 16; }
+  txt("Total", M, y + 2, { t: 11.5, peso: 900 }); txt(inf.desglose.totalFact, C2, y + 2, { t: 11.5, peso: 900, color: P.accDim, al: "right" }); txt(inf.desglose.totalEfec, DER, y + 2, { t: 11.5, peso: 900, color: P.blue, al: "right" }); y += 34;
+  titulo(inf.liquidacionTitulo);
+  for (const f of inf.liquidacion) fila(f.label, f.val, { fuerte: f.fuerte, color: f.color === "rojo" ? P.red : f.color === "verde" ? P.green : f.color === "azul" ? P.blue : f.color === "oro" ? P.accDim : undefined });
+  if (inf.jornada.length) { y += 10; titulo("Jornada"); for (const f of inf.jornada) fila(f.label, f.val, { fuerte: f.fuerte }); }
+  if (inf.gastos.length) { y += 10; titulo("Gastos"); for (const g of inf.gastos) fila(g.label, g.val, { color: P.red }); }
+  // Día a día, con la cabecera repetida en cada página.
+  if (inf.dias.filas.length) {
+    const cols = inf.dias.cols; const ancho = (W - 2 * M - 62) / (cols.length - 1);
+    const xDe = (i) => (i === 0 ? M : M + 62 + ancho * i);
+    const cabecera = () => { cols.forEach((c, i) => txt(c.toUpperCase(), xDe(i), y, { t: 8, peso: 800, color: P.t3, al: i === 0 ? "left" : "right" })); y += 7; raya(y, P.t3); y += 15; };
+    y += 10; hueco(Math.min(inf.dias.filas.length, 10) * 19 + 50); txt("DÍA A DÍA", M, y, { t: 8.5, peso: 800, color: P.t3 }); y += 18; cabecera();
+    for (const f of inf.dias.filas) {
+      if (y + 20 > H - 56) { nueva(); cabecera(); }
+      f.forEach((v, i) => { const celda = typeof v === "object" ? v : { v }; txt(celda.v, xDe(i), y, { t: 9.5, peso: i === 0 ? 400 : 700, color: celda.color === "verde" ? P.green : celda.color === "rojo" ? P.red : i === 0 ? P.t2 : P.t1, al: i === 0 ? "left" : "right" }); });
+      y += 6; raya(y, P.linea); y += 13;
+    }
+  }
+  lienzos.forEach(({ ctx: c }, i) => { ctx = c; raya(H - 40); txt("Generado con TXpro · txpro.app", M, H - 26, { t: 8.5, color: P.t3 }); txt(`Página ${i + 1} de ${lienzos.length}`, DER, H - 26, { t: 8.5, color: P.t3, al: "right" }); });
+  return lienzos.map((l) => l.cv);
+};
+// Un PDF mínimo: una página A4 por imagen JPEG, a página completa.
+const pdfDeJpegs = (imagenes) => {
+  const cod = new TextEncoder(); const partes = []; const pos = []; let largo = 0;
+  const pon = (x) => { const u = typeof x === "string" ? cod.encode(x) : x; partes.push(u); largo += u.length; };
+  const obj = (n, cuerpo, flujo) => { pos[n] = largo; pon(`${n} 0 obj\n${cuerpo}\n`); if (flujo) { pon("stream\n"); pon(flujo); pon("\nendstream\n"); } pon("endobj\n"); };
+  const W = 595.28, H = 841.89, n = imagenes.length;
+  pon("%PDF-1.4\n"); pon(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, `<< /Type /Pages /Kids [${imagenes.map((_, i) => `${3 + i * 3} 0 R`).join(" ")}] /Count ${n} >>`);
+  imagenes.forEach((im, i) => {
+    const pag = 3 + i * 3, cont = pag + 1, img = pag + 2; const dibujo = cod.encode(`q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`);
+    obj(pag, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${img} 0 R >> >> /Contents ${cont} 0 R >>`);
+    obj(cont, `<< /Length ${dibujo.length} >>`, dibujo);
+    obj(img, `<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>`, im.bytes);
+  });
+  const total = 2 + n * 3; const tabla = largo;
+  pon(`xref\n0 ${total + 1}\n0000000000 65535 f \n`);
+  for (let k = 1; k <= total; k++) pon(`${String(pos[k]).padStart(10, "0")} 00000 n \n`);
+  pon(`trailer\n<< /Size ${total + 1} /Root 1 0 R >>\nstartxref\n${tabla}\n%%EOF\n`);
+  return new Blob(partes, { type: "application/pdf" });
+};
+const crearInformePDF = async (inf) => {
+  try { await Promise.all([400, 700, 800, 900].map((p) => document.fonts.load(`${p} 12px "DM Sans"`))); } catch {}
+  const lienzos = pintarInforme(inf);
+  const imagenes = await Promise.all(lienzos.map((cv) => new Promise((ok, mal) => cv.toBlob((b) => (b ? b.arrayBuffer().then((buf) => ok({ bytes: new Uint8Array(buf), w: cv.width, h: cv.height })) : mal(new Error("sin imagen"))), "image/jpeg", 0.92))));
+  return pdfDeJpegs(imagenes);
+};
+// Lo comparte con la hoja del móvil (WhatsApp, correo…) y, donde no se puede
+// compartir un archivo, lo descarga.
+const entregarArchivo = async (blob, nombre, titulo) => {
+  const archivo = new File([blob], nombre, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+    try { await navigator.share({ files: [archivo], title: titulo }); return "compartido"; } catch (e) { if (e && e.name === "AbortError") return "cancelado"; }
+  }
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 15000);
+  return "descargado";
+};
 // LO PRIMERO DEL RESUMEN: lo facturado y, debajo, la cuenta que importa: tu
 // parte, lo que has gastado tú y lo que te queda limpio (con propinas y extras).
 const Hero = ({ total, dias, media, parte, etiqueta, propinas = 0, extra = 0, gastos = 0 }) => {
@@ -783,6 +894,8 @@ function TXpro() {
   // Mensual y Periodo eran casi la misma pantalla: ahora son una, "Resumen",
   // con un selector de mes, semana (de lunes a domingo) o fechas a elegir.
   const [modoResumen, setModoResumen] = useState("mes");
+  const [anioSel, setAnioSel] = useState(() => todayStr().slice(0, 4));
+  const [avisoInforme, setAvisoInforme] = useState("");
   const [rangeFrom, setRangeFrom] = useState(() => monthStart(today));
   const [rangeTo, setRangeTo] = useState(today);
   useEffect(() => { try { localStorage.setItem("tc_days", JSON.stringify(days)); } catch {} }, [days]);
@@ -869,6 +982,45 @@ function TXpro() {
   const selectedData = monthData.find((m) => m.ym === selectedMonth);
   const rangeData = useMemo(() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const g = gastosEntre(gastos, days, lo, hi); const s = summarize(Object.entries(days).filter(([d]) => d >= lo && d <= hi).sort(([a], [b]) => a.localeCompare(b)), rep, plats, porMes ? cuotaMensualEntre(cuota, lo, hi) : 0); return { ...s, gastos: g, diferenciaMes: s.diferenciaMes - g.reembolsable }; }, [days, gastos, rangeFrom, rangeTo, rep, porMes, cuota, plats]);
   const maxFact = Math.max(1, ...monthData.map((m) => m.totalFact));
+  // EL INFORME DEL MES EN PDF. "Para la empresa": las cuentas con ella y nada
+  // más. "Completo": además, lo que es solo del conductor (sus gastos, las
+  // propinas, lo que le queda y lo que gana por hora), para él o su gestor.
+  const informeDelMes = async (completo) => {
+    const m = selectedData; if (!m || avisoInforme === "Preparando el informe…") return;
+    setAvisoInforme("Preparando el informe…");
+    let fin = "";
+    try {
+      const d = desgloseDe(Object.entries(days).filter(([f]) => monthKey(f) === m.ym), plats);
+      const propios = m.gastos.total - m.gastos.reembolsable;
+      const limpio = m.conductorMes + m.jornada.propinas + m.incentivo.importe - propios;
+      const enCurso = porMes && m.ym >= monthKey(todayStr());
+      const dif = m.diferenciaMes; const j = m.jornada;
+      const balance = Math.abs(dif) < 0.005 ? null : dif < 0 ? { label: "La empresa debe al conductor", val: fmt(-dif), color: "verde" } : enCurso ? { label: "Faltan para cubrir la cuota del mes", val: fmt(dif), color: "oro" } : { label: "El conductor debe a la empresa", val: fmt(dif), color: "rojo" };
+      if (balance && m.gastos.reembolsable > 0) balance.sub = "Incluye los gastos que devuelve la empresa";
+      const parte = { label: fijo ? "Conductor, tras la cuota" : `Conductor (${pct}%)`, val: fmt(m.conductorMes), color: m.conductorMes < 0 ? "rojo" : "" };
+      const suma = [j.propinas > 0 ? `${fmt(j.propinas)} de propinas` : null, m.incentivo.importe > 0 ? `${fmt(m.incentivo.importe)} de extra` : null].filter(Boolean);
+      const inf = {
+        titulo: `Informe de ${monthLabel(m.ym)}`, sub: `${completo ? "Informe completo" : "Liquidación con la empresa"} · generado el ${new Date().toLocaleDateString("es-ES")}`,
+        total: fmt(m.totalFact), totalSub: `Facturado · ${m.diasTrabajados} ${m.diasTrabajados === 1 ? "día" : "días"} · media ${fmt0(m.mediaDiaria)} al día`,
+        fichas: completo
+          ? [parte, { label: "Gastos del conductor", val: (propios > 0 ? "−" : "") + fmt(propios), color: propios > 0 ? "rojo" : "" }, { label: "Le queda", val: fmt(limpio), color: limpio >= 0 ? "verde" : "rojo", destacada: true }]
+          : [parte, { label: "Cobrado por la empresa", val: fmt(m.totalCobradoEmpresa) }, { label: "Efectivo del conductor", val: fmt(m.efectivoMes) }],
+        nota: completo && suma.length ? `«Le queda» incluye ${suma.join(" y ")}.` : "",
+        balance,
+        desglose: { filas: d.filas.map((f) => ({ nombre: f.nombre, fact: fmt(f.fact), efec: fmt(f.efec) })), tarjeta: d.tarjeta ? fmt(d.tarjeta) : "", totalFact: fmt(d.totalFact), totalEfec: fmt(d.totalEfec) },
+        liquidacionTitulo: "Liquidación del mes",
+        liquidacion: [...filasReparto(m, false).map((f) => ({ label: f.label, val: fmt(f.val), fuerte: !!f.bold, color: f.bold ? "oro" : "" })), { label: "Cobrado por la empresa (apps y tarjeta)", val: fmt(m.totalCobradoEmpresa) }, { label: "Efectivo cobrado por el conductor", val: fmt(m.efectivoMes), color: "azul" }, ...(m.gastos.reembolsable > 0 ? [{ label: "Gastos que devuelve la empresa", val: fmt(m.gastos.reembolsable), color: "verde" }] : []), ...(m.incentivo.importe > 0 ? [{ label: m.incentivo.etiqueta, val: fmt(m.incentivo.importe), color: "verde" }] : [])],
+        jornada: !completo ? [] : [...(j.min ? [{ label: `Horas trabajadas (${j.diasConHoras} ${j.diasConHoras === 1 ? "día" : "días"})`, val: duracion(j.min) }] : []), ...(j.carreras ? [{ label: "Carreras", val: String(j.carreras) }] : []), ...(j.propinas ? [{ label: "Propinas", val: fmt(j.propinas) }] : []), ...(j.min ? [{ label: "Gana por hora", val: `${fmt(j.ganadoConHoras / (j.min / 60))}/h`, fuerte: true }] : [])],
+        gastos: [...(completo && m.gastos.combustible > 0 ? [{ label: "Combustible", val: "−" + fmt(m.gastos.combustible) }] : []), ...gastos.filter((g) => monthKey(g.date) === m.ym && g.concepto !== "Combustible" && (completo || g.reembolsable)).sort((a, b) => a.date.localeCompare(b.date)).map((g) => ({ label: `${g.concepto} · ${dayMonth(g.date)}${g.reembolsable ? " · lo devuelve la empresa" : ""}`, val: "−" + fmt(Number(g.importe) || 0) }))],
+        dias: porMes
+          ? { cols: ["Fecha", "Facturado", "Cobró empresa", "Efectivo"], filas: m.rows.map((r) => [`${weekday(r.date)} ${dayMonth(r.date)}`, fmt(r.s.facturacion), fmt(r.s.cobradoEmpresa), fmt(r.s.facturacion - r.s.cobradoEmpresa)]) }
+          : { cols: ["Fecha", "Facturado", "Cobró empresa", "Efectivo", fijo ? "Conductor" : `${pct}% día`, "Diferencia"], filas: m.rows.map((r) => [`${weekday(r.date)} ${dayMonth(r.date)}`, fmt(r.s.facturacion), fmt(r.s.cobradoEmpresa), fmt(r.s.facturacion - r.s.cobradoEmpresa), fmt(r.s.conductor50), { v: (r.s.diferencia <= 0 ? "−" : "+") + fmt(Math.abs(r.s.diferencia)), color: r.s.diferencia <= 0 ? "verde" : "rojo" }]) },
+      };
+      const como = await entregarArchivo(await crearInformePDF(inf), `TXpro-${m.ym}${completo ? "-completo" : ""}.pdf`, inf.titulo);
+      fin = como === "descargado" ? "Informe descargado" : "";
+    } catch { fin = "No se pudo crear el informe en este móvil"; }
+    setAvisoInforme(fin); if (fin) setTimeout(() => setAvisoInforme(""), 3000);
+  };
   const exportarCopia = async () => {
     const payload = { app: "txpro", formato: 3, exportado: new Date().toISOString(), appVersion: APP_VERSION, days, gastos, notas, cfg };
     const texto = JSON.stringify(payload, null, 2);
@@ -956,11 +1108,11 @@ function TXpro() {
   const inp = { width: "100%", background: C.inp, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
-      <div style={{ background: `linear-gradient(180deg, ${C.surf}, ${C.cabecera})`, borderBottom: `2px solid ${C.acc}40`, padding: "18px 20px 14px", paddingTop: "calc(18px + env(safe-area-inset-top, 0px))", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 14px rgba(30,34,54,0.08)" }}>
+      <div style={{ background: `linear-gradient(180deg, ${C.surf}, ${C.cabecera})`, borderBottom: `2px solid ${C.acc}40`, padding: "9px 16px 8px", paddingTop: "calc(9px + env(safe-area-inset-top, 0px))", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 14px rgba(30,34,54,0.08)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <TXLogo size={52} />
-          <div style={{ flex: 1 }}><div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1 }}>TX<span style={{ color: C.accDim }}>pro</span></div><div style={{ fontSize: 11, color: C.t2 }}>Liquidaciones · Facturación · Comisiones</div></div>
-          <button className="nb" onClick={() => setView(view === "ajustes" ? "diario" : "ajustes")} aria-label="Ajustes" style={{ background: view === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${view === "ajustes" ? C.acc : C.border}`, borderRadius: 12, width: 40, height: 40, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: view === "ajustes" ? C.accDim : C.t2 }}><Icono name="ajustes" size={20} /></button>
+          <TXLogo size={36} />
+          <div style={{ flex: 1, fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1 }}>TX<span style={{ color: C.accDim }}>pro</span></div>
+          <button className="nb" onClick={() => setView(view === "ajustes" ? "diario" : "ajustes")} aria-label="Ajustes" style={{ background: view === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${view === "ajustes" ? C.acc : C.border}`, borderRadius: 11, width: 38, height: 38, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: view === "ajustes" ? C.accDim : C.t2 }}><Icono name="ajustes" size={19} /></button>
         </div>
       </div>
       {avisarPlay && <div style={{ margin: "16px 16px 0", background: `${C.blue}0f`, border: `1.5px solid ${C.blue}44`, borderRadius: 14, padding: 14 }}>
@@ -1449,7 +1601,7 @@ function TXpro() {
           const ir = (m) => { setModoResumen(m); if (m === "semana") { const ws = weekStart(today); setRangeFrom(ws); setRangeTo(shiftDays(ws, 6)); } };
           return (
             <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
-              {[["mes", "Mes"], ["semana", "Semana"], ["fechas", "Fechas"]].map(([m, lb]) => <button key={m} className="nb" aria-pressed={modoResumen === m} onClick={() => ir(m)} style={seg(modoResumen === m)}>{lb}</button>)}
+              {[["mes", "Mes"], ["semana", "Semana"], ["anio", "Año"], ["fechas", "Fechas"]].map(([m, lb]) => <button key={m} className="nb" aria-pressed={modoResumen === m} onClick={() => ir(m)} style={seg(modoResumen === m)}>{lb}</button>)}
             </div>
           );
         })()}
@@ -1485,6 +1637,15 @@ function TXpro() {
                 <Hero total={totalFact} dias={diasTrabajados} media={mediaDiaria} parte={conductorMes} etiqueta={etqParte} propinas={selectedData.jornada.propinas} extra={incentivo.importe} gastos={gastosMes.total - gastosMes.reembolsable} />
                 <Balance value={diferenciaMes} pendiente={porMes && selectedMonth >= monthKey(todayStr())} sub={porMes && selectedMonth >= monthKey(todayStr()) && diferenciaMes > 0 ? `Lo que le falta cobrar a la empresa para llegar a los ${fmt0(cuota)}` : gastosMes.reembolsable > 0 ? "Balance del mes · incluye los gastos a devolver" : "Balance mensual acumulado"} />
                 <Desglose entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} etiqueta={capitalizar(monthLabel(selectedMonth))} />
+                <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Informe en PDF">
+                  <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Informe del mes en PDF</div>
+                  <div style={{ fontSize: 12, color: C.t3, lineHeight: 1.45, marginBottom: 10 }}>Para mandarlo por WhatsApp o guardarlo. El completo añade tus gastos, propinas y lo que te queda.</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="nb" onClick={() => informeDelMes(false)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Para la empresa</button>
+                    <button className="nb" onClick={() => informeDelMes(true)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Completo</button>
+                  </div>
+                  {avisoInforme && <div role="status" style={{ fontSize: 12.5, color: C.t2, fontWeight: 700, marginTop: 9 }}>{avisoInforme}</div>}
+                </div>
                 {(() => { const ant = mesAnterior(selectedMonth); return <Reparto entries={Object.entries(days).filter(([d]) => monthKey(d) === selectedMonth)} plats={plats} previo={desgloseDe(Object.entries(days).filter(([d]) => monthKey(d) === ant), plats).totalFact} frente={new Date(Number(ant.slice(0, 4)), Number(ant.slice(5)) - 1).toLocaleDateString("es-ES", { month: "long" })} />; })()}
                 <StatCard title="Liquidación mensual" items={[...filasReparto(selectedData, false), { label: "Cobrado por empresa (acumulado mes)", val: totalCobradoEmpresa, color: C.t1 }, { label: "Efectivo cobrado por el conductor", val: efectivoMes, color: C.blue }, ...(gastosMes.total > 0 ? [{ label: "Gastos del mes", val: gastosMes.total, color: C.red, neg: true }] : []), ...(cfgInc.incentivo === "combustible" && combustibleMes > 0 ? [{ label: "de ellos, combustible", val: combustibleMes, color: C.t2, neg: true }] : []), ...(gastosMes.reembolsable > 0 ? [{ label: "Gastos que te devuelve la empresa", val: gastosMes.reembolsable, color: C.green }] : []), ...(incentivo.importe > 0 ? [{ label: incentivo.etiqueta, val: incentivo.importe, color: C.green }] : [])]}>
                   {incentivo.tipo === "ninguno" ? null : incentivo.tipo === "incompleto" ? <div style={{ background: `${C.acc}08`, border: `1px solid ${C.acc}22`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.t2 }}>Te falta indicar tu incentivo en Ajustes</div> : incentivo.llega ? <div style={{ background: `${C.green}12`, border: `1px solid ${C.green}33`, borderRadius: 10, padding: "8px 12px", marginTop: 10, fontSize: 12, color: C.green, fontWeight: 700 }}>{incentivo.logrado}</div>
@@ -1622,7 +1783,81 @@ function TXpro() {
         <div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div>
       </div>
         </>); })()}
-        {view === "resumen" && modoResumen !== "mes" && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria, gastos: gastosPeriodo } = rangeData; return (<>
+        {view === "resumen" && modoResumen === "anio" && (() => {
+          // EL AÑO: lo facturado y lo que queda, mes a mes, y qué días de la semana
+          // rinden más. Sale de las mismas cuentas de cada mes.
+          const anios = [...new Set(months.map((m) => m.slice(0, 4)))].sort().reverse();
+          if (!anios.length) return <div style={{ color: C.t2, textAlign: "center", padding: 40, fontSize: 14 }}>Sin datos. Registra días primero.</div>;
+          const y = anios.includes(anioSel) ? anioSel : anios[0];
+          const i = anios.indexOf(y); const antes = anios[i + 1], despues = anios[i - 1];
+          const meses = monthData.filter((m) => m.ym.startsWith(y)).sort((a, b) => a.ym.localeCompare(b.ym));
+          const propios = (m) => m.gastos.total - m.gastos.reembolsable;
+          const limpioDe = (m) => m.conductorMes + m.jornada.propinas + m.incentivo.importe - propios(m);
+          const tot = meses.reduce((a, m) => ({ fact: a.fact + m.totalFact, parte: a.parte + m.conductorMes, propinas: a.propinas + m.jornada.propinas, extra: a.extra + m.incentivo.importe, gastos: a.gastos + propios(m), dias: a.dias + m.diasTrabajados }), { fact: 0, parte: 0, propinas: 0, extra: 0, gastos: 0, dias: 0 });
+          const tope = Math.max(1, ...meses.map((m) => m.totalFact));
+          const mejor = meses.reduce((a, m) => (!a || m.totalFact > a.totalFact ? m : a), null);
+          const nombreMes = (ym) => new Date(Number(ym.slice(0, 4)), Number(ym.slice(5)) - 1).toLocaleDateString("es-ES", { month: "long" });
+          const irAlMes = (ym) => { setSelectedMonth(ym); setModoResumen("mes"); };
+          const diasY = meses.flatMap((m) => m.rows).filter((r) => r.s.facturacion > 0);
+          const DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+          const sem = WD.map((corto, k) => { const d = diasY.filter((r) => weekday(r.date) === corto); return { letra: "LMXJVSD"[k], nombre: DIAS[k], n: d.length, media: d.length ? d.reduce((a, r) => a + r.s.facturacion, 0) / d.length : 0 }; });
+          const conDatos = sem.filter((x) => x.n > 0);
+          const mejorDia = conDatos.length >= 2 ? conDatos.reduce((a, x) => (x.media > a.media ? x : a)) : null;
+          const topeSem = Math.max(1, ...sem.map((x) => x.media));
+          const record = diasY.reduce((a, r) => (!a || r.s.facturacion > a.s.facturacion ? r : a), null);
+          const flecha = (on) => ({ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: on ? "pointer" : "default", fontFamily: "inherit", flexShrink: 0, opacity: on ? 1 : 0.35 });
+          const cab = { fontSize: 10.5, color: C.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "right" };
+          return (<>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+              <button className="nb" disabled={!antes} onClick={() => antes && setAnioSel(antes)} aria-label="Año anterior" style={flecha(!!antes)}>‹</button>
+              <div style={{ fontSize: 15, fontWeight: 900, color: C.t1, textAlign: "center" }}>{y}<div style={{ fontSize: 11, color: C.t2, fontWeight: 600 }}>{meses.length} {meses.length === 1 ? "mes" : "meses"} con datos</div></div>
+              <button className="nb" disabled={!despues} onClick={() => despues && setAnioSel(despues)} aria-label="Año siguiente" style={flecha(!!despues)}>›</button>
+            </div>
+            <Hero total={tot.fact} dias={tot.dias} media={tot.dias ? tot.fact / tot.dias : 0} parte={tot.parte} etiqueta={etqParte} propinas={tot.propinas} extra={tot.extra} gastos={tot.gastos} />
+            <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Mes a mes">
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Mes a mes</div>
+                {mejor && meses.length > 1 && <div style={{ fontSize: 12, color: C.t2 }}>Mejor mes: <strong style={{ color: C.accDim, textTransform: "capitalize" }}>{nombreMes(mejor.ym)}</strong></div>}
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 92, marginBottom: 12 }}>
+                {Array.from({ length: 12 }, (_, k) => { const ym = `${y}-${String(k + 1).padStart(2, "0")}`; const m = meses.find((x) => x.ym === ym); const es = mejor && m === mejor; return (
+                  <div key={ym} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <div style={{ width: "100%", maxWidth: 20, height: m ? Math.max(5, (m.totalFact / tope) * 70) : 3, borderRadius: 5, background: es ? `linear-gradient(180deg,${C.acc},${C.accDim})` : m ? `${C.acc}66` : C.linea }} />
+                    <div style={{ fontSize: 10, color: es ? C.accDim : C.t3, fontWeight: es ? 800 : 600 }}>{"EFMAMJJASOND"[k]}</div>
+                  </div>
+                ); })}
+              </div>
+              <div style={{ display: "flex", gap: 8, padding: "0 0 6px", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ ...cab, flex: 1, textAlign: "left" }}>Mes</div><div style={{ ...cab, width: 34 }}>Días</div><div style={{ ...cab, width: 92 }}>Facturado</div><div style={{ ...cab, width: 88, color: C.green }}>Te queda</div>
+              </div>
+              {meses.map((m) => { const l = limpioDe(m); return (
+                <button key={m.ym} className="nb" onClick={() => irAlMes(m.ym)} aria-label={`Ver ${nombreMes(m.ym)}`} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 0", background: "none", border: "none", borderBottom: `1px solid ${C.linea}`, cursor: "pointer", fontFamily: "inherit", color: C.t1, textAlign: "right" }}>
+                  <span style={{ flex: 1, textAlign: "left", fontSize: 13, fontWeight: 700, textTransform: "capitalize" }}>{nombreMes(m.ym)} <span style={{ color: C.t3, fontWeight: 600 }}>›</span></span>
+                  <span style={{ width: 34, fontSize: 12.5, color: C.t2 }}>{m.diasTrabajados}</span>
+                  <span style={{ width: 92, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>{fmt(m.totalFact)}</span>
+                  <span style={{ width: 88, fontSize: 13, fontWeight: 800, color: l >= 0 ? C.green : C.red, whiteSpace: "nowrap" }}>{fmt(l)}</span>
+                </button>
+              ); })}
+              <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>Toca un mes para ver su liquidación.</div>
+            </div>
+            {conDatos.length > 0 && <div style={{ ...card, padding: 16, marginBottom: 20 }} aria-label="Qué días rinden más">
+              <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Qué días rinden más</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 7, height: 104, marginBottom: 12 }}>
+                {sem.map((x) => { const es = mejorDia && x === mejorDia; return (
+                  <div key={x.nombre} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                    <div style={{ fontSize: 10, color: es ? C.accDim : C.t3, fontWeight: 800, whiteSpace: "nowrap" }}>{x.n ? Math.round(x.media) : ""}</div>
+                    <div style={{ width: "100%", maxWidth: 34, height: x.n ? Math.max(6, (x.media / topeSem) * 62) : 3, borderRadius: 7, background: es ? `linear-gradient(180deg,${C.acc},${C.accDim})` : x.n ? `${C.acc}66` : C.linea }} />
+                    <div style={{ fontSize: 11, color: es ? C.t1 : C.t3, fontWeight: es ? 900 : 600 }}>{x.letra}</div>
+                  </div>
+                ); })}
+              </div>
+              {mejorDia && <div style={{ fontSize: 13, color: C.t1, lineHeight: 1.5 }}>Tu mejor día es el <strong>{mejorDia.nombre}</strong>: <strong>{fmt0(mejorDia.media)}</strong> de media ({mejorDia.n} {mejorDia.n === 1 ? "día" : "días"}).</div>}
+              {record && <div style={{ fontSize: 12.5, color: C.t2, marginTop: 4 }}>Tu récord: <strong style={{ color: C.t1 }}>{fmt(record.s.facturacion)}</strong> el {weekday(record.date)} {dayMonth(record.date)}.</div>}
+              <div style={{ fontSize: 11, color: C.t3, marginTop: 8 }}>Media de lo que facturas cada día de la semana en {y}.</div>
+            </div>}
+          </>);
+        })()}
+        {view === "resumen" && (modoResumen === "semana" || modoResumen === "fechas") && (() => { const lo = rangeFrom <= rangeTo ? rangeFrom : rangeTo; const hi = rangeFrom <= rangeTo ? rangeTo : rangeFrom; const { rows, totalFact, conductorMes, totalCobradoEmpresa, diferenciaMes, efectivoMes, diasTrabajados, mediaDiaria, gastos: gastosPeriodo } = rangeData; return (<>
           {modoResumen === "fechas" && <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div style={{ minWidth: 0 }}><label htmlFor="rangoDesde" style={{ fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" }}>Desde</label><input type="date" id="rangoDesde" aria-label="Desde" className="inp" style={{ ...inp, fontSize: 13 }} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} /></div>

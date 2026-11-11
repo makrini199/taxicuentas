@@ -776,6 +776,47 @@ const { chromium } = require('playwright');
   comprobar('cuota al mes sin errores', porMes.errs.length === 0, porMes.errs.join(' | '));
   await porMes.c.close();
 
+  console.log('\n— EL AÑO, LOS DÍAS QUE MÁS RINDEN Y EL INFORME EN PDF —');
+  // Dos meses de este año (o el anterior, si estamos en enero): el mes pasado
+  // con dos días y este con uno. 50 %, sin gastos.
+  const ca = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block', acceptDownloads: true });
+  await ca.addInitScript(() => {
+    if (sessionStorage.getItem('sembrado')) return; sessionStorage.setItem('sembrado', '1');
+    localStorage.setItem('tc_cfg_ok', 'true'); localStorage.setItem('tc_aviso_play', JSON.stringify(Date.now()));
+    const d = new Date(); const f = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    const base = d.getMonth() === 0 ? new Date(d.getFullYear() - 1, 11, 20) : d;   // todo dentro del mismo año
+    const a1 = f(new Date(base.getFullYear(), base.getMonth() - 1, 5)), a2 = f(new Date(base.getFullYear(), base.getMonth() - 1, 6)), a3 = f(new Date(base.getFullYear(), base.getMonth(), 1));
+    localStorage.setItem('tc_days', JSON.stringify({ [a1]: { taximetro: 1000, visa: 400, propinas: 10 }, [a2]: { taximetro: 300 }, [a3]: { taximetro: 200, uber: 100 } }));
+    localStorage.setItem('tc_gastos', JSON.stringify([{ id: 1, date: a1, concepto: 'Lavado', importe: 20, reembolsable: false }]));
+  });
+  const pa = await ca.newPage(); const errAnio = []; pa.on('pageerror', (e) => errAnio.push(e.message));
+  await pa.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pa.waitForSelector('text=INGRESOS DEL DÍA');
+  await pa.getByRole('button', { name: /Resumen/ }).last().click(); await pa.waitForTimeout(400);
+  await pa.getByRole('button', { name: 'Año', exact: true }).click(); await pa.waitForTimeout(400);
+  const anioTxt = await pa.locator('body').innerText();
+  // 1.600 facturados en 3 días; tu 50 % = 800; + 10 de propinas − 20 de lavado = 790.
+  comprobar('el año suma lo facturado de sus meses', /1\.600,00\s€/.test(anioTxt) && /3 días/.test(anioTxt) && /2 meses con datos/.test(anioTxt), anioTxt.slice(0, 200).replace(/\n/g, ' '));
+  comprobar('y lo que te queda, con propinas y gastos', /TU 50%\s+800,00\s€\s+TUS GASTOS\s+−20,00\s€\s+TE QUEDA\s+790,00/i.test(anioTxt));
+  const mesAMes = await pa.getByLabel('Mes a mes').innerText();
+  comprobar('mes a mes: días, facturado y lo que queda', /2\s+1\.300,00\s€\s+640,00\s€/.test(mesAMes) && /1\s+300,00\s€\s+150,00\s€/.test(mesAMes), mesAMes.replace(/\n/g, ' ').slice(0, 200));
+  const rinden = await pa.getByLabel('Qué días rinden más').innerText();
+  comprobar('dice qué día de la semana rinde más y el récord', /Tu mejor día es el/.test(rinden) && /Tu récord: 1\.000,00\s€/.test(rinden), rinden.replace(/\n/g, ' ').slice(-160));
+  await pa.getByLabel('Mes a mes').getByRole('button').first().click(); await pa.waitForTimeout(400);
+  comprobar('tocar un mes lleva a su liquidación', /Liquidación mensual/i.test(await pa.locator('body').innerText()) && /1\.300,00/.test(await pa.getByLabel('Resumen del periodo').innerText()));
+  // El informe: sin hoja de compartir (como aquí) se descarga. Tiene que ser un
+  // PDF de verdad, con sus páginas y su tabla de referencias.
+  const bajar = async (boton) => { const [dl] = await Promise.all([pa.waitForEvent('download'), pa.getByRole('button', { name: boton, exact: true }).click()]); const fs = require('fs'); const buf = fs.readFileSync(await dl.path()); await pa.waitForTimeout(3200); return { nombre: dl.suggestedFilename(), buf }; };
+  const pdfEmpresa = await bajar('Para la empresa');
+  const cuerpoPdf = pdfEmpresa.buf.toString('latin1');
+  comprobar('el informe para la empresa es un PDF', /^TXpro-\d{4}-\d{2}\.pdf$/.test(pdfEmpresa.nombre) && cuerpoPdf.startsWith('%PDF-1.4') && cuerpoPdf.trimEnd().endsWith('%%EOF'), pdfEmpresa.nombre);
+  const xref = Number((cuerpoPdf.match(/startxref\n(\d+)\n/) || [])[1]);
+  comprobar('con sus páginas y la tabla en su sitio', /\/Type \/Pages[^>]*\/Count [1-9]/.test(cuerpoPdf) && cuerpoPdf.slice(xref, xref + 4) === 'xref' && /\/Filter \/DCTDecode/.test(cuerpoPdf) && pdfEmpresa.buf.length > 30000, `${pdfEmpresa.buf.length} bytes`);
+  const pdfCompleto = await bajar('Completo');
+  comprobar('y el completo también', /^TXpro-\d{4}-\d{2}-completo\.pdf$/.test(pdfCompleto.nombre) && pdfCompleto.buf.toString('latin1').startsWith('%PDF-1.4'), pdfCompleto.nombre);
+  comprobar('año e informe sin errores', errAnio.length === 0, errAnio.join(' | '));
+  await ca.close();
+
   console.log('\n— MODO OSCURO —');
   const fondo = (pg) => pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const oscuroSis = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', colorScheme: 'dark' });
