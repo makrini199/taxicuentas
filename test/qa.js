@@ -24,6 +24,18 @@ const { chromium } = require('playwright');
   await p.reload({ waitUntil: 'load' });
   await p.waitForSelector('text=INGRESOS DEL DÍA');
 
+  // El Diario pliega lo que se toca poco: el cálculo con la empresa y la jornada.
+  const abrir = async (pg, nombre) => { const bt = pg.getByRole('button', { name: nombre }).first(); if ((await bt.getAttribute('aria-expanded')) === 'false') { await bt.click(); await pg.waitForTimeout(150); } };
+  const abrirTodo = async (pg) => { await abrir(pg, /Cálculo con la empresa/); await abrir(pg, /^Tu jornada/); };
+  // Lleva el Calendario a un mes concreto, esté antes o después del de hoy.
+  const irAMes = async (pg, ym) => {
+    const nombre = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5)) - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const h = new Date(); const boton = ym < `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}` ? 'Mes anterior' : 'Mes siguiente';
+    for (let i = 0; i < 36 && !(await pg.locator('body').innerText()).toLowerCase().includes(nombre); i++) { await pg.getByLabel(boton).click(); await pg.waitForTimeout(120); }
+  };
+  const hoyTxt = (pg) => pg.locator('[aria-label="Resumen del día"]').innerText();
+  const jornadaTxt = (pg) => pg.getByRole('button', { name: /^Tu jornada/ }).locator('..').innerText();
+
   console.log('\n— ARRANQUE —');
   comprobar('aviso de configuración inicial', await p.getByText('Ajusta la app a tu acuerdo').count() > 0);
   comprobar('marca en la cabecera', (await p.locator('body').innerText()).includes('TXpro'));
@@ -33,12 +45,16 @@ const { chromium } = require('playwright');
   await set('Taxímetro', '142.30'); await set('Uber', '68.40'); await set('Uber, cobrado en efectivo', '18');
   await set('Cabify', '51.20'); await set('Bolt', '24.75'); await set('Bolt, cobrado en efectivo', '24.75');
   await set('FreeNow · precio cerrado', '46.10'); await set('FreeNow · precio cerrado, ya cobrado', '12');
-  await set('Tarjeta', '98.50');
+  // El taxímetro lleva su casilla de efectivo: 142,30 − 43,80 = 98,50 con tarjeta.
+  comprobar('lo plegado empieza cerrado', (await p.getByText('Cálculo del día').count()) === 0 && (await p.getByLabel('Hora de empezar').count()) === 0);
+  await set('Taxímetro, cobrado en efectivo', '43.80');
   await p.waitForTimeout(400);
+  comprobar('la tarjeta del taxímetro se calcula sola', /Con tarjeta en el taxímetro: 98,50/.test(await p.locator('body').innerText()));
+  await abrirTodo(p);
   // facturación = 142.30+68.40+51.20+24.75+46.10 = 332.75
   // cobrado = (68.40-18)+(51.20-0)+(24.75-24.75)+12+98.50 = 50.40+51.20+0+12+98.50 = 212.10
   const calc = await p.getByText('Cálculo del día').locator('..').innerText();
-  comprobar('facturación del día', (await p.getByText('Total facturación día').locator('../..').innerText()).includes('332,75'));
+  comprobar('facturación del día', (await hoyTxt(p)).includes('332,75'));
   comprobar('50% del conductor', calc.includes('166,38'));
   comprobar('cobrado por empresa', calc.includes('212,10'));
   comprobar('efectivo del conductor', calc.includes('120,65'));
@@ -53,9 +69,9 @@ const { chromium } = require('playwright');
   // Las propinas son del conductor: ni facturación, ni 50%, ni lo que cobra la
   // empresa pueden moverse un céntimo.
   const calc2 = await p.getByText('Cálculo del día').locator('..').innerText();
-  comprobar('las propinas no entran en la facturación', (await p.getByText('Total facturación día').locator('../..').innerText()).includes('332,75'));
+  comprobar('las propinas no entran en la facturación', (await hoyTxt(p)).includes('332,75'));
   comprobar('ni en el 50% ni en lo cobrado', calc2.includes('166,38') && calc2.includes('212,10') && calc2.includes('120,65'));
-  const jor = await p.getByText('Tu jornada').first().locator('..').innerText();
+  const jor = await jornadaTxt(p);
   comprobar('jornada que pasa la medianoche', jor.includes('10 h (pasas la medianoche)'), jor.split('\n').pop());
   // (166,375 de tu 50% + 12,50 de propinas) / 10 h = 17,8875
   comprobar('lo que ganas por hora', /ganas 17,89\s€\/h/.test(jor));
@@ -98,7 +114,7 @@ const { chromium } = require('playwright');
   // facturación 332,75 · 50% = 166,375 · cobrado 212,10 → la empresa debe 45,725
   // más los 45 del pinchazo a devolver → 90,73
   comprobar('balance con los gastos a devolver', mes.includes('90,73'));
-  comprobar('media diaria presente', /Media diaria \(1 día\)/.test(mes));
+  comprobar('media diaria presente', /1 día · media 333\s€ al día/.test(mes));
   comprobar('horas del mes', /Horas trabajadas \(1 día\)\s+10 h/.test(mes));
   comprobar('carreras del mes', /Carreras\s+20/.test(mes));
   comprobar('propinas del mes', /Propinas \(enteras para ti\)\s+12,50/.test(mes));
@@ -221,6 +237,7 @@ const { chromium } = require('playwright');
   comprobar('la propia sale en el parte', await p.locator('input[aria-label="RTI"]').count() === 1);
   await set('RTI', '80'); await set('RTI, cobrado en efectivo', '30');
   await p.waitForTimeout(400);
+  await abrirTodo(p);
   const propia = await p.getByText('Cálculo del día').locator('..').innerText();
   comprobar('la propia suma a la facturación', (await p.locator('body').innerText()).includes('230,00'), '100 + 50 + 80');
   comprobar('y la empresa cobra su parte', propia.includes('80,00'), '(50−20) + (80−30)');
@@ -331,7 +348,7 @@ const { chromium } = require('playwright');
     await pv.waitForTimeout(700);
     await pv.getByRole('button', { name: /Calendario/ }).click();
     await pv.waitForTimeout(400);
-    for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pv.locator('body').innerText()); i++) { await pv.getByLabel('Mes siguiente').click(); await pv.waitForTimeout(120); }
+    await irAMes(pv, '2026-10');
     await pv.getByRole('button', { name: /^2026-10-01/ }).click();
     await pv.waitForTimeout(400);
     return pv.locator('body').innerText();
@@ -360,7 +377,7 @@ const { chromium } = require('playwright');
   await ps.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 });
   await ps.getByRole('button', { name: /Calendario/ }).click();
   await ps.waitForTimeout(600);
-  for (let i = 0; i < 24 && !/diciembre de 2026/i.test(await ps.locator('body').innerText()); i++) { await ps.getByLabel('Mes siguiente').click(); await ps.waitForTimeout(150); }
+  await irAMes(ps, '2026-12');
   comprobar('los días fuertes siguen ahí sin cobertura', (await ps.locator('body').innerText()).includes('Nochevieja'));
   comprobar('y el mapa también', (await ps.getByText('Dónde es').count()) > 0);
   await sinRed.close();
@@ -378,7 +395,7 @@ const { chromium } = require('playwright');
   await taxi.fill('10,65+8.40');           // con coma y con punto, las dos valen
   await pc.waitForTimeout(300);
   comprobar('la cuenta sale en vivo', (await pc.locator('body').innerText()).includes('= 19,05'));
-  comprobar('y la facturación ya la cuenta', (await pc.getByText('Total facturación día').locator('../..').innerText()).includes('19,05'));
+  comprobar('y la facturación ya la cuenta', (await hoyTxt(pc)).includes('19,05'));
   await taxi.press('Enter');
   await pc.waitForTimeout(200);
   comprobar('al salir queda solo el total', (await taxi.inputValue()) === '19.05', await taxi.inputValue());
@@ -393,7 +410,7 @@ const { chromium } = require('playwright');
   await taxi.press('Enter');
   await pc.waitForTimeout(200);
   comprobar('viaje sumado', (await taxi.inputValue()) === '24.05', await taxi.inputValue());
-  const tarjeta = pc.locator('input[aria-label="Tarjeta"]');
+  const tarjeta = pc.locator('input[aria-label="Taxímetro, cobrado en efectivo"]');
   await tarjeta.fill('abc7');
   comprobar('lo que no es número no entra', (await tarjeta.inputValue()) === '7', await tarjeta.inputValue());
   await tarjeta.fill('');
@@ -415,6 +432,7 @@ const { chromium } = require('playwright');
   comprobar('y al volver sigue lo apuntado', (await taxi.inputValue()) === '24.05');
 
   // Propinas con calculadora y carreras de una en una.
+  await abrirTodo(pc);
   const propinas = pc.locator('input[aria-label="Propinas"]');
   await propinas.fill('2+1,5');
   await propinas.press('Enter');
@@ -475,7 +493,7 @@ const { chromium } = require('playwright');
   await pm.waitForTimeout(700);
   await pm.getByRole('button', { name: /Calendario/ }).click();
   await pm.waitForTimeout(500);
-  for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pm.locator('body').innerText()); i++) { await pm.getByLabel('Mes siguiente').click(); await pm.waitForTimeout(120); }
+  await irAMes(pm, '2026-10');
   await pm.getByRole('button', { name: /^2026-10-02/ }).click();
   await pm.waitForTimeout(500);
   const tarjetaMapa = () => pm.getByText('Dónde es').locator('../..').innerText();
@@ -520,7 +538,7 @@ const { chromium } = require('playwright');
   await pv2.waitForTimeout(800);
   await pv2.getByRole('button', { name: /Calendario/ }).click();
   await pv2.waitForTimeout(500);
-  for (let i = 0; i < 24 && !/octubre de 2026/i.test(await pv2.locator('body').innerText()); i++) { await pv2.getByLabel('Mes siguiente').click(); await pv2.waitForTimeout(120); }
+  await irAMes(pv2, '2026-10');
   await pv2.getByRole('button', { name: 'Todo el mes' }).click();
   await pv2.waitForTimeout(400);
   comprobar('con el calendario viejo guardado, el mapa se llena al abrir', !(await pv2.locator('body').innerText()).includes('no hay nada con sitio concreto'));
@@ -652,10 +670,11 @@ const { chromium } = require('playwright');
   await ph.waitForSelector('text=INGRESOS DEL DÍA');
   const tarjetaHoy = () => ph.getByLabel('Resumen del día').innerText();
   let th = await tarjetaHoy();
-  comprobar('la tarjeta de hoy enseña lo facturado y las carreras', th.includes('200,00') && /CARRERAS\s*12/i.test(th), th.slice(0, 120));
+  comprobar('la tarjeta de hoy enseña lo facturado y las carreras', th.includes('200,00') && /12 carreras/.test(th), th.slice(0, 120));
   comprobar('y la semana, con su total', /semana/i.test(th) && th.includes('200,00'));
   await ph.getByRole('button', { name: /Empezar jornada/ }).click();
   await ph.waitForTimeout(300);
+  await abrir(ph, /^Tu jornada/);
   const reloj = await ph.evaluate(() => JSON.parse(localStorage.getItem('tc_reloj') || 'null'));
   const ahoraHM = await ph.evaluate(() => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; });
   comprobar('«Empezar jornada» pone en marcha el cronómetro', !!reloj && (await ph.getByLabel('Hora de empezar').inputValue()) === ahoraHM, JSON.stringify(reloj));
@@ -672,6 +691,8 @@ const { chromium } = require('playwright');
   await ph.waitForTimeout(200);
   await ph.getByRole('button', { name: /Terminar jornada/ }).click();
   await ph.waitForTimeout(300);
+  // Al terminar, la jornada se abre sola: toca apuntar carreras y propinas.
+  comprobar('al terminar se despliega «Tu jornada»', (await ph.getByLabel('Hora de terminar').count()) === 1);
   const fin = await ph.getByLabel('Hora de terminar').inputValue();
   const cuerpoHoy = await ph.locator('body').innerText();
   comprobar('«Terminar» apunta la hora de acabar y el descanso', fin === ahoraHM || fin > ahoraHM ? /Descontados 15 min/.test(cuerpoHoy) : false, fin);
@@ -687,6 +708,114 @@ const { chromium } = require('playwright');
   comprobar('y compara con el mes anterior', /▲ 100 % frente a/.test(resumenHoy));
   comprobar('hoy y cronómetro sin errores', errHoy.length === 0, errHoy.join(' | '));
   await ch.close();
+
+  console.log('\n— CUOTA FIJA (ALQUILER) Y SALDO CON LA EMPRESA —');
+  // Hay conductores que no van a porcentaje: pagan a la empresa una cuota fija,
+  // por día trabajado o al mes, y el resto es suyo. Día de prueba: 271,40 €
+  // facturados, de los que la empresa cobró 138,20 (apps y tarjeta).
+  const conAcuerdo = async (cfg, dia) => {
+    const c = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+    await c.addInitScript(([cfg, dia]) => {
+      if (sessionStorage.getItem('sembrado')) return; sessionStorage.setItem('sembrado', '1');
+      localStorage.setItem('tc_cfg_ok', 'true'); localStorage.setItem('tc_aviso_play', JSON.stringify(Date.now()));
+      localStorage.setItem('tc_cfg', JSON.stringify(cfg));
+      const d = new Date(); const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      localStorage.setItem('tc_days', JSON.stringify({ [hoy]: dia }));
+    }, [cfg, dia]);
+    const pg = await c.newPage(); const errs = []; pg.on('pageerror', (e) => errs.push(e.message));
+    await pg.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+    await pg.waitForSelector('text=INGRESOS DEL DÍA');
+    return { c, pg, errs };
+  };
+  const diaCuota = { taximetro: 182.5, visa: 64.3, uber: 48.5, uberEfec: 15, cabify: 22, bolt: 18.4 };
+  const resumenDe = async (pg) => { await pg.getByRole('button', { name: /Resumen/ }).last().click(); await pg.waitForTimeout(500); return pg.locator('body').innerText(); };
+
+  // 125 € por día trabajado: tu parte = 271,40 − 125 = 146,40; la empresa cobró
+  // 138,20 y se queda 125 → te debe 13,20.
+  const porDia = await conAcuerdo({ modo: 'fijo', cuota: '125', cuotaPor: 'dia' }, diaCuota);
+  let tc = await hoyTxt(porDia.pg);
+  comprobar('cuota por día: tu parte es lo facturado menos la cuota', /tu parte 146,40/.test(tc), tc.slice(0, 120));
+  comprobar('cuota por día: la empresa te debe lo que cobró de más', /La empresa te debe 13,20/.test(tc));
+  await abrir(porDia.pg, /Cálculo con la empresa/);
+  const calcCuota = await porDia.pg.getByText('Cálculo del día').locator('..').innerText();
+  comprobar('el cálculo del día enseña la cuota', /Cuota para la empresa\s+125,00/.test(calcCuota) && /Para ti, quitada la cuota\s+146,40/.test(calcCuota));
+  let rc = await resumenDe(porDia.pg);
+  comprobar('el mes cuenta la cuota por los días trabajados', /Cuota a la empresa \(125\s€ × 1 día\)\s+125,00/.test(rc));
+  comprobar('y el balance del mes', /EMPRESA DEBE AL CONDUCTOR[\s\S]*13,20/i.test(rc));
+  comprobar('arriba del Resumen: tu parte, tus gastos y lo que te queda', /TRAS LA CUOTA\s+146,40\s€\s+TUS GASTOS\s+0,00\s€\s+TE QUEDA\s+146,40/i.test(rc), rc.slice(rc.indexOf('Facturado'), rc.indexOf('Facturado') + 120));
+  // Con cuota fija no hay bono ni % de combustible: la gasolina es del conductor.
+  await porDia.pg.getByLabel('Ajustes').click(); await porDia.pg.waitForTimeout(400);
+  const ajCuota = await porDia.pg.locator('body').innerText();
+  comprobar('Ajustes explica el acuerdo de cuota', /Pagas a la empresa 125\s€ por cada día que trabajes/.test(ajCuota) && !/Incentivo por facturación/i.test(ajCuota));
+  // De vuelta a porcentaje, al 60 %: de 271,40 le tocan 108,56 a la empresa, que
+  // ya cobró 138,20 → te debe 29,64. (Con la cuenta antigua salía otra cosa en
+  // cuanto el porcentaje no era el 50 %.)
+  await porDia.pg.getByRole('button', { name: 'A porcentaje' }).click(); await porDia.pg.waitForTimeout(200);
+  await porDia.pg.locator('#cfgPct').fill('60'); await porDia.pg.waitForTimeout(200);
+  comprobar('a porcentaje vuelve el incentivo', /Incentivo por facturación/i.test(await porDia.pg.locator('body').innerText()));
+  await porDia.pg.getByRole('button', { name: /Diario/ }).click(); await porDia.pg.waitForTimeout(400);
+  tc = await hoyTxt(porDia.pg);
+  comprobar('al 60 %: tu parte y el saldo cuadran', /tu parte 162,84/.test(tc) && /La empresa te debe 29,64/.test(tc), tc.slice(0, 120));
+  comprobar('cuota por día sin errores', porDia.errs.length === 0, porDia.errs.join(' | '));
+  await porDia.c.close();
+
+  // Todo en efectivo al 60 %: de 100 € te quedas 60 y debes 40 (no 60).
+  const efectivo60 = await conAcuerdo({ pctConductor: 60 }, { taximetro: 100 });
+  tc = await hoyTxt(efectivo60.pg);
+  comprobar('al 60 % y todo en efectivo debes el 40 %', /tu parte 60,00/.test(tc) && /Debes a la empresa 40,00/.test(tc), tc.slice(0, 120));
+  await efectivo60.c.close();
+
+  // 2.800 € al mes: el saldo es del mes. La empresa lleva cobrados 138,20 →
+  // faltan 2.661,80 para cubrir la cuota (y de paso, los miles llevan punto).
+  const porMes = await conAcuerdo({ modo: 'fijo', cuota: '2800', cuotaPor: 'mes' }, diaCuota);
+  tc = await hoyTxt(porMes.pg);
+  comprobar('cuota al mes: Hoy dice lo que falta para cubrirla', /cuota de 2\.800\s€ al mes/.test(tc) && /Faltan para cubrir la cuota del mes 2\.661,80/.test(tc), tc.slice(0, 140));
+  rc = await resumenDe(porMes.pg);
+  comprobar('y el Resumen del mes en curso también', /FALTAN PARA CUBRIR LA CUOTA DEL MES[\s\S]*2\.661,80/i.test(rc) && /Cuota mensual a la empresa\s+2\.800,00/.test(rc));
+  comprobar('con cuota mensual la tabla enseña lo que cobró la empresa', /Cobró empresa/.test(rc) && !/Diferencia/.test(rc));
+  comprobar('cuota al mes sin errores', porMes.errs.length === 0, porMes.errs.join(' | '));
+  await porMes.c.close();
+
+  console.log('\n— EL AÑO, LOS DÍAS QUE MÁS RINDEN Y EL INFORME EN PDF —');
+  // Dos meses de este año (o el anterior, si estamos en enero): el mes pasado
+  // con dos días y este con uno. 50 %, sin gastos.
+  const ca = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block', acceptDownloads: true });
+  await ca.addInitScript(() => {
+    if (sessionStorage.getItem('sembrado')) return; sessionStorage.setItem('sembrado', '1');
+    localStorage.setItem('tc_cfg_ok', 'true'); localStorage.setItem('tc_aviso_play', JSON.stringify(Date.now()));
+    const d = new Date(); const f = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    const base = d.getMonth() === 0 ? new Date(d.getFullYear() - 1, 11, 20) : d;   // todo dentro del mismo año
+    const a1 = f(new Date(base.getFullYear(), base.getMonth() - 1, 5)), a2 = f(new Date(base.getFullYear(), base.getMonth() - 1, 6)), a3 = f(new Date(base.getFullYear(), base.getMonth(), 1));
+    localStorage.setItem('tc_days', JSON.stringify({ [a1]: { taximetro: 1000, visa: 400, propinas: 10 }, [a2]: { taximetro: 300 }, [a3]: { taximetro: 200, uber: 100 } }));
+    localStorage.setItem('tc_gastos', JSON.stringify([{ id: 1, date: a1, concepto: 'Lavado', importe: 20, reembolsable: false }]));
+  });
+  const pa = await ca.newPage(); const errAnio = []; pa.on('pageerror', (e) => errAnio.push(e.message));
+  await pa.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pa.waitForSelector('text=INGRESOS DEL DÍA');
+  await pa.getByRole('button', { name: /Resumen/ }).last().click(); await pa.waitForTimeout(400);
+  await pa.getByRole('button', { name: 'Año', exact: true }).click(); await pa.waitForTimeout(400);
+  const anioTxt = await pa.locator('body').innerText();
+  // 1.600 facturados en 3 días; tu 50 % = 800; + 10 de propinas − 20 de lavado = 790.
+  comprobar('el año suma lo facturado de sus meses', /1\.600,00\s€/.test(anioTxt) && /3 días/.test(anioTxt) && /2 meses con datos/.test(anioTxt), anioTxt.slice(0, 200).replace(/\n/g, ' '));
+  comprobar('y lo que te queda, con propinas y gastos', /TU 50%\s+800,00\s€\s+TUS GASTOS\s+−20,00\s€\s+TE QUEDA\s+790,00/i.test(anioTxt));
+  const mesAMes = await pa.getByLabel('Mes a mes').innerText();
+  comprobar('mes a mes: días, facturado y lo que queda', /2\s+1\.300,00\s€\s+640,00\s€/.test(mesAMes) && /1\s+300,00\s€\s+150,00\s€/.test(mesAMes), mesAMes.replace(/\n/g, ' ').slice(0, 200));
+  const rinden = await pa.getByLabel('Qué días rinden más').innerText();
+  comprobar('dice qué día de la semana rinde más y el récord', /Tu mejor día es el/.test(rinden) && /Tu récord: 1\.000,00\s€/.test(rinden), rinden.replace(/\n/g, ' ').slice(-160));
+  await pa.getByLabel('Mes a mes').getByRole('button').first().click(); await pa.waitForTimeout(400);
+  comprobar('tocar un mes lleva a su liquidación', /Liquidación mensual/i.test(await pa.locator('body').innerText()) && /1\.300,00/.test(await pa.getByLabel('Resumen del periodo').innerText()));
+  // El informe: sin hoja de compartir (como aquí) se descarga. Tiene que ser un
+  // PDF de verdad, con sus páginas y su tabla de referencias.
+  const bajar = async (boton) => { const [dl] = await Promise.all([pa.waitForEvent('download'), pa.getByRole('button', { name: boton, exact: true }).click()]); const fs = require('fs'); const buf = fs.readFileSync(await dl.path()); await pa.waitForTimeout(3200); return { nombre: dl.suggestedFilename(), buf }; };
+  const pdfEmpresa = await bajar('Para la empresa');
+  const cuerpoPdf = pdfEmpresa.buf.toString('latin1');
+  comprobar('el informe para la empresa es un PDF', /^TXpro-\d{4}-\d{2}\.pdf$/.test(pdfEmpresa.nombre) && cuerpoPdf.startsWith('%PDF-1.4') && cuerpoPdf.trimEnd().endsWith('%%EOF'), pdfEmpresa.nombre);
+  const xref = Number((cuerpoPdf.match(/startxref\n(\d+)\n/) || [])[1]);
+  comprobar('con sus páginas y la tabla en su sitio', /\/Type \/Pages[^>]*\/Count [1-9]/.test(cuerpoPdf) && cuerpoPdf.slice(xref, xref + 4) === 'xref' && /\/Filter \/DCTDecode/.test(cuerpoPdf) && pdfEmpresa.buf.length > 30000, `${pdfEmpresa.buf.length} bytes`);
+  const pdfCompleto = await bajar('Completo');
+  comprobar('y el completo también', /^TXpro-\d{4}-\d{2}-completo\.pdf$/.test(pdfCompleto.nombre) && pdfCompleto.buf.toString('latin1').startsWith('%PDF-1.4'), pdfCompleto.nombre);
+  comprobar('año e informe sin errores', errAnio.length === 0, errAnio.join(' | '));
+  await ca.close();
 
   console.log('\n— MODO OSCURO —');
   const fondo = (pg) => pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
