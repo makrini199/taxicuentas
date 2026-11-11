@@ -381,6 +381,7 @@ const TRAZOS = {
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
 };
 TRAZOS.resumen = TRAZOS.mensual;
+TRAZOS.avion = <><path d="M10.200 13.800 3.400 11.600l1.500-1.500 6.500.900 4.300-4.300c1.200-1.200 3.400-1.700 4.300-.800s.400 3.100-.800 4.300l-4.300 4.300.900 6.500-1.500 1.500-2.200-6.800" /><path d="m10.200 13.800-2.700 2.700M7.500 16.500l-2.300-.400M7.500 16.500l.400 2.300" /></>;
 TRAZOS.flota = <><circle cx="9" cy="8.2" r="3.2" /><path d="M2.8 19.6c.6-3.4 3-5.4 6.2-5.4s5.6 2 6.2 5.4" /><circle cx="17.2" cy="9.2" r="2.5" /><path d="M17 14.4c2.3.3 3.8 1.800 4.300 4.400" /></>;
 TRAZOS.coche = <><path d="M4.4 16.4v-4.2l1.8-4.4a2 2 0 0 1 1.900-1.300h7.800a2 2 0 0 1 1.900 1.300l1.800 4.400v4.200" /><path d="M3.2 16.400h17.600" /><path d="M5.800 16.400v2.300M18.200 16.400v2.300" /><path d="M5 11.900h14" /><circle cx="7.700" cy="14.100" r="0.900" /><circle cx="16.300" cy="14.100" r="0.900" /></>;
 const Icono = ({ name, size = 23 }) => (
@@ -778,6 +779,336 @@ const DayTable = ({ rows, etiqueta, mensual, empresa }) => (
     <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>{mensual ? "La cuota mensual se resta en el balance del mes, no día a día." : empresa ? "Verde (+) = te debe el conductor · Rojo (−) = le debes" : "Verde (−) = empresa debe · Rojo (+) = conductor debe"}</div>
   </div>
 );
+// ═══════════════════════════════════════════════════════════════════════════
+// GASOLINERAS BARATAS
+// Los precios son los oficiales que las estaciones comunican al Ministerio
+// (Geoportal de Gasolineras). El servicio es público y se puede leer desde el
+// navegador, así que no hace falta clave ni servidor propio. La app baja la
+// lista entera de la Comunidad de Madrid para un combustible y busca aquí
+// dentro: la ubicación del conductor no sale del móvil.
+// ═══════════════════════════════════════════════════════════════════════════
+const GAS_URL = "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/FiltroProvinciaProducto/28/";
+const GAS_KEY = "tc_gas";             // lo que eligió: combustible, distancia, orden
+const GAS_DATOS_KEY = "tc_gas_datos"; // la última lista, para abrir sin cobertura
+const GAS_CADUCA = 30 * 60 * 1000;    // el Ministerio renueva cada media hora
+const COMBUSTIBLES = [["1", "Gasolina 95"], ["4", "Diésel"], ["17", "GLP"], ["18", "GNC"]];
+const GAS_RADIOS = [2, 5, 10, 20];
+const GAS_PREF = { comb: "1", radio: 5, orden: "precio", solo24: false };
+const leerGasPref = () => {
+  const p = loadStorage(GAS_KEY, null) || {};
+  return {
+    comb: COMBUSTIBLES.some(([id]) => id === p.comb) ? p.comb : GAS_PREF.comb,
+    radio: GAS_RADIOS.includes(p.radio) ? p.radio : GAS_PREF.radio,
+    orden: p.orden === "cerca" ? "cerca" : "precio",
+    solo24: p.solo24 === true,
+  };
+};
+const numEs = (s) => { const n = parseFloat(String(s == null ? "" : s).replace(",", ".")); return Number.isFinite(n) ? n : NaN; };
+const textoCorto = (s, max) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, max);
+// Las direcciones llegan EN MAYÚSCULAS: se dejan como se escriben.
+const enMinusculas = (s) => s.toLowerCase().replace(/(^|[\s.\-/(,])([a-záéíóúüñ])/g, (m, a, b) => a + b.toUpperCase());
+const sinAcentos = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+// Solo entra lo que tiene precio y sitio creíbles; lo demás se descarta.
+const limpiarEstaciones = (lista) => {
+  if (!Array.isArray(lista)) return [];
+  const out = [];
+  for (const e of lista) {
+    if (!e || typeof e !== "object") continue;
+    const precio = numEs(e.PrecioProducto), lat = numEs(e.Latitud), lon = numEs(e["Longitud (WGS84)"]);
+    if (!(precio > 0.2 && precio < 6) || !(lat > 35 && lat < 44.5) || !(lon > -10 && lon < 5)) continue;
+    const horario = textoCorto(e.Horario, 80);
+    out.push({ id: textoCorto(e.IDEESS, 12), rotulo: textoCorto(e["Rótulo"], 40) || "Gasolinera", dir: enMinusculas(textoCorto(e["Dirección"], 70)).replace(/[\s,;.\-]+$/, ""), muni: textoCorto(e.Municipio, 40), lat, lon, precio, horario, h24: /^L-D:\s*24\s*H$/i.test(horario) });
+  }
+  return out;
+};
+const leerGasDatos = () => {
+  const d = loadStorage(GAS_DATOS_KEY, null);
+  if (!d || typeof d !== "object" || !COMBUSTIBLES.some(([id]) => id === d.comb) || !Number.isFinite(d.hora) || !Array.isArray(d.estaciones)) return null;
+  const estaciones = d.estaciones.filter((e) => e && Number.isFinite(e.precio) && Number.isFinite(e.lat) && Number.isFinite(e.lon) && typeof e.rotulo === "string");
+  return estaciones.length ? { comb: d.comb, hora: d.hora, estaciones } : null;
+};
+const descargarGasolineras = async (comb) => {
+  const corte = typeof AbortController === "function" ? new AbortController() : null;
+  const reloj = corte ? setTimeout(() => corte.abort(), 25000) : null;
+  try {
+    const res = await fetch(GAS_URL + comb, { headers: { Accept: "application/json" }, cache: "no-store", ...(corte ? { signal: corte.signal } : {}) });
+    if (!res.ok) throw new Error("sin respuesta");
+    const crudo = await res.json();
+    const estaciones = limpiarEstaciones(crudo && crudo.ListaEESSPrecio);
+    if (!estaciones.length) throw new Error("lista vacía");
+    return { comb, hora: Date.now(), estaciones };
+  } finally { if (reloj) clearTimeout(reloj); }
+};
+const distanciaKm = (a, b) => {
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+};
+const precioLitro = (n) => n.toLocaleString("es-ES", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const kmTxt = (km) => (km < 1 ? `${Math.round(km * 100) * 10} m` : `${km.toLocaleString("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`);
+const comoLlegar = (e) => `https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lon}`;
+
+function Gasolineras({ alVolver }) {
+  const [pref, setPref] = useState(leerGasPref);
+  const [datos, setDatos] = useState(null);
+  const [estado, setEstado] = useState("cargando");
+  const [recarga, setRecarga] = useState(0);
+  const forzar = useRef(false);
+  const [pos, setPos] = useState(null);
+  const [posEstado, setPosEstado] = useState("");
+  const [busca, setBusca] = useState("");
+  const [cuantas, setCuantas] = useState(12);
+  const cambiar = (k, v) => { const n = { ...pref, [k]: v }; setPref(n); setCuantas(12); try { localStorage.setItem(GAS_KEY, JSON.stringify(n)); } catch {} };
+
+  useEffect(() => {
+    let vivo = true;
+    const g = leerGasDatos();
+    const guardado = g && g.comb === pref.comb ? g : null;
+    setDatos(guardado);
+    if (guardado && !forzar.current && Date.now() - guardado.hora < GAS_CADUCA) { setEstado(""); return undefined; }
+    forzar.current = false;
+    setEstado("cargando");
+    descargarGasolineras(pref.comb)
+      .then((d) => { if (!vivo) return; setDatos(d); setEstado(""); try { localStorage.setItem(GAS_DATOS_KEY, JSON.stringify(d)); } catch {} })
+      .catch(() => { if (vivo) setEstado("error"); });
+    return () => { vivo = false; };
+  }, [pref.comb, recarga]);
+
+  const ubicar = () => {
+    if (!navigator.geolocation) { setPosEstado("fallo"); return; }
+    setPosEstado("buscando");
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setPos({ lat: p.coords.latitude, lon: p.coords.longitude }); setPosEstado(""); setCuantas(12); },
+      (e) => setPosEstado(e && e.code === 1 ? "denegada" : "fallo"),
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 }
+    );
+  };
+  // Si ya dio permiso otro día, no hace falta que vuelva a pulsar.
+  useEffect(() => { try { navigator.permissions.query({ name: "geolocation" }).then((r) => { if (r.state === "granted") ubicar(); }).catch(() => {}); } catch {} }, []);
+
+  const q = sinAcentos(busca.trim());
+  const vista = useMemo(() => {
+    if (!datos) return { filas: [], media: 0, mejor: null };
+    let l = datos.estaciones.map((e) => ({ ...e, km: pos ? distanciaKm(pos, e) : null }));
+    if (pref.solo24) l = l.filter((e) => e.h24);
+    if (q) l = l.filter((e) => sinAcentos(`${e.rotulo} ${e.dir} ${e.muni}`).includes(q));
+    else if (pos) l = l.filter((e) => e.km <= pref.radio);
+    const media = l.length ? l.reduce((s, e) => s + e.precio, 0) / l.length : 0;
+    const porPrecio = (a, b) => a.precio - b.precio || (a.km || 0) - (b.km || 0);
+    const mejor = l.length ? [...l].sort(porPrecio)[0] : null;
+    l.sort(pref.orden === "cerca" && pos ? (a, b) => a.km - b.km || a.precio - b.precio : porPrecio);
+    return { filas: l, media, mejor };
+  }, [datos, pos, pref.solo24, pref.radio, pref.orden, q]);
+
+  const nombreComb = (COMBUSTIBLES.find(([id]) => id === pref.comb) || COMBUSTIBLES[0])[1];
+  const unidad = pref.comb === "18" ? "€/kg" : "€/l";
+  const carga = pref.comb === "18" ? [15, "15 kg"] : [40, "40 litros"];
+  const hora = datos ? new Date(datos.hora) : null;
+  const horaTxt = hora ? `${hora.toLocaleDateString("es-ES", { day: "numeric", month: "long" })} a las ${hora.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}` : "";
+  const viejo = datos && Date.now() - datos.hora > 6 * 3600 * 1000;
+  const { filas, media, mejor } = vista;
+  const ahorro = mejor ? (media - mejor.precio) * carga[0] : 0;
+  const donde = q ? `con «${busca.trim()}»` : pos ? `a menos de ${pref.radio} km` : "de la Comunidad de Madrid";
+  const chip = (on) => ({ padding: "8px 12px", borderRadius: 999, border: `1px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}22` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" });
+  const etiqueta = { fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 };
+
+  return (<>
+    <button className="nb" onClick={alVolver} style={{ background: "none", border: "none", padding: "2px 0", marginBottom: 8, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Gastos</button>
+    <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Gasolineras baratas</div>
+    <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>Precios oficiales de hoy en la Comunidad de Madrid.</div>
+
+    <div role="group" aria-label="Combustible" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 10 }}>
+      {COMBUSTIBLES.map(([id, nombre]) => <button key={id} className="nb" aria-pressed={pref.comb === id} onClick={() => cambiar("comb", id)} style={chip(pref.comb === id)}>{nombre}</button>)}
+    </div>
+
+    {!pos && <div style={{ ...card, padding: 14, marginBottom: 10 }} aria-label="Tu ubicación">
+      <div style={{ fontSize: 13, color: C.t1, fontWeight: 700, marginBottom: 4 }}>¿Cerca de dónde estás?</div>
+      <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Con tu ubicación te enseño las de alrededor y a cuánto te quedan. La ubicación no sale del móvil ni se guarda.</div>
+      <button className="nb" onClick={ubicar} disabled={posEstado === "buscando"} style={{ width: "100%", padding: 11, borderRadius: 12, border: "none", background: C.acc, color: "#1a1d29", fontWeight: 800, fontSize: 14, cursor: "pointer", fontFamily: "inherit", opacity: posEstado === "buscando" ? 0.6 : 1 }}>{posEstado === "buscando" ? "Buscando dónde estás…" : "Usar mi ubicación"}</button>
+      {posEstado === "denegada" && <div role="status" style={{ fontSize: 12, color: C.red, marginTop: 8, lineHeight: 1.5 }}>El móvil no ha dado permiso de ubicación. Puedes darlo en los ajustes del teléfono, o buscar abajo por municipio o calle.</div>}
+      {posEstado === "fallo" && <div role="status" style={{ fontSize: 12, color: C.red, marginTop: 8, lineHeight: 1.5 }}>No he podido saber dónde estás. Prueba otra vez o busca abajo por municipio o calle.</div>}
+    </div>}
+
+    {pos && <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 8 }} role="group" aria-label="Distancia">
+      {GAS_RADIOS.map((r) => <button key={r} className="nb" aria-pressed={pref.radio === r} onClick={() => cambiar("radio", r)} style={chip(pref.radio === r)}>{r} km</button>)}
+    </div>}
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 10 }} role="group" aria-label="Orden">
+      {pos && <button className="nb" aria-pressed={pref.orden === "precio"} onClick={() => cambiar("orden", "precio")} style={chip(pref.orden === "precio")}>Más baratas</button>}
+      {pos && <button className="nb" aria-pressed={pref.orden === "cerca"} onClick={() => cambiar("orden", "cerca")} style={chip(pref.orden === "cerca")}>Más cerca</button>}
+      <button className="nb" aria-pressed={pref.solo24} onClick={() => cambiar("solo24", !pref.solo24)} style={chip(pref.solo24)}>Abiertas 24 h</button>
+    </div>
+    <input type="search" aria-label="Buscar gasolinera" value={busca} onChange={(e) => { setBusca(e.target.value); setCuantas(12); }} placeholder="Busca un municipio, calle o marca" style={{ width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.inp, color: C.t1, fontSize: 14, fontFamily: "inherit", marginBottom: 12 }} />
+
+    {estado === "cargando" && !datos && <div role="status" style={{ ...card, padding: 18, textAlign: "center", color: C.t2, fontSize: 13 }}>Bajando los precios de hoy…</div>}
+    {estado === "error" && <div role="alert" style={{ background: `${C.red}12`, border: `1px solid ${C.red}44`, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 12.5, color: C.t1, lineHeight: 1.5 }}>
+      {datos ? "No he podido actualizar los precios (¿sin cobertura?). Te enseño los últimos que bajé." : "No he podido bajar los precios. Comprueba la conexión y vuelve a probar."}
+      <button className="nb" onClick={() => { forzar.current = true; setRecarga((n) => n + 1); }} style={{ display: "block", marginTop: 8, padding: "7px 12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 700, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Reintentar</button>
+    </div>}
+
+    {datos && mejor && <div style={{ ...card, padding: 16, marginBottom: 12, borderColor: `${C.green}55` }} aria-label="La más barata">
+      <div style={etiqueta}>La más barata {donde}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 6 }}>
+        <span style={{ fontSize: 34, fontWeight: 900, color: C.green, letterSpacing: -0.5 }}>{precioLitro(mejor.precio)}</span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: C.t2 }}>{unidad}</span>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 900, marginTop: 4 }}>{mejor.rotulo}</div>
+      <div style={{ fontSize: 12.5, color: C.t2, marginTop: 2, lineHeight: 1.45 }}>{mejor.dir}{mejor.muni ? ` · ${mejor.muni}` : ""}{mejor.km != null ? ` · a ${kmTxt(mejor.km)}` : ""}</div>
+      {filas.length > 1 && <div style={{ fontSize: 12.5, color: C.t1, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.linea}`, lineHeight: 1.5 }}>La media de las {filas.length} gasolineras {donde} es <strong>{precioLitro(media)} {unidad}</strong>.{ahorro >= 0.5 ? <> Echando {carga[1]} aquí te ahorras <strong style={{ color: C.green }}>{fmt(ahorro)}</strong>.</> : null}</div>}
+      <a href={comoLlegar(mejor)} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: 12, padding: 11, borderRadius: 12, background: C.acc, color: "#1a1d29", fontWeight: 800, fontSize: 14, textAlign: "center", textDecoration: "none" }}>Cómo llegar</a>
+    </div>}
+
+    {datos && !mejor && <div role="status" style={{ ...card, padding: 16, marginBottom: 12, fontSize: 13, color: C.t2, lineHeight: 1.5 }} aria-label="Sin resultados">No hay gasolineras con {nombreComb}{pref.solo24 ? " abiertas 24 h" : ""} {donde}.{pos && !q && pref.radio < 20 ? " Prueba con más distancia." : ""}</div>}
+
+    {datos && filas.length > 0 && <div style={{ ...card, padding: "4px 14px", marginBottom: 12 }} aria-label="Lista de gasolineras">
+      {filas.slice(0, cuantas).map((e, i) => { const dif = e.precio - media; return (
+        <a key={e.id || i} href={comoLlegar(e)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderTop: i ? `1px solid ${C.linea}` : "none", textDecoration: "none", color: C.t1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.rotulo}</div>
+            <div style={{ fontSize: 12, color: C.t2, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.dir}{e.muni ? ` · ${e.muni}` : ""}</div>
+            <div style={{ fontSize: 11.5, color: C.t3, marginTop: 2 }}>{e.km != null ? `${kmTxt(e.km)} · ` : ""}{e.h24 ? "Abierta 24 h" : e.horario}</div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 900 }}>{precioLitro(e.precio)}</div>
+            {filas.length > 1 && Math.abs(dif) >= 0.001 && <div style={{ fontSize: 11.5, fontWeight: 700, color: dif < 0 ? C.green : C.red }}>{dif < 0 ? "−" : "+"}{precioLitro(Math.abs(dif))}</div>}
+          </div>
+        </a>); })}
+      {filas.length > cuantas && <button className="nb" onClick={() => setCuantas((n) => n + 20)} style={{ width: "100%", margin: "6px 0 10px", padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ver más ({filas.length - cuantas})</button>}
+    </div>}
+
+    {datos && <div style={{ fontSize: 11.5, color: viejo ? C.red : C.t3, lineHeight: 1.55, marginBottom: 8 }} aria-label="Fuente de los precios">
+      Precios bajados el {horaTxt}{estado === "cargando" ? " · actualizando…" : ""}.{viejo ? " Son antiguos: actualiza cuando tengas cobertura." : ""} Fuente: Geoportal de Gasolineras del Ministerio. Son los que comunica cada estación; el del surtidor manda.
+      {estado !== "cargando" && <button className="nb" onClick={() => { forzar.current = true; setRecarga((n) => n + 1); }} style={{ display: "block", marginTop: 8, padding: "7px 12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Actualizar precios</button>}
+    </div>}
+  </>);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LLEGADAS AL AEROPUERTO
+// Los horarios de vuelos no son un dato abierto: hay que pedirlos con una clave
+// de pago, y esa clave no puede ir dentro de la app. Por eso la app solo lee un
+// archivo ya preparado, llegadas.json, que va junto a ella igual que
+// eventos.json. Mientras ese archivo no exista, esta pantalla ni se ofrece.
+//
+//   { "actualizado": "2026-11-11T21:00:00+01:00",
+//     "vuelos": [{ "hora": "2026-11-11T21:35:00+01:00", "prevista": "…", "terminal": "T4",
+//                  "origen": "Londres", "num": "IB3167", "cia": "Iberia", "estado": "" }] }
+//
+// "hora" es la programada y "prevista" la que da el aeropuerto si hay retraso.
+// Para el taxi, T4S cuenta como T4 (se sale por la T4) y T3 como T2.
+// ═══════════════════════════════════════════════════════════════════════════
+const TERMINALES = ["T1", "T2", "T4"];
+const LLEGADAS_VIEJAS = 3 * 3600 * 1000;   // pasado este tiempo, ya no se ofrecen
+const limpiarLlegadas = (crudo) => {
+  if (!crudo || typeof crudo !== "object" || !Array.isArray(crudo.vuelos)) return null;
+  const actualizado = Date.parse(crudo.actualizado);
+  if (!Number.isFinite(actualizado)) return null;
+  const vuelos = [];
+  for (const v of crudo.vuelos) {
+    if (!v || typeof v !== "object") continue;
+    const prog = Date.parse(v.hora);
+    if (!Number.isFinite(prog)) continue;
+    const p = Date.parse(v.prevista);
+    let t = String(v.terminal == null ? "" : v.terminal).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (t && t[0] !== "T") t = "T" + t;
+    if (t === "T4S") t = "T4";
+    if (t === "T3") t = "T2";
+    vuelos.push({ prog, prev: Number.isFinite(p) ? p : prog, t: TERMINALES.includes(t) ? t : "", origen: textoCorto(v.origen, 40), num: textoCorto(v.num, 10), cia: textoCorto(v.cia, 30), cancelado: v.estado === "cancelado" });
+  }
+  vuelos.sort((a, b) => a.prev - b.prev);
+  return { actualizado, vuelos };
+};
+const llegadasVigentes = (ll, ahora) => !!ll && ahora - ll.actualizado < LLEGADAS_VIEJAS && ll.vuelos.some((v) => !v.cancelado && v.prev > ahora);
+const horaCorta = (ms) => new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+const cuantosVuelos = (n) => `${n} ${n === 1 ? "vuelo" : "vuelos"}`;
+// Lo que llega en la próxima hora y lo que acaba de aterrizar.
+const resumenLlegadas = (ll, ahora) => {
+  const vivos = ll.vuelos.filter((v) => !v.cancelado);
+  const hora = vivos.filter((v) => v.prev > ahora && v.prev <= ahora + 3600000);
+  const recien = vivos.filter((v) => v.prev <= ahora && v.prev > ahora - 30 * 60000);
+  return { hora, recien, porTerminal: TERMINALES.map((t) => [t, hora.filter((v) => v.t === t).length]) };
+};
+
+function Aeropuerto({ llegadas, alVolver }) {
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setAhora(Date.now()), 30000); return () => clearInterval(id); }, []);
+  const [terminal, setTerminal] = useState("");
+  const [cuantos, setCuantos] = useState(12);
+  const { hora, recien, porTerminal } = useMemo(() => resumenLlegadas(llegadas, ahora), [llegadas, ahora]);
+  const vivos = useMemo(() => llegadas.vuelos.filter((v) => !v.cancelado && (!terminal || v.t === terminal)), [llegadas, terminal]);
+  // Las próximas doce horas, de hora en hora de reloj.
+  const tramos = useMemo(() => {
+    const ini = new Date(ahora); ini.setMinutes(0, 0, 0);
+    return Array.from({ length: 12 }, (_, i) => { const a = ini.getTime() + i * 3600000; return { a, n: vivos.filter((v) => v.prev >= Math.max(a, ahora) && v.prev < a + 3600000).length }; });
+  }, [vivos, ahora]);
+  const tope = Math.max(1, ...tramos.map((t) => t.n));
+  const pico = tramos.reduce((m, t) => (t.n > m.n ? t : m), tramos[0]);
+  const proximos = vivos.filter((v) => v.prev > ahora);
+  const viejo = ahora - llegadas.actualizado > 3600000;
+  const chip = (on) => ({ padding: "8px 14px", borderRadius: 999, border: `1px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}22` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" });
+  const etiqueta = { fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 };
+
+  return (<>
+    <button className="nb" onClick={alVolver} style={{ background: "none", border: "none", padding: "2px 0", marginBottom: 8, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>
+    <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Llegadas al aeropuerto</div>
+    <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>Vuelos que aterrizan en Barajas, por terminal.</div>
+
+    <div style={{ ...card, padding: 16, marginBottom: 12, borderColor: `${C.blue}55` }} aria-label="Próxima hora">
+      <div style={etiqueta}>En la próxima hora</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
+        <span style={{ fontSize: 34, fontWeight: 900, color: C.blue, letterSpacing: -0.5 }}>{hora.length}</span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: C.t2 }}>{hora.length === 1 ? "vuelo" : "vuelos"}</span>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        {porTerminal.map(([t, n]) => <div key={t} style={{ flex: 1, background: C.inp, border: `1px solid ${C.linea}`, borderRadius: 12, padding: "9px 6px", textAlign: "center" }}>
+          <div style={{ fontSize: 11, color: C.t3, fontWeight: 800 }}>{t}</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: n ? C.t1 : C.t3 }}>{n}</div>
+        </div>)}
+      </div>
+      <div style={{ fontSize: 12.5, color: C.t1, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.linea}`, lineHeight: 1.5 }}>
+        {recien.length ? <>Han aterrizado <strong>{cuantosVuelos(recien.length)}</strong> en la última media hora: su gente está saliendo ahora.</> : <>No ha aterrizado ninguno en la última media hora.</>}
+      </div>
+    </div>
+
+    <div role="group" aria-label="Terminal" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 10 }}>
+      {[["", "Todas"], ...TERMINALES.map((t) => [t, t])].map(([t, nombre]) => <button key={nombre} className="nb" aria-pressed={terminal === t} onClick={() => { setTerminal(t); setCuantos(12); }} style={chip(terminal === t)}>{nombre}</button>)}
+    </div>
+
+    <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Llegadas por hora">
+      <div style={etiqueta}>Las próximas 12 horas{terminal ? ` · ${terminal}` : ""}</div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 110, marginTop: 14 }}>
+        {tramos.map((t) => <div key={t.a} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: t === pico && t.n ? C.accDim : C.t3, marginBottom: 3 }}>{t.n || ""}</div>
+          <div style={{ width: "100%", height: `${Math.round((t.n / tope) * 78)}px`, minHeight: t.n ? 3 : 1, borderRadius: 5, background: t === pico && t.n ? C.acc : t.n ? `${C.blue}99` : C.linea }} />
+        </div>)}
+      </div>
+      <div style={{ display: "flex", gap: 4, marginTop: 5 }}>
+        {tramos.map((t, i) => <div key={t.a} style={{ flex: 1, textAlign: "center", fontSize: 10, color: C.t3, fontWeight: 600 }}>{i % 2 === 0 ? `${new Date(t.a).getHours()}h` : ""}</div>)}
+      </div>
+      {pico.n > 0 && <div style={{ fontSize: 12.5, color: C.t1, marginTop: 12, lineHeight: 1.5 }}>El pico{terminal ? ` de la ${terminal}` : ""}: de <strong>{horaCorta(pico.a)}</strong> a <strong>{horaCorta(pico.a + 3600000)}</strong>, con <strong>{cuantosVuelos(pico.n)}</strong>.</div>}
+    </div>
+
+    {proximos.length > 0 ? <div style={{ ...card, padding: "4px 14px", marginBottom: 12 }} aria-label="Próximos vuelos">
+      {proximos.slice(0, cuantos).map((v, i) => { const retraso = Math.round((v.prev - v.prog) / 60000); return (
+        <div key={`${v.num}-${v.prog}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: i ? `1px solid ${C.linea}` : "none" }}>
+          <div style={{ width: 54, flexShrink: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: retraso >= 15 ? C.red : C.t1 }}>{horaCorta(v.prev)}</div>
+            {retraso >= 15 && <div style={{ fontSize: 10.5, color: C.t3, textDecoration: "line-through" }}>{horaCorta(v.prog)}</div>}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.origen || "Origen sin indicar"}</div>
+            <div style={{ fontSize: 11.5, color: C.t3, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[v.num, v.cia].filter(Boolean).join(" · ")}{retraso >= 15 ? ` · ${retraso} min de retraso` : ""}</div>
+          </div>
+          <div style={{ flexShrink: 0, minWidth: 34, textAlign: "center", padding: "4px 7px", borderRadius: 8, background: v.t ? `${C.blue}18` : C.inp, color: v.t ? C.blue : C.t3, fontSize: 12, fontWeight: 900 }}>{v.t || "—"}</div>
+        </div>); })}
+      {proximos.length > cuantos && <button className="nb" onClick={() => setCuantos((n) => n + 20)} style={{ width: "100%", margin: "6px 0 10px", padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ver más ({proximos.length - cuantos})</button>}
+    </div> : <div role="status" style={{ ...card, padding: 16, marginBottom: 12, fontSize: 13, color: C.t2 }} aria-label="Sin vuelos">No hay más llegadas{terminal ? ` en la ${terminal}` : ""} en los datos de ahora.</div>}
+
+    <div style={{ fontSize: 11.5, color: viejo ? C.red : C.t3, lineHeight: 1.55, marginBottom: 8 }} aria-label="Hora de los datos">
+      Datos de las {horaCorta(llegadas.actualizado)}.{viejo ? " Tienen más de una hora: los retrasos pueden haber cambiado." : ""} La T4S cuenta como T4, que es por donde se sale. Los horarios pueden cambiar sin aviso.
+    </div>
+  </>);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS DOS CARAS DE TXPRO: CONDUCTOR Y EMPRESA O FLOTA
 // El conductor lleva sus cuentas como siempre. La empresa da de alta a sus
@@ -1436,6 +1767,18 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
     return () => { vivo = false; };
   }, []);
   const eventosPorDia = useMemo(() => indexarEventos(eventos.eventos), [eventos]);
+  // Las llegadas al aeropuerto cambian a cada rato: se piden al abrir la app y
+  // cada vez que se entra en Calendario o en su pantalla. No se guardan.
+  const [llegadas, setLlegadas] = useState(null);
+  useEffect(() => {
+    if (view !== "diario" && view !== "calendario" && view !== "aeropuerto") return undefined;
+    let vivo = true;
+    fetch("./llegadas.json", { cache: "no-cache" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((crudo) => { if (vivo) setLlegadas(limpiarLlegadas(crudo)); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [view]);
   const [mapa, setMapa] = useState(null);
   const [alcanceMapa, setAlcanceMapa] = useState(null);   // null: el día si tiene algo, si no el mes
   const [lugarMarcado, setLugarMarcado] = useState(null);
@@ -2025,6 +2368,14 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
           <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Gastos</div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 14 }}>Lo que pagas tú de tu bolsillo. Marca los que te devuelve la empresa y se descontarán de lo que le debes.</div>
           {gastoSaved && <div style={{ background: `${C.green}18`, border: `1px solid ${C.green}44`, borderRadius: 10, padding: 11, color: C.green, fontWeight: 700, textAlign: "center", marginBottom: 12, fontSize: 13 }}>Gasto guardado</div>}
+          <button className="nb" onClick={() => { setView("gasolineras"); setTimeout(() => { try { window.scrollTo(0, 0); } catch {} }, 0); }} style={{ ...card, width: "100%", padding: "13px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", color: C.t1, borderColor: `${C.green}55` }}>
+            <span style={{ width: 38, height: 38, borderRadius: 12, background: `${C.green}18`, color: C.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icono name="gastos" size={21} /></span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 900 }}>Gasolineras baratas</span>
+              <span style={{ display: "block", fontSize: 12, color: C.t2, marginTop: 1 }}>Los precios de hoy, cerca de ti</span>
+            </span>
+            <span aria-hidden="true" style={{ fontSize: 20, color: C.t3, fontWeight: 700 }}>›</span>
+          </button>
 
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Nuevo gasto</div>
@@ -2082,6 +2433,11 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
             );
           })}
         </>); })()}
+        {view === "gasolineras" && <Gasolineras alVolver={() => setView("gastos")} />}
+        {view === "aeropuerto" && (llegadas
+          ? <Aeropuerto llegadas={llegadas} alVolver={() => setView("calendario")} />
+          : <button className="nb" onClick={() => setView("calendario")} style={{ background: "none", border: "none", padding: "2px 0", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>)}
+
         {view === "calendario" && (() => {
           const huecos = primerDiaSemana(calMes);
           const total = diasEnMes(calMes);
@@ -2097,7 +2453,17 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
           const alcanceCal = alcanceMapa === "mes" || !sel ? "mes" : alcanceMapa === "dia" ? "dia" : delDiaCal.length ? "dia" : "mes";
           const datosSel = sel && days[sel] ? calcDay(days[sel], rep, plats) : null;
           const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 36, height: 36, fontSize: 18, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 };
+          const hayLlegadas = llegadasVigentes(llegadas, Date.now());
+          const enUnaHora = hayLlegadas ? resumenLlegadas(llegadas, Date.now()).hora.length : 0;
           return (<>
+            {hayLlegadas && <button className="nb" onClick={() => { setView("aeropuerto"); setTimeout(() => { try { window.scrollTo(0, 0); } catch {} }, 0); }} style={{ ...card, width: "100%", padding: "13px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", color: C.t1, borderColor: `${C.blue}55` }}>
+              <span style={{ width: 38, height: 38, borderRadius: 12, background: `${C.blue}18`, color: C.blue, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icono name="avion" size={21} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 900 }}>Llegadas al aeropuerto</span>
+                <span style={{ display: "block", fontSize: 12, color: C.t2, marginTop: 1 }}>{enUnaHora ? `${cuantosVuelos(enUnaHora)} en la próxima hora` : "Sin llegadas en la próxima hora"}</span>
+              </span>
+              <span aria-hidden="true" style={{ fontSize: 20, color: C.t3, fontWeight: 700 }}>›</span>
+            </button>}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
               <button className="nb" onClick={() => setCalMes(mesVecino(calMes, -1))} aria-label="Mes anterior" style={flecha}>‹</button>
               <div style={{ textAlign: "center" }}>
@@ -2533,11 +2899,11 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["resumen", "Resumen"]].map(([v, lb]) => (
-          <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${view === v ? C.acc : "transparent"}`, cursor: "pointer", color: view === v ? C.accDim : C.t3, fontWeight: view === v ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
+        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["resumen", "Resumen"]].map(([v, lb]) => { const enPestana = (x) => view === x || (x === "gastos" && view === "gasolineras") || (x === "calendario" && view === "aeropuerto"); return (
+          <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${enPestana(v) ? C.acc : "transparent"}`, cursor: "pointer", color: enPestana(v) ? C.accDim : C.t3, fontWeight: enPestana(v) ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
             <Icono name={v} />{lb}
           </button>
-        ))}
+        ); })}
       </nav>
     </div>
   );
