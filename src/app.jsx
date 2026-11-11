@@ -381,6 +381,8 @@ const TRAZOS = {
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
 };
 TRAZOS.resumen = TRAZOS.mensual;
+TRAZOS.flota = <><circle cx="9" cy="8.2" r="3.2" /><path d="M2.8 19.6c.6-3.4 3-5.4 6.2-5.4s5.6 2 6.2 5.4" /><circle cx="17.2" cy="9.2" r="2.5" /><path d="M17 14.4c2.3.3 3.8 1.800 4.300 4.400" /></>;
+TRAZOS.alta = <><circle cx="10" cy="8.2" r="3.4" /><path d="M3.400 19.800c.700-3.600 3.200-5.600 6.600-5.600 1.300 0 2.500.300 3.500.900" /><path d="M18 14.200v6.200M14.900 17.300h6.200" /></>;
 const Icono = ({ name, size = 23 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block" }}>{TRAZOS[name]}</svg>
 );
@@ -546,7 +548,7 @@ const Reparto = ({ entries, plats, previo, frente }) => {
     </div>
   );
 };
-const Desglose = ({ entries, plats, etiqueta }) => {
+const Desglose = ({ entries, plats, etiqueta, boton = "Copiar para la empresa" }) => {
   const [aviso, setAviso] = useState("");
   const d = desgloseDe(entries, plats);
   const col = { width: 88, flexShrink: 0, textAlign: "right" };
@@ -584,7 +586,7 @@ const Desglose = ({ entries, plats, etiqueta }) => {
         <span style={{ ...col, fontSize: 14.5, fontWeight: 900, color: C.blue }}>{fmt(d.totalEfec)}</span>
       </div>
       <div style={{ fontSize: 11, color: C.t3, marginTop: 8, lineHeight: 1.45 }}>Efectivo del taxímetro: el taxímetro menos lo cobrado con tarjeta.</div>
-      <button className="nb" onClick={copiar} style={{ marginTop: 10, width: "100%", padding: 10, borderRadius: 10, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{aviso || "Copiar para la empresa"}</button>
+      <button className="nb" onClick={copiar} style={{ marginTop: 10, width: "100%", padding: 10, borderRadius: 10, border: `1px solid ${C.acc}66`, background: `${C.acc}14`, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{aviso || boton}</button>
     </div>
   );
 };
@@ -766,17 +768,71 @@ const Balance = ({ value, sub, pendiente }) => { const neg = value <= 0; const f
 ); };
 // Con cuota mensual no hay saldo por día (la cuota se resta en el mes): la tabla
 // enseña lo que cobró la empresa cada día en lugar de "tu parte" y la diferencia.
-const DayTable = ({ rows, etiqueta, mensual }) => (
+const DayTable = ({ rows, etiqueta, mensual, empresa }) => (
   <div style={{ ...card, padding: 16, marginBottom: 20, overflowX: "auto" }}>
     <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Día a día</div>
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
       <thead><tr>{["Fecha", "Fact.", "Acum.", ...(mensual ? ["Cobró empresa"] : [etiqueta, "Diferencia"])].map((h, i) => (<th key={h} style={{ padding: "6px 6px", color: C.t2, fontWeight: 700, textAlign: i === 0 ? "left" : "right", borderBottom: `1px solid ${C.border}`, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>))}</tr></thead>
-      <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{dayMonth(date)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td>{mensual ? <td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.cobradoEmpresa)}</td> : <><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></>}</tr>); })}</tbody>
+      <tbody>{rows.map(({ date, s: ds, acumFact }) => { const neg = ds.diferencia <= 0; return (<tr key={date}><td style={{ padding: "8px 6px", color: C.t2, fontSize: 12, borderBottom: `1px solid ${C.border}22` }}>{dayMonth(date)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.facturacion)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(acumFact)}</td>{mensual ? <td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, fontSize: 12 }}>{fmt(ds.cobradoEmpresa)}</td> : <><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: C.accDim, fontWeight: 700, fontSize: 12 }}>{fmt(ds.conductor50)}</td><td style={{ padding: "8px 6px", textAlign: "right", borderBottom: `1px solid ${C.border}22`, color: neg !== !!empresa ? C.green : C.red, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>{neg ? "−" : "+"}{fmt(Math.abs(ds.diferencia))}</td></>}</tr>); })}</tbody>
     </table>
-    <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>{mensual ? "La cuota mensual se resta en el balance del mes, no día a día." : "Verde (−) = empresa debe · Rojo (+) = conductor debe"}</div>
+    <div style={{ fontSize: 11, color: C.t3, marginTop: 10 }}>{mensual ? "La cuota mensual se resta en el balance del mes, no día a día." : empresa ? "Verde (+) = te debe el conductor · Rojo (−) = le debes" : "Verde (−) = empresa debe · Rojo (+) = conductor debe"}</div>
   </div>
 );
-function TXpro() {
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS DOS CARAS DE TXPRO: CONDUCTOR Y EMPRESA O FLOTA
+// El conductor lleva sus cuentas como siempre. La empresa da de alta a sus
+// conductores y ve las cuentas de cada uno y las de toda la flota, con las
+// mismas operaciones que el Resumen del conductor (cuentasMes).
+// Hoy todo vive en el móvil: las cuentas de un conductor llegan con su copia
+// de seguridad. Cuando haya servidor e inicio de sesión llegarán solas, y lo
+// único que cambia es de dónde sale `flota` (leerFlota / guardar).
+// ═══════════════════════════════════════════════════════════════════════════
+const ROL_KEY = "tc_rol";
+const FLOTA_KEY = "tc_flota";
+// Sin rol guardado: quien ya tiene cuentas apuntadas es conductor; quien abre
+// la app por primera vez elige.
+const leerRol = () => {
+  const r = loadStorage(ROL_KEY, null);
+  if (r === "empresa" || r === "conductor") return r;
+  try { return localStorage.getItem("tc_days") || localStorage.getItem("tc_cfg_ok") ? "conductor" : null; } catch { return "conductor"; }
+};
+const guardarRol = (r) => { try { localStorage.setItem(ROL_KEY, JSON.stringify(r)); } catch {} };
+const ACUERDO_BASE = { modo: "porcentaje", pctConductor: 50, cuota: "", cuotaPor: "dia" };
+const diasLimpios = (dias) => Object.fromEntries(Object.entries(dias && typeof dias === "object" ? dias : {}).filter(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && v && typeof v === "object" && hasData(v)).map(([d, v]) => [d, migrateDay(v)]));
+const normConductor = (c) => ({
+  id: String(c.id), nombre: String(c.nombre || "").trim(), telefono: String(c.telefono || "").trim(), alta: /^\d{4}-\d{2}-\d{2}$/.test(c.alta || "") ? c.alta : todayStr(),
+  acuerdo: { ...ACUERDO_BASE, ...(c.acuerdo && typeof c.acuerdo === "object" ? c.acuerdo : {}) }, plataformas: normPlataformas(c.plataformas),
+  days: diasLimpios(c.days), gastos: Array.isArray(c.gastos) ? c.gastos.filter(gastoValido) : [], actualizado: typeof c.actualizado === "string" ? c.actualizado : "", ejemplo: !!c.ejemplo,
+});
+const leerFlota = () => {
+  const f = loadStorage(FLOTA_KEY, null);
+  return { empresa: f && typeof f.empresa === "string" ? f.empresa : "", conductores: (f && Array.isArray(f.conductores) ? f.conductores : []).filter((c) => c && c.id && c.nombre).map(normConductor) };
+};
+const acuerdoTxt = (a) => (a.modo === "fijo" ? `Cuota de ${fmt0(num(a.cuota))} ${a.cuotaPor === "mes" ? "al mes" : "por día"}` : `Al ${num(a.pctConductor)} %`);
+// Las cuentas de un mes de un conductor con su acuerdo: lo mismo que ve él.
+const cuentasMes = (c, ym) => {
+  const a = c.acuerdo; const fijo = a.modo === "fijo"; const cuota = num(a.cuota); const porMes = fijo && a.cuotaPor === "mes";
+  const entries = Object.entries(c.days).filter(([d]) => monthKey(d) === ym).sort(([x], [y]) => x.localeCompare(y));
+  const g = gastosEntre(c.gastos, c.days, ym + "-01", finDeMes(ym));
+  const s = summarize(entries, fijo ? { cuotaDia: porMes ? 0 : cuota } : num(a.pctConductor), c.plataformas, porMes && entries.length ? cuota : 0);
+  return { ...s, entries, gastos: g, saldo: s.diferenciaMes - g.reembolsable, porMes, fijo };
+};
+// Una flota de ejemplo, para ver cómo queda el panel antes de dar de alta a nadie.
+const flotaDeEjemplo = () => {
+  const hoy = new Date(); const f = (x) => ymd(x);
+  const hacer = (i, nombre, acuerdo, semilla, libra) => {
+    const days = {};
+    for (let k = 0; k < 45; k++) {
+      const x = new Date(hoy); x.setDate(hoy.getDate() - k); if (x.getDay() === libra) continue;
+      const r = (k * semilla + i * 11) % 60; const finde = x.getDay() === 5 || x.getDay() === 6 ? 40 : 0;
+      days[f(x)] = { taximetro: 120 + r + finde, visa: 30 + (r % 40), uber: 30 + (r % 25), uberEfec: 5 + (r % 10), cabify: 10 + (r % 20), cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, carreras: 10 + (r % 7), inicio: "07:00", fin: "16:00" };
+    }
+    return normConductor({ id: `ejemplo-${i}`, nombre, telefono: "", acuerdo, days, gastos: [], actualizado: new Date().toISOString(), ejemplo: true });
+  };
+  return [hacer(1, "Antonio García", { modo: "porcentaje", pctConductor: 50 }, 37, 2), hacer(2, "Karim Benali", { modo: "fijo", cuota: "125", cuotaPor: "dia" }, 29, 3), hacer(3, "Lucía Fernández", { modo: "porcentaje", pctConductor: 45 }, 41, 1)];
+};
+// El tema (claro, oscuro o el del móvil), igual para las dos caras.
+const useTema = () => {
   const [tema, setTema] = useState(leerTema);
   const [oscuroSistema, setOscuroSistema] = useState(movilOscuro);
   useEffect(() => {
@@ -789,6 +845,279 @@ function TXpro() {
   // Antes de pintar nada: así todo lo de abajo ya lee los colores buenos.
   aplicarTema(temaReal(tema, oscuroSistema));
   const elegirTema = (t) => { setTema(t); try { localStorage.setItem(TEMA_KEY, JSON.stringify(t)); } catch {} };
+  return [tema, elegirTema];
+};
+const SelectorTema = ({ tema, elegirTema }) => (
+  <div role="radiogroup" aria-label="Apariencia" style={{ display: "flex", gap: 7 }}>
+    {TEMAS.map(([t, etiqueta]) => (
+      <button key={t} className="nb" role="radio" aria-checked={tema === t} onClick={() => elegirTema(t)} style={{ flex: 1, padding: "10px 6px", borderRadius: 10, border: `1.5px solid ${tema === t ? C.acc : C.border}`, background: tema === t ? `${C.acc}1c` : C.surf, color: tema === t ? C.accDim : C.t2, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{etiqueta}</button>
+    ))}
+  </div>
+);
+// LA ENTRADA: la primera vez se elige cómo se va a usar la app. Aquí irá el
+// inicio de sesión cuando haya cuentas en la nube.
+const Entrada = ({ alElegir }) => {
+  useTema();
+  const opcion = { width: "100%", display: "flex", alignItems: "center", gap: 14, textAlign: "left", padding: 16, borderRadius: 16, border: `1.5px solid ${C.border}`, background: C.surf, boxShadow: C.sombra, cursor: "pointer", fontFamily: "inherit", color: C.t1, marginBottom: 12 };
+  const icono = { width: 46, height: 46, borderRadius: 14, background: `${C.acc}1c`, color: C.accDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+  return (
+    <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", padding: "calc(44px + env(safe-area-inset-top, 0px)) 20px 32px" }}>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}><TXLogo size={68} /></div>
+      <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: -0.5, textAlign: "center" }}>TX<span style={{ color: C.accDim }}>pro</span></div>
+      <div style={{ fontSize: 14, color: C.t2, textAlign: "center", margin: "6px 0 28px" }}>Las cuentas del taxi, claras y al día.</div>
+      <div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>¿Cómo vas a usar TXpro?</div>
+      <button className="nb" onClick={() => alElegir("conductor")} style={opcion}>
+        <span style={icono}><TaxiLogo size={24} color={C.accDim} /></span>
+        <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 16, fontWeight: 900 }}>Soy conductor</span><span style={{ display: "block", fontSize: 12.5, color: C.t2, marginTop: 2, lineHeight: 1.4 }}>Apunto mi día y veo mis cuentas con la empresa.</span></span>
+        <span style={{ color: C.t3, fontSize: 20 }}>›</span>
+      </button>
+      <button className="nb" onClick={() => alElegir("empresa")} style={opcion}>
+        <span style={icono}><Icono name="flota" size={25} /></span>
+        <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 16, fontWeight: 900 }}>Soy empresa o flota</span><span style={{ display: "block", fontSize: 12.5, color: C.t2, marginTop: 2, lineHeight: 1.4 }}>Doy de alta a mis conductores y llevo las cuentas de cada uno.</span></span>
+        <span style={{ color: C.t3, fontSize: 20 }}>›</span>
+      </button>
+      <div style={{ fontSize: 12, color: C.t3, textAlign: "center", lineHeight: 1.5, marginTop: 14 }}>Podrás cambiarlo cuando quieras en Ajustes.<br />Tus datos se guardan en este móvil.</div>
+    </div>
+  );
+};
+// EL PANEL DE LA EMPRESA
+function Flota({ alCambiarRol }) {
+  const [tema, elegirTema] = useTema();
+  const [flota, setFlota] = useState(leerFlota);
+  const [vista, setVista] = useState("panel");
+  const [idSel, setIdSel] = useState(null);
+  const [mes, setMes] = useState(() => monthKey(todayStr()));
+  const NUEVO = { id: null, nombre: "", telefono: "", ...ACUERDO_BASE };
+  const [ficha, setFicha] = useState(NUEVO);
+  const [aviso, setAviso] = useState("");
+  useEffect(() => { try { localStorage.setItem(FLOTA_KEY, JSON.stringify(flota)); } catch {} }, [flota]);
+  const conductores = flota.conductores;
+  const sel = conductores.find((c) => c.id === idSel) || null;
+  const mesHoy = monthKey(todayStr());
+  const cuentas = useMemo(() => conductores.map((c) => ({ c, m: cuentasMes(c, mes) })), [conductores, mes]);
+  const hayEjemplo = conductores.some((c) => c.ejemplo);
+  const ir = (v) => { setVista(v); setAviso(""); try { window.scrollTo(0, 0); } catch {} };
+  const abrir = (id) => { setIdSel(id); ir("conductor"); };
+  const nuevaFicha = () => { setFicha(NUEVO); ir("ficha"); };
+  const editarFicha = (c) => { setFicha({ id: c.id, nombre: c.nombre, telefono: c.telefono, ...c.acuerdo }); ir("ficha"); };
+  const guardarFicha = () => {
+    const nombre = ficha.nombre.trim(); if (!nombre) return;
+    const acuerdo = { modo: ficha.modo === "fijo" ? "fijo" : "porcentaje", pctConductor: ficha.pctConductor, cuota: ficha.cuota, cuotaPor: ficha.cuotaPor === "mes" ? "mes" : "dia" };
+    const id = ficha.id || `c${Date.now()}`;
+    setFlota((f) => ({ ...f, conductores: ficha.id ? f.conductores.map((c) => (c.id === id ? { ...c, nombre, telefono: ficha.telefono.trim(), acuerdo } : c)) : [...f.conductores, normConductor({ id, nombre, telefono: ficha.telefono, acuerdo })] }));
+    abrir(id);
+  };
+  const darDeBaja = (c) => { if (!window.confirm(`¿Dar de baja a ${c.nombre}? Se borran sus cuentas de este móvil.`)) return; setFlota((f) => ({ ...f, conductores: f.conductores.filter((x) => x.id !== c.id) })); ir("panel"); };
+  // Hasta que haya inicio de sesión, las cuentas de un conductor llegan con su
+  // copia de seguridad (Ajustes → Copia de seguridad, en su móvil).
+  const cargarCuentas = async (c, file) => {
+    if (!file) return;
+    try {
+      const datos = JSON.parse(await file.text());
+      if (!datos || !["txpro", "taxicuentas"].includes(datos.app) || typeof datos.days !== "object" || datos.days === null) { setAviso("Ese archivo no es una copia de TXpro."); return; }
+      const days = diasLimpios(datos.days);
+      setFlota((f) => ({ ...f, conductores: f.conductores.map((x) => (x.id === c.id ? { ...x, days, gastos: Array.isArray(datos.gastos) ? datos.gastos.filter(gastoValido) : [], plataformas: normPlataformas(datos.cfg && datos.cfg.plataformas), actualizado: new Date().toISOString(), ejemplo: false } : x)) }));
+      setAviso(`Cargados ${Object.keys(days).length} días de ${c.nombre}.`);
+    } catch { setAviso("No se pudo leer el archivo."); }
+  };
+  const inp = { width: "100%", background: C.inp, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
+  const tit = { fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 };
+  const etq = { fontSize: 12, color: C.t2, fontWeight: 600, marginBottom: 5, display: "block" };
+  const principal = { width: "100%", padding: 13, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14", fontWeight: 900, fontSize: 14.5, cursor: "pointer", fontFamily: "inherit" };
+  const secundario = { flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
+  const seg = (on) => ({ flex: 1, padding: "10px 4px", borderRadius: 10, border: `1.5px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}18` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" });
+  const flecha = (on) => ({ background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 34, height: 34, fontSize: 17, color: C.t2, cursor: on ? "pointer" : "default", fontFamily: "inherit", flexShrink: 0, opacity: on ? 1 : 0.35 });
+  const fichaNum = { flex: 1, minWidth: 0, background: C.surf, border: `1px solid ${C.border}`, borderRadius: 12, padding: "9px 6px", textAlign: "center" };
+  const fichaTit = { fontSize: 10.5, color: C.t3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+  const fichaVal = { fontSize: 13.5, fontWeight: 900, whiteSpace: "nowrap", color: C.t1 };
+  const corto = (v) => (Math.abs(v) >= 10000 ? fmt0(v) : fmt(v));
+  const inicial = (n) => (n.trim()[0] || "?").toUpperCase();
+  // Desde la empresa: saldo > 0, el conductor le debe; saldo < 0, ella le debe.
+  const saldoTxt = (v) => (Math.abs(v) < 0.005 ? "En paz" : v > 0 ? `Te debe ${fmt(v)}` : `Le debes ${fmt(-v)}`);
+  const saldoCol = (v) => (Math.abs(v) < 0.005 ? C.t3 : v > 0 ? C.green : C.red);
+  const selectorMes = (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+      <button className="nb" onClick={() => setMes(mesVecino(mes, -1))} aria-label="Mes anterior" style={flecha(true)}>‹</button>
+      <div style={{ fontSize: 15, fontWeight: 900, color: C.t1, textAlign: "center" }}>{capitalizar(monthLabel(mes))}</div>
+      <button className="nb" disabled={mes >= mesHoy} onClick={() => mes < mesHoy && setMes(mesVecino(mes, 1))} aria-label="Mes siguiente" style={flecha(mes < mesHoy)}>›</button>
+    </div>
+  );
+  return (
+    <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: C.bg, color: C.t1, fontFamily: "'DM Sans', sans-serif", paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
+      <div style={{ background: `linear-gradient(180deg, ${C.surf}, ${C.cabecera})`, borderBottom: `2px solid ${C.acc}40`, padding: "9px 16px 8px", paddingTop: "calc(9px + env(safe-area-inset-top, 0px))", position: "sticky", top: 0, zIndex: 10, boxShadow: "0 2px 14px rgba(30,34,54,0.08)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <TXLogo size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: -0.5, color: C.t1, lineHeight: 1.1 }}>TX<span style={{ color: C.accDim }}>pro</span> <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", color: C.accDim, background: `${C.acc}22`, borderRadius: 6, padding: "2px 6px", verticalAlign: "3px" }}>Empresa</span></div>
+            {flota.empresa && <div style={{ fontSize: 11, color: C.t2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{flota.empresa}</div>}
+          </div>
+          <button className="nb" onClick={() => ir(vista === "ajustes" ? "panel" : "ajustes")} aria-label="Ajustes" style={{ background: vista === "ajustes" ? `${C.acc}22` : C.surf, border: `1px solid ${vista === "ajustes" ? C.acc : C.border}`, borderRadius: 11, width: 38, height: 38, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: vista === "ajustes" ? C.accDim : C.t2 }}><Icono name="ajustes" size={19} /></button>
+        </div>
+      </div>
+      <div style={{ padding: 16 }}>
+        {vista === "panel" && (() => {
+          const conDatos = cuentas.filter((x) => x.m.totalFact > 0);
+          const t = conDatos.reduce((a, x) => ({ fact: a.fact + x.m.totalFact, empresa: a.empresa + x.m.parteEmpresaMes, cobrado: a.cobrado + x.m.totalCobradoEmpresa, dias: a.dias + x.m.diasTrabajados }), { fact: 0, empresa: 0, cobrado: 0, dias: 0 });
+          const teDeben = conDatos.filter((x) => x.m.saldo > 0.005); const debes = conDatos.filter((x) => x.m.saldo < -0.005);
+          const sumaTeDeben = teDeben.reduce((a, x) => a + x.m.saldo, 0); const sumaDebes = debes.reduce((a, x) => a - x.m.saldo, 0);
+          const orden = [...cuentas].sort((a, b) => b.m.totalFact - a.m.totalFact || a.c.nombre.localeCompare(b.c.nombre));
+          if (!conductores.length) return (
+            <div style={{ ...card, padding: 22, textAlign: "center" }} aria-label="Flota vacía">
+              <div style={{ width: 54, height: 54, borderRadius: 16, background: `${C.acc}1c`, color: C.accDim, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}><Icono name="flota" size={28} /></div>
+              <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 6 }}>Aún no tienes conductores</div>
+              <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.5, marginBottom: 16 }}>Da de alta a cada conductor con su acuerdo (porcentaje o cuota fija) y verás aquí sus cuentas y las de toda la flota.</div>
+              <button className="saveBtn" onClick={nuevaFicha} style={principal}>Dar de alta un conductor</button>
+              <button className="nb" onClick={() => setFlota((f) => ({ ...f, conductores: flotaDeEjemplo() }))} style={{ marginTop: 12, background: "none", border: "none", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>Ver con una flota de ejemplo</button>
+            </div>
+          );
+          return (<>
+            {hayEjemplo && <div style={{ display: "flex", alignItems: "center", gap: 10, background: `${C.blue}0f`, border: `1px solid ${C.blue}44`, borderRadius: 12, padding: "9px 12px", marginBottom: 12 }}>
+              <div style={{ flex: 1, fontSize: 12.5, color: C.t1 }}>Estás viendo una <strong>flota de ejemplo</strong>.</div>
+              <button className="nb" onClick={() => setFlota((f) => ({ ...f, conductores: f.conductores.filter((c) => !c.ejemplo) }))} style={{ background: "none", border: "none", color: C.blue, fontWeight: 800, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>Quitar</button>
+            </div>}
+            {selectorMes}
+            <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12, boxShadow: `0 4px 18px ${C.acc}14` }} aria-label="Resumen de la flota">
+              <div style={{ fontSize: 32, fontWeight: 900, color: C.accDim }}>{fmt(t.fact)}</div>
+              <div style={{ fontSize: 13, color: C.t2, marginTop: 4 }}>Facturado por la flota · {conDatos.length} de {conductores.length} {conductores.length === 1 ? "conductor" : "conductores"} · {t.dias} {t.dias === 1 ? "jornada" : "jornadas"}</div>
+              <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
+                <div style={fichaNum}><div style={fichaTit}>Empresa</div><div style={{ ...fichaVal, color: C.accDim }}>{corto(t.empresa)}</div></div>
+                <div style={fichaNum}><div style={fichaTit}>Ya cobrado</div><div style={fichaVal}>{corto(t.cobrado)}</div></div>
+                <div style={fichaNum}><div style={fichaTit}>Conductores</div><div style={fichaVal}>{corto(t.fact - t.empresa)}</div></div>
+              </div>
+              {(teDeben.length > 0 || debes.length > 0) && <div style={{ fontSize: 12.5, color: C.t2, marginTop: 10, lineHeight: 1.5 }}>
+                {teDeben.length > 0 && <div><span style={{ color: C.green, fontWeight: 800 }}>Te deben {fmt(sumaTeDeben)}</span> · {teDeben.length} {teDeben.length === 1 ? "conductor" : "conductores"}</div>}
+                {debes.length > 0 && <div><span style={{ color: C.red, fontWeight: 800 }}>Debes {fmt(sumaDebes)}</span> · {debes.length} {debes.length === 1 ? "conductor" : "conductores"}</div>}
+              </div>}
+            </div>
+            <div style={{ ...card, padding: "8px 16px", marginBottom: 12 }} aria-label="Conductores">
+              <div style={{ ...tit, padding: "8px 0 4px" }}>Conductores</div>
+              {orden.map(({ c, m }) => (
+                <button key={c.id} className="nb" onClick={() => abrir(c.id)} aria-label={`Ver a ${c.nombre}`} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, padding: "11px 0", background: "none", border: "none", borderTop: `1px solid ${C.linea}`, cursor: "pointer", fontFamily: "inherit", color: C.t1, textAlign: "left" }}>
+                  <span style={{ width: 38, height: 38, borderRadius: 12, background: `${C.acc}22`, color: C.accDim, fontWeight: 900, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{inicial(c.nombre)}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.nombre}</span>
+                    <span style={{ display: "block", fontSize: 11.5, color: C.t3, marginTop: 1 }}>{acuerdoTxt(c.acuerdo)}{m.diasTrabajados ? ` · ${m.diasTrabajados} ${m.diasTrabajados === 1 ? "día" : "días"}` : ""}</span>
+                  </span>
+                  {m.totalFact > 0
+                    ? <span style={{ textAlign: "right", flexShrink: 0 }}><span style={{ display: "block", fontSize: 14, fontWeight: 900, whiteSpace: "nowrap" }}>{fmt(m.totalFact)}</span><span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: saldoCol(m.saldo), whiteSpace: "nowrap", marginTop: 1 }}>{saldoTxt(m.saldo)}</span></span>
+                    : <span style={{ fontSize: 12, color: C.t3, flexShrink: 0 }}>Sin datos</span>}
+                  <span style={{ color: C.t3, fontSize: 17, flexShrink: 0 }}>›</span>
+                </button>
+              ))}
+            </div>
+            <button className="saveBtn" onClick={nuevaFicha} style={principal}>Dar de alta un conductor</button>
+          </>);
+        })()}
+        {vista === "conductor" && sel && (() => {
+          const m = cuentasMes(sel, mes);
+          const etiqueta = sel.acuerdo.modo === "fijo" ? "Suyo día" : `${num(sel.acuerdo.pctConductor)}% día`;
+          return (<>
+            <button className="nb" onClick={() => ir("panel")} style={{ background: "none", border: "none", padding: 0, marginBottom: 10, color: C.accDim, fontWeight: 800, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" }}>‹ Flota</button>
+            <div style={{ ...card, padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }} aria-label="Ficha del conductor">
+              <span style={{ width: 46, height: 46, borderRadius: 14, background: `${C.acc}22`, color: C.accDim, fontWeight: 900, fontSize: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{inicial(sel.nombre)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sel.nombre}</div>
+                <div style={{ fontSize: 12.5, color: C.t2, marginTop: 1 }}>{acuerdoTxt(sel.acuerdo)}{sel.telefono ? ` · ${sel.telefono}` : ""}</div>
+              </div>
+              <button className="nb" onClick={() => editarFicha(sel)} style={{ ...secundario, flex: "none", padding: "8px 12px" }}>Editar</button>
+            </div>
+            {selectorMes}
+            {m.totalFact > 0 ? <>
+              <div style={{ background: `${C.acc}10`, border: `1px solid ${C.acc}30`, borderRadius: 18, padding: 18, marginBottom: 12 }} aria-label="Cuentas del conductor">
+                <div style={{ fontSize: 30, fontWeight: 900, color: C.accDim }}>{fmt(m.totalFact)}</div>
+                <div style={{ fontSize: 13, color: C.t2, marginTop: 4 }}>Facturado · {m.diasTrabajados} {m.diasTrabajados === 1 ? "día" : "días"} · media <strong style={{ color: C.t1 }}>{fmt0(m.mediaDiaria)}</strong> al día</div>
+                <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
+                  <div style={fichaNum}><div style={fichaTit}>Empresa</div><div style={{ ...fichaVal, color: C.accDim }}>{corto(m.parteEmpresaMes)}</div></div>
+                  <div style={fichaNum}><div style={fichaTit}>Ya cobrado</div><div style={fichaVal}>{corto(m.totalCobradoEmpresa)}</div></div>
+                  <div style={fichaNum}><div style={fichaTit}>Su efectivo</div><div style={{ ...fichaVal, color: C.blue }}>{corto(m.efectivoMes)}</div></div>
+                </div>
+              </div>
+              <div style={{ background: `${saldoCol(m.saldo)}14`, border: `1.5px solid ${saldoCol(m.saldo)}44`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }} aria-label="Saldo con el conductor">
+                <div><div style={{ fontSize: 12, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{Math.abs(m.saldo) < 0.005 ? "Estáis en paz" : m.saldo > 0 ? "Te debe el conductor" : "Le debes al conductor"}</div><div style={{ fontSize: 11, color: C.t3, marginTop: 2 }}>{m.porMes && mes >= mesHoy ? "Mes en curso: aún puede cubrir la cuota" : m.gastos.reembolsable > 0 ? "Incluye los gastos que le devuelves" : "Saldo del mes"}</div></div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: saldoCol(m.saldo), marginLeft: 14, whiteSpace: "nowrap" }}>{fmt(Math.abs(m.saldo))}</div>
+              </div>
+              <Desglose entries={m.entries} plats={sel.plataformas} etiqueta={`${sel.nombre} · ${capitalizar(monthLabel(mes))}`} boton="Copiar el desglose" />
+              <DayTable rows={m.rows} etiqueta={etiqueta} mensual={m.porMes} empresa />
+            </> : <div style={{ ...card, padding: 20, textAlign: "center", color: C.t2, fontSize: 13.5, marginBottom: 12 }}>Sin cuentas en {monthLabel(mes)}.</div>}
+            <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Cuentas del conductor: cargar">
+              <div style={{ ...tit, marginBottom: 6 }}>Sus cuentas</div>
+              <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>{sel.actualizado ? <>Actualizadas el <strong style={{ color: C.t1 }}>{new Date(sel.actualizado).toLocaleDateString("es-ES")}</strong>. </> : null}El conductor te manda su copia desde su TXpro (Ajustes → Copia de seguridad) y la cargas aquí. Con las cuentas en la nube llegarán solas.</div>
+              <label className="nb" style={{ ...secundario, display: "block", textAlign: "center", borderColor: `${C.acc}66`, background: `${C.acc}14`, color: C.accDim }}>
+                Cargar la copia del conductor
+                <input type="file" accept="application/json,.json" aria-label="Copia del conductor" style={{ display: "none" }} onChange={(e) => { cargarCuentas(sel, e.target.files && e.target.files[0]); e.target.value = ""; }} />
+              </label>
+              {aviso && <div role="status" style={{ fontSize: 12.5, color: C.t2, fontWeight: 700, marginTop: 9 }}>{aviso}</div>}
+            </div>
+            <button className="nb" onClick={() => darDeBaja(sel)} style={{ width: "100%", padding: 11, borderRadius: 10, border: `1px solid ${C.red}44`, background: `${C.red}0e`, color: C.red, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Dar de baja</button>
+          </>);
+        })()}
+        {vista === "ficha" && (() => {
+          const fijo = ficha.modo === "fijo"; const porMes = ficha.cuotaPor === "mes"; const pon = (k, v) => setFicha((f) => ({ ...f, [k]: v }));
+          return (<>
+            <button className="nb" onClick={() => (ficha.id ? abrir(ficha.id) : ir("panel"))} style={{ background: "none", border: "none", padding: 0, marginBottom: 10, color: C.accDim, fontWeight: 800, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" }}>‹ Volver</button>
+            <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 12 }}>{ficha.id ? "Editar conductor" : "Dar de alta un conductor"}</div>
+            <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+              <label htmlFor="fNombre" style={etq}>Nombre</label>
+              <input id="fNombre" className="inp" type="text" autoComplete="off" placeholder="Nombre y apellidos" style={{ ...inp, marginBottom: 12 }} value={ficha.nombre} onChange={(e) => pon("nombre", e.target.value)} />
+              <label htmlFor="fTel" style={etq}>Teléfono (opcional)</label>
+              <input id="fTel" className="inp" type="tel" autoComplete="off" placeholder="600 000 000" style={inp} value={ficha.telefono} onChange={(e) => pon("telefono", e.target.value)} />
+            </div>
+            <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+              <div style={{ ...tit, marginBottom: 12 }}>Su acuerdo con la empresa</div>
+              <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
+                {[["porcentaje", "A porcentaje"], ["fijo", "Cuota fija (alquiler)"]].map(([v, lb]) => <button key={v} className="nb" aria-pressed={(fijo ? "fijo" : "porcentaje") === v} onClick={() => pon("modo", v)} style={seg((fijo ? "fijo" : "porcentaje") === v)}>{lb}</button>)}
+              </div>
+              {fijo ? <>
+                <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
+                  {[["dia", "Por día trabajado"], ["mes", "Al mes"]].map(([v, lb]) => <button key={v} className="nb" aria-pressed={(porMes ? "mes" : "dia") === v} onClick={() => pon("cuotaPor", v)} style={seg((porMes ? "mes" : "dia") === v)}>{lb}</button>)}
+                </div>
+                <label htmlFor="fCuota" style={etq}>{porMes ? "Cuánto paga a la empresa al mes" : "Cuánto paga a la empresa por día trabajado"}</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input id="fCuota" className="inp" type="number" min="0" step={porMes ? 50 : 5} placeholder={porMes ? "2800" : "125"} style={{ ...inp, flex: 1 }} value={ficha.cuota} onChange={(e) => pon("cuota", e.target.value)} /><span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>€</span></div>
+              </> : <>
+                <label htmlFor="fPct" style={etq}>Qué % de la facturación se lleva el conductor</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}><input id="fPct" className="inp" type="number" min="0" max="100" step="0.5" style={{ ...inp, flex: 1 }} value={ficha.pctConductor} onChange={(e) => pon("pctConductor", e.target.value)} /><span style={{ fontSize: 20, fontWeight: 900, color: C.accDim }}>%</span></div>
+              </>}
+            </div>
+            <button className="saveBtn" disabled={!ficha.nombre.trim()} onClick={guardarFicha} style={{ ...principal, ...(ficha.nombre.trim() ? {} : { background: C.apagado, color: C.t3, cursor: "default" }) }}>{ficha.id ? "Guardar cambios" : "Dar de alta"}</button>
+          </>);
+        })()}
+        {vista === "ajustes" && <>
+          <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 12 }}>Ajustes de la empresa</div>
+          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+            <label htmlFor="eNombre" style={etq}>Nombre de la empresa o flota</label>
+            <input id="eNombre" className="inp" type="text" autoComplete="off" placeholder="Taxis Ejemplo, S.L." style={inp} value={flota.empresa} onChange={(e) => setFlota((f) => ({ ...f, empresa: e.target.value }))} />
+          </div>
+          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+            <div style={{ ...tit, marginBottom: 8 }}>Apariencia</div>
+            <SelectorTema tema={tema} elegirTema={elegirTema} />
+          </div>
+          <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+            <div style={{ ...tit, marginBottom: 8 }}>Tipo de cuenta</div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Estás usando TXpro como <strong style={{ color: C.t1 }}>empresa o flota</strong>. Si además conduces, puedes pasar a tus cuentas de conductor: la flota se queda guardada.</div>
+            <button className="nb" onClick={() => alCambiarRol("conductor")} style={{ ...secundario, width: "100%" }}>Cambiar a conductor</button>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.t3, textAlign: "center", marginTop: 16 }}>TXpro {APP_VERSION}</div>
+        </>}
+      </div>
+      <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        {[["panel", "Flota", "flota"], ["ficha", "Dar de alta", "alta"], ["ajustes", "Ajustes", "ajustes"]].map(([v, lb, ic]) => { const on = vista === v || (v === "panel" && vista === "conductor"); return (
+          <button key={v} className="nb" onClick={() => (v === "ficha" ? nuevaFicha() : ir(v))} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${on ? C.acc : "transparent"}`, cursor: "pointer", color: on ? C.accDim : C.t3, fontWeight: on ? 800 : 500, fontSize: 10, fontFamily: "inherit" }}>
+            <Icono name={ic} />{lb}
+          </button>
+        ); })}
+      </nav>
+    </div>
+  );
+}
+// LA RAÍZ: decide qué cara se enseña.
+function Raiz() {
+  const [rol, setRol] = useState(leerRol);
+  const cambiar = (r) => { guardarRol(r); setRol(r); try { window.scrollTo(0, 0); } catch {} };
+  if (!rol) return <Entrada alElegir={cambiar} />;
+  return rol === "empresa" ? <Flota alCambiarRol={cambiar} /> : <TXpro alCambiarRol={cambiar} />;
+}
+function TXpro({ alCambiarRol }) {
+  const [tema, elegirTema] = useTema();
   const [days, setDays] = useState(loadDays);
   const [view, setView] = useState("diario");
   const [editDate, setEditDate] = useState(today);
@@ -1767,6 +2096,11 @@ function TXpro() {
               ))}
             </div>
           </div>
+          {alCambiarRol && <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Tipo de cuenta</div>
+            <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Estás usando TXpro como <strong style={{ color: C.t1 }}>conductor</strong>. Si llevas una empresa o una flota, puedes dar de alta a tus conductores y ver las cuentas de cada uno. Tus cuentas de conductor se quedan guardadas.</div>
+            <button className="nb" onClick={() => alCambiarRol("empresa")} style={{ width: "100%", padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cambiar a empresa o flota</button>
+          </div>}
           <div style={{ ...card, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>¿Ideas o fallos?</div>
             <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>TXpro la hacemos con lo que nos pedís los compañeros. Cuéntanos qué te falta, qué cambiarías o qué ha fallado.</div>
@@ -1922,4 +2256,4 @@ function TXpro() {
     </div>
   );
 }
-ReactDOM.createRoot(document.getElementById("root")).render(<TXpro />);
+ReactDOM.createRoot(document.getElementById("root")).render(<Raiz />);

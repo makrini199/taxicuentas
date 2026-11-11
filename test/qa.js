@@ -10,6 +10,11 @@ const { chromium } = require('playwright');
 (async () => {
   const EJECUTABLE = process.env.CHROMIUM_PATH;  // opcional: navegador propio
   const b = await chromium.launch({ args: ['--lang=es-ES'], ...(EJECUTABLE ? { executablePath: EJECUTABLE } : {}) });
+  // Quien abre la app por primera vez elige entre conductor y empresa. Casi todas
+  // las pruebas son del conductor, así que entran ya como tal; las de la entrada
+  // y la empresa usan contextoNuevo, sin nada puesto.
+  const contextoNuevo = b.newContext.bind(b);
+  b.newContext = async (o) => { const c = await contextoNuevo(o); await c.addInitScript(() => { try { if (!localStorage.getItem('tc_rol')) localStorage.setItem('tc_rol', JSON.stringify('conductor')); } catch {} }); return c; };
   const ctx = await b.newContext({ viewport: { width: 360, height: 700 }, deviceScaleFactor: 2, locale: 'es-ES', timezoneId: 'Europe/Madrid', acceptDownloads: true });
   const p = await ctx.newPage();
   const errores = [];
@@ -831,6 +836,71 @@ const { chromium } = require('playwright');
   comprobar('y el completo también', /^TXpro-\d{4}-\d{2}-completo\.pdf$/.test(pdfCompleto.nombre) && pdfCompleto.buf.toString('latin1').startsWith('%PDF-1.4'), pdfCompleto.nombre);
   comprobar('año e informe sin errores', errAnio.length === 0, errAnio.join(' | '));
   await ca.close();
+
+  console.log('\n— LAS DOS CARAS: CONDUCTOR Y EMPRESA O FLOTA —');
+  const cf = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  const pf = await cf.newPage(); const errFlota = []; pf.on('pageerror', (e) => errFlota.push(e.message));
+  pf.on('dialog', (d) => d.accept());
+  await pf.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pf.waitForSelector('text=¿Cómo vas a usar TXpro?');
+  comprobar('la primera vez pregunta cómo se va a usar', (await pf.getByRole('button', { name: /Soy conductor/ }).count()) === 1 && (await pf.getByRole('button', { name: /Soy empresa o flota/ }).count()) === 1);
+  await pf.getByRole('button', { name: /Soy empresa o flota/ }).click(); await pf.waitForTimeout(300);
+  comprobar('la empresa empieza sin conductores', (await pf.getByLabel('Flota vacía').count()) === 1);
+  // La flota de ejemplo se pone y se quita sin dejar rastro.
+  await pf.getByRole('button', { name: /flota de ejemplo/ }).click(); await pf.waitForTimeout(300);
+  comprobar('se puede ver con una flota de ejemplo', (await pf.getByLabel('Conductores').getByRole('button').count()) === 3 && /Facturado por la flota · 3 de 3 conductores/.test(await pf.getByLabel('Resumen de la flota').innerText()));
+  await pf.getByRole('button', { name: 'Quitar' }).click(); await pf.waitForTimeout(300);
+  comprobar('y quitarla', (await pf.getByLabel('Flota vacía').count()) === 1);
+  // Alta de un conductor al 60 %.
+  await pf.getByRole('button', { name: 'Dar de alta un conductor' }).click(); await pf.waitForTimeout(300);
+  await pf.locator('#fNombre').fill('Pepe Ruiz'); await pf.locator('#fPct').fill('60');
+  await pf.locator('.saveBtn', { hasText: 'Dar de alta' }).click(); await pf.waitForTimeout(300);
+  const fichaTxt = await pf.getByLabel('Ficha del conductor').innerText();
+  comprobar('dar de alta a un conductor con su acuerdo', /Pepe Ruiz/.test(fichaTxt) && /Al 60 %/.test(fichaTxt), fichaTxt.replace(/\n/g, ' '));
+  comprobar('recién dado de alta no tiene cuentas', /Sin cuentas en/.test(await pf.locator('body').innerText()));
+  // Sus cuentas llegan con su copia de seguridad: 100 € de taxímetro en
+  // efectivo. Al 60 % le tocan 40 a la empresa, que no ha cobrado nada → el
+  // conductor le debe 40. Lo mismo que ve él en su móvil.
+  const fsF = require('fs'); const osF = require('os'); const pathF = require('path');
+  const hoyF = await pf.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const copiaF = pathF.join(fsF.mkdtempSync(pathF.join(osF.tmpdir(), 'txpro-')), 'copia.json');
+  fsF.writeFileSync(copiaF, JSON.stringify({ app: 'txpro', formato: 3, days: { [hoyF]: { taximetro: 100, visa: 0 } }, gastos: [], cfg: {} }));
+  await pf.locator('input[aria-label="Copia del conductor"]').setInputFiles(copiaF); await pf.waitForTimeout(400);
+  comprobar('se cargan las cuentas del conductor desde su copia', /Cargados 1 días de Pepe Ruiz/.test(await pf.locator('body').innerText()));
+  const cuentasF = await pf.getByLabel('Cuentas del conductor', { exact: true }).innerText();
+  comprobar('las cuentas salen con su acuerdo', /100,00\s€/.test(cuentasF) && /EMPRESA\s+40,00\s€/i.test(cuentasF) && /SU EFECTIVO\s+100,00\s€/i.test(cuentasF), cuentasF.replace(/\n/g, ' '));
+  comprobar('y el saldo, visto desde la empresa', /TE DEBE EL CONDUCTOR[\s\S]*40,00\s€/i.test(await pf.getByLabel('Saldo con el conductor').innerText()));
+  await pf.getByRole('button', { name: '‹ Flota' }).click(); await pf.waitForTimeout(300);
+  const panelF = await pf.locator('body').innerText();
+  comprobar('el panel suma la flota y dice quién debe', /Te deben 40,00\s€ · 1 conductor/.test(panelF) && /Pepe Ruiz[\s\S]*Te debe 40,00\s€/.test(panelF));
+  // Un archivo que no es una copia no rompe nada.
+  await pf.getByLabel('Conductores').getByRole('button').first().click(); await pf.waitForTimeout(300);
+  fsF.writeFileSync(copiaF, 'esto no es una copia');
+  await pf.locator('input[aria-label="Copia del conductor"]').setInputFiles(copiaF); await pf.waitForTimeout(400);
+  comprobar('un archivo cualquiera no rompe nada', /No se pudo leer el archivo/.test(await pf.locator('body').innerText()) && /100,00\s€/.test(await pf.getByLabel('Cuentas del conductor', { exact: true }).innerText()));
+  // Todo queda guardado, y se puede pasar a conductor y volver.
+  await pf.reload({ waitUntil: 'load' }); await pf.waitForSelector('text=Facturado por la flota');
+  comprobar('la flota sigue al volver a abrir', /Pepe Ruiz/.test(await pf.locator('body').innerText()));
+  await pf.getByLabel('Ajustes').click(); await pf.waitForTimeout(300);
+  await pf.getByRole('button', { name: 'Cambiar a conductor' }).click();
+  await pf.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('de empresa se puede pasar a conductor', true);
+  await pf.getByLabel('Ajustes').click(); await pf.waitForTimeout(300);
+  await pf.getByRole('button', { name: 'Cambiar a empresa o flota' }).click(); await pf.waitForTimeout(300);
+  comprobar('y volver, con la flota intacta', /Pepe Ruiz/.test(await pf.locator('body').innerText()));
+  await pf.getByLabel('Conductores').getByRole('button').first().click(); await pf.waitForTimeout(300);
+  await pf.getByRole('button', { name: 'Dar de baja' }).click(); await pf.waitForTimeout(300);
+  comprobar('dar de baja lo quita de la flota', (await pf.getByLabel('Flota vacía').count()) === 1);
+  comprobar('empresa sin errores', errFlota.length === 0, errFlota.join(' | '));
+  await cf.close();
+  // Quien ya llevaba sus cuentas no ve la pregunta: sigue como conductor.
+  const cv = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  await cv.addInitScript(() => { if (!localStorage.getItem('tc_days')) localStorage.setItem('tc_days', JSON.stringify({ '2026-01-10': { taximetro: 100 } })); });
+  const pvj = await cv.newPage();
+  await pvj.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  const directo = await pvj.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('quien ya tenía cuentas entra directo como conductor', directo);
+  await cv.close();
 
   console.log('\n— MODO OSCURO —');
   const fondo = (pg) => pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
