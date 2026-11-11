@@ -1114,8 +1114,10 @@ function TXpro() {
   // texto dice de qué es la casilla y las marcas son de quien son.
   const filas = [
     { key: "taximetro", cobKey: "taxEfec", nombre: "Taxímetro", oro: true },
-    { key: "visa", nombre: "Tarjeta", nota: "Cierre del datáfono. Lo demás del taxímetro es efectivo." },
     ...platsActivas.map((pl) => ({ key: pl.key, cobKey: pl.cobKey, nombre: pl.nombre, cobrado: pl.tipo === "cobrado" })),
+    // La tarjeta es el cierre del datáfono entero: taxímetro y también los viajes
+    // de las apps que se cobran por fuera con tarjeta. Por eso va al final.
+    { key: "visa", nombre: "Tarjeta", nota: "Cierre del datáfono. Lo que no pongas aquí cuenta como efectivo." },
   ];
   const colHead = { fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: 0.4, textTransform: "uppercase", textAlign: "right", flexShrink: 0 };
   const inp = { width: "100%", background: C.inp, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "11px 12px", color: C.t1, fontSize: 15, fontWeight: 700, fontFamily: "inherit" };
