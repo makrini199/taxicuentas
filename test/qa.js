@@ -45,11 +45,26 @@ const { chromium } = require('playwright');
   await set('Taxímetro', '142.30'); await set('Uber', '68.40'); await set('Uber, cobrado en efectivo', '18');
   await set('Cabify', '51.20'); await set('Bolt', '24.75'); await set('Bolt, cobrado en efectivo', '24.75');
   await set('FreeNow · precio cerrado', '46.10'); await set('FreeNow · precio cerrado, ya cobrado', '12');
-  // El taxímetro lleva su casilla de efectivo: 142,30 − 43,80 = 98,50 con tarjeta.
   comprobar('lo plegado empieza cerrado', (await p.getByText('Cálculo del día').count()) === 0 && (await p.getByLabel('Hora de empezar').count()) === 0);
-  await set('Taxímetro, cobrado en efectivo', '43.80');
+  // Tarjeta y efectivo del taxímetro van enlazados. Sin tarjeta, todo el
+  // taxímetro es efectivo. Con el cierre del datáfono (98,50), el efectivo es lo
+  // que falta: 142,30 − 98,50 = 43,80.
+  const efecTaxi = p.locator('input[aria-label="Taxímetro, cobrado en efectivo"]');
+  const tarjetaTaxi = p.locator('input[aria-label="Tarjeta"]');
+  comprobar('sin tarjeta, todo el taxímetro es efectivo', (await efecTaxi.inputValue()) === '142.3', await efecTaxi.inputValue());
+  await set('Tarjeta', '98.50');
+  await p.waitForTimeout(300);
+  comprobar('con la tarjeta puesta, el efectivo es lo que falta', (await efecTaxi.inputValue()) === '43.8', await efecTaxi.inputValue());
+  // Al revés: quien apunta el efectivo ve calcularse la tarjeta, y si luego
+  // corrige el taxímetro, la tarjeta se recalcula.
+  await set('Taxímetro, cobrado en efectivo', '40');
+  await p.waitForTimeout(200);
+  comprobar('con el efectivo puesto, la tarjeta se calcula', (await tarjetaTaxi.inputValue()) === '102.3', await tarjetaTaxi.inputValue());
+  await set('Taxímetro', '150'); await p.waitForTimeout(200);
+  comprobar('y sigue al taxímetro si cambia', (await tarjetaTaxi.inputValue()) === '110', await tarjetaTaxi.inputValue());
+  await set('Taxímetro', '142.30'); await set('Tarjeta', '98.50');
   await p.waitForTimeout(400);
-  comprobar('la tarjeta del taxímetro se calcula sola', /Con tarjeta en el taxímetro: 98,50/.test(await p.locator('body').innerText()));
+  comprobar('vuelve a mandar la tarjeta al escribirla', (await efecTaxi.inputValue()) === '43.8', await efecTaxi.inputValue());
   await abrirTodo(p);
   // facturación = 142.30+68.40+51.20+24.75+46.10 = 332.75
   // cobrado = (68.40-18)+(51.20-0)+(24.75-24.75)+12+98.50 = 50.40+51.20+0+12+98.50 = 212.10
@@ -410,7 +425,7 @@ const { chromium } = require('playwright');
   await taxi.press('Enter');
   await pc.waitForTimeout(200);
   comprobar('viaje sumado', (await taxi.inputValue()) === '24.05', await taxi.inputValue());
-  const tarjeta = pc.locator('input[aria-label="Taxímetro, cobrado en efectivo"]');
+  const tarjeta = pc.locator('input[aria-label="Tarjeta"]');
   await tarjeta.fill('abc7');
   comprobar('lo que no es número no entra', (await tarjeta.inputValue()) === '7', await tarjeta.inputValue());
   await tarjeta.fill('');

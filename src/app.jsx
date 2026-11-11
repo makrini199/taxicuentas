@@ -142,11 +142,14 @@ const cuotaMensualEntre = (cuota, lo, hi) => {
   return total;
 };
 const clavesDia = (plats) => ["taximetro", "visa", ...plats.flatMap((p) => [p.key, p.cobKey])];
-// En el Diario el taxímetro tiene su casilla de efectivo, como las apps: lo que
-// no se cobró en efectivo se cobró con tarjeta. Lo guardado sigue siendo la
-// tarjeta (visa); taxEfec solo vive mientras se escribe. Vacía = todo en efectivo.
-const conTarjeta = (d) => { if (!d || d.taxEfec === undefined || String(d.taxEfec).trim() === "") return d; const t = Math.max(0, evalSuma(d.taximetro)); const e = Math.max(0, evalSuma(d.taxEfec)); return { ...d, visa: Math.max(0, Math.round((t - e) * 100) / 100) }; };
-const conEfectivoTaxi = (d) => (d && Number(d.visa) > 0 && d.taxEfec === undefined ? { ...d, taxEfec: String(Math.round(((Number(d.taximetro) || 0) - Number(d.visa)) * 100) / 100) } : d);
+// En el Diario el taxímetro se puede apuntar de dos maneras, y las dos casillas
+// van enlazadas: la Tarjeta (el cierre del datáfono: lo demás es efectivo) o el
+// efectivo del taxímetro (lo demás es tarjeta). Lo que se guarda es siempre la
+// tarjeta (visa); taxEfec solo vive mientras se escribe, cuando manda el efectivo.
+const tarjetaDe = (d) => { const v = Math.round((Math.max(0, evalSuma(d.taximetro)) - Math.max(0, evalSuma(d.taxEfec))) * 100) / 100; return v > 0 ? v : 0; };
+const conTarjeta = (d) => (!d || d.taxEfec === undefined || String(d.taxEfec).trim() === "" ? d : { ...d, visa: tarjetaDe(d) });
+// Lo que queda en efectivo del taxímetro cuando lo apuntado es la tarjeta.
+const efectivoTaxi = (d) => { const t = Math.max(0, evalSuma(d.taximetro)); if (t <= 0) return ""; return String(Math.max(0, Math.round((t - Math.max(0, evalSuma(d.visa))) * 100) / 100)); };
 const EMPTY = { taximetro: 0, uber: 0, uberEfec: 0, cabify: 0, cabifyEfec: 0, bolt: 0, boltEfec: 0, fnt9: 0, fncob: 0, visa: 0 };
 const EFEC_TRIOS = [["uber", "uberEfec", "uberCob"], ["cabify", "cabifyEfec", "cabifyCob"], ["bolt", "boltEfec", "boltCob"]];
 const today = todayStr();
@@ -793,7 +796,7 @@ function TXpro() {
   // viaje no va a darle a "Guardar día" tras cada carrera: si se le cierra la app
   // o se reinicia el móvil, lo apuntado tiene que seguir ahí.
   const [borradores, setBorradores] = useState(() => { const b = loadStorage("tc_borradores", {}); return b && typeof b === "object" && !Array.isArray(b) ? Object.fromEntries(Object.entries(b).filter(([f, v]) => /^\d{4}-\d{2}-\d{2}$/.test(f) && v && typeof v === "object")) : {}; });
-  const [form, setForm] = useState(() => { const b = loadStorage("tc_borradores", {}); if (b && b[today] && typeof b[today] === "object") return { ...b[today] }; const s = loadDays(); return s[today] ? conEfectivoTaxi({ ...s[today] }) : { ...EMPTY }; });
+  const [form, setForm] = useState(() => { const b = loadStorage("tc_borradores", {}); if (b && b[today] && typeof b[today] === "object") return conTarjeta({ ...b[today] }); const s = loadDays(); return s[today] ? { ...s[today] } : { ...EMPTY }; });
   const [enfoque, setEnfoque] = useState(null);
   const [saved, setSaved] = useState(false);
   const [notas, setNotas] = useState(() => { const n = loadStorage("tc_notas", {}); return n && typeof n === "object" ? n : {}; });
@@ -911,11 +914,20 @@ function TXpro() {
     if (ES_HORA.test(form.inicio || "")) parsed.inicio = form.inicio;
     if (ES_HORA.test(form.fin || "")) parsed.fin = form.fin;
     if (parsed.inicio && parsed.fin && descansoDe(form)) parsed.descanso = descansoDe(form);
-    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setForm(vacio ? { ...EMPTY } : conEfectivoTaxi({ ...parsed })); quitarBorrador(editDate); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
+    const vacio = !hasData(parsed); setDays((prev) => { const next = { ...prev }; if (vacio) delete next[editDate]; else next[editDate] = parsed; return next; }); setForm(vacio ? { ...EMPTY } : { ...parsed }); quitarBorrador(editDate); setSaved(vacio ? "borrado" : "guardado"); setTimeout(() => setSaved(false), 2000); };
   const quitarBorrador = (f) => setBorradores((b) => { if (!b[f]) return b; const n = { ...b }; delete n[f]; return n; });
   const descartarBorrador = () => { if (!window.confirm("¿Descartar lo que has apuntado sin guardar en este día?")) return; quitarBorrador(editDate); setForm(days[editDate] ? { ...days[editDate] } : { ...EMPTY }); };
   // Todo lo que teclea el conductor pasa por aquí, para que quede en el borrador.
-  const editar = (k, val) => { const n = { ...form, [k]: val }; setForm(n); setBorradores((b) => ({ ...b, [editDate]: n })); };
+  // Tarjeta y efectivo del taxímetro van enlazados: manda la última que se
+  // escribe. Si se escribe la tarjeta, el efectivo es lo que falta; si se escribe
+  // el efectivo, la tarjeta se calcula (y se recalcula al cambiar el taxímetro).
+  const editar = (k, val) => {
+    const n = { ...form, [k]: val };
+    if (k === "visa") delete n.taxEfec;
+    else if (k === "taxEfec" && String(val).trim() === "") { delete n.taxEfec; n.visa = ""; }
+    else if ((k === "taxEfec" || k === "taximetro") && n.taxEfec !== undefined) { const v = tarjetaDe(n); n.visa = v > 0 ? String(v) : ""; }
+    setForm(n); setBorradores((b) => ({ ...b, [editDate]: n }));
+  };
   // Al salir de la casilla se hace la cuenta y queda solo el total.
   // Al salir de una casilla, su ayuda ("+ Sumar otro viaje") se quita un instante
   // después: si se quitara ya, lo de debajo subiría de golpe y el toque que
@@ -935,7 +947,7 @@ function TXpro() {
   };
   const empezarJornada = () => {
     const t = Date.now(); const fecha = todayStr();
-    const base = fecha === editDate ? form : borradores[fecha] ? { ...borradores[fecha] } : days[fecha] ? conEfectivoTaxi({ ...days[fecha] }) : { ...EMPTY };
+    const base = fecha === editDate ? form : borradores[fecha] ? conTarjeta({ ...borradores[fecha] }) : days[fecha] ? { ...days[fecha] } : { ...EMPTY };
     const n = { ...base, inicio: horaDe(t), fin: "", descanso: "" };
     setEditDate(fecha); setEnfoque(null); setForm(n); setBorradores((b) => ({ ...b, [fecha]: n }));
     setReloj({ fecha, inicio: t, pausado: 0, pausaDesde: null }); setAvisoReloj("");
@@ -951,7 +963,7 @@ function TXpro() {
     setReloj(null); setAvisoReloj(reloj.fecha === editDate ? "Jornada terminada: revisa las cifras y guarda el día." : `Jornada terminada y apuntada en el ${weekday(reloj.fecha)} ${Number(reloj.fecha.slice(8))}: ábrelo y guárdalo.`);
   };
   const cancelarReloj = () => { if (window.confirm("¿Parar el cronómetro sin apuntar la hora de terminar?")) setReloj(null); };
-  const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? { ...borradores[d] } : days[d] ? conEfectivoTaxi({ ...days[d] }) : { ...EMPTY }); };
+  const changeDate = (d) => { setEditDate(d); setEnfoque(null); setForm(borradores[d] ? conTarjeta({ ...borradores[d] }) : days[d] ? { ...days[d] } : { ...EMPTY }); };
   const jornadaHoy = useMemo(() => ({ min: minutosJornada(form), propinas: propinasDe(form), carreras: carrerasDe(form), cruza: ES_HORA.test(form.inicio || "") && ES_HORA.test(form.fin || "") && form.fin < form.inicio }), [form]);
   const dayStats = useMemo(() => { const raw = {}; const conT = conTarjeta(form); for (const k of clavesDia(plats)) raw[k] = Math.max(0, evalSuma(conT[k])); return calcDay(raw, rep, plats); }, [form, rep, plats]);
   // Con cuota mensual: lo que lleva cobrado la empresa este mes frente a la
@@ -1072,10 +1084,10 @@ function TXpro() {
   const ANCHO = 84;
   // Casilla de dinero con calculadora. Texto y no number: el campo numérico del
   // navegador no deja escribir "+" ni coma. Enter hace la cuenta, como el "=".
-  const casilla = (k, etiqueta, estilo, pista) => (
+  const casilla = (k, etiqueta, estilo, pista, valor) => (
     <input className="inp" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" placeholder={pista || "0.00"} data-casilla={k} aria-label={etiqueta}
       style={{ ...inp, width: ANCHO, flexShrink: 0, padding: "9px 10px", fontSize: 14, textAlign: "right", ...estilo }}
-      value={form[k] || ""} onFocus={() => setEnfoque(k)} onBlur={() => cerrarCasilla(k)}
+      value={valor !== undefined ? valor : form[k] || ""} onFocus={() => setEnfoque(k)} onBlur={() => cerrarCasilla(k)}
       onChange={(e) => editar(k, limpiarCasilla(e.target.value))}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
   );
@@ -1102,6 +1114,7 @@ function TXpro() {
   // texto dice de qué es la casilla y las marcas son de quien son.
   const filas = [
     { key: "taximetro", cobKey: "taxEfec", nombre: "Taxímetro", oro: true },
+    { key: "visa", nombre: "Tarjeta", nota: "Cierre del datáfono. Lo demás del taxímetro es efectivo." },
     ...platsActivas.map((pl) => ({ key: pl.key, cobKey: pl.cobKey, nombre: pl.nombre, cobrado: pl.tipo === "cobrado" })),
   ];
   const colHead = { fontSize: 9.5, fontWeight: 800, color: C.t3, letterSpacing: 0.4, textTransform: "uppercase", textAlign: "right", flexShrink: 0 };
@@ -1237,16 +1250,16 @@ function TXpro() {
                     <span style={{ fontSize: 13.5, fontWeight: 800, color: f.oro ? "#c08a06" : C.t1, lineHeight: 1.2, wordBreak: "break-word" }}>{f.nombre}</span>
                   </div>
                   {f.cobrado && <div style={{ fontSize: 9.5, fontWeight: 700, color: C.green, marginTop: 3 }}>2ª casilla: ya cobrado</div>}
+                  {f.nota && <div style={{ fontSize: 10, color: C.t3, marginTop: 3, lineHeight: 1.3 }}>{f.nota}</div>}
                 </div>
                 {casilla(f.key, f.nombre)}
                 {f.cobKey
-                  ? casilla(f.cobKey, `${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`, { background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` }, f.key === "taximetro" && evalSuma(form.taximetro) > 0 ? String(evalSuma(form.taximetro)) : undefined)
+                  ? casilla(f.cobKey, `${f.nombre}, ${f.cobrado ? "ya cobrado" : "cobrado en efectivo"}`, { background: f.cobrado ? `${C.green}0d` : `${C.blue}0d`, borderColor: f.cobrado ? `${C.green}38` : `${C.blue}38` }, undefined, f.key === "taximetro" && form.taxEfec === undefined ? efectivoTaxi(form) : undefined)
                   : <div style={{ width: ANCHO, flexShrink: 0 }} />}
               </div>
               {(enfoque === f.key || enfoque === f.cobKey) && ayudaSuma(enfoque)}
               </React.Fragment>
             ))}
-            {evalSuma(form.taxEfec) > 0 && <div style={{ borderTop: `1px solid ${C.linea}`, paddingTop: 8, fontSize: 11, color: C.t3 }}>Con tarjeta en el taxímetro: <strong style={{ color: C.t2 }}>{fmt(Math.max(0, evalSuma(form.taximetro) - evalSuma(form.taxEfec)))}</strong></div>}
           </div>
           <button className="nb" onClick={() => setVerCalculo((v) => !v)} aria-expanded={verCalculo} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", marginBottom: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
             <span>Cálculo con la empresa</span><span>{verCalculo ? "▴" : "▾"}</span>
