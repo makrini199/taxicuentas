@@ -916,7 +916,7 @@ function Gasolineras({ alVolver }) {
   const etiqueta = { fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 };
 
   return (<>
-    <button className="nb" onClick={alVolver} style={{ background: "none", border: "none", padding: "2px 0", marginBottom: 8, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Gastos</button>
+    <button className="nb" onClick={alVolver} style={{ background: "none", border: "none", padding: "12px 18px 12px 0", margin: "-10px 0 -2px", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Gastos</button>
     <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Gasolineras baratas</div>
     <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>Precios oficiales de hoy en la Comunidad de Madrid.</div>
 
@@ -935,7 +935,7 @@ function Gasolineras({ alVolver }) {
     {pos && <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 8 }} role="group" aria-label="Distancia">
       {GAS_RADIOS.map((r) => <button key={r} className="nb" aria-pressed={pref.radio === r} onClick={() => cambiar("radio", r)} style={chip(pref.radio === r)}>{r} km</button>)}
     </div>}
-    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 10 }} role="group" aria-label="Orden">
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }} role="group" aria-label="Orden">
       {pos && <button className="nb" aria-pressed={pref.orden === "precio"} onClick={() => cambiar("orden", "precio")} style={chip(pref.orden === "precio")}>Más baratas</button>}
       {pos && <button className="nb" aria-pressed={pref.orden === "cerca"} onClick={() => cambiar("orden", "cerca")} style={chip(pref.orden === "cerca")}>Más cerca</button>}
       <button className="nb" aria-pressed={pref.solo24} onClick={() => cambiar("solo24", !pref.solo24)} style={chip(pref.solo24)}>Abiertas 24 h</button>
@@ -1054,7 +1054,7 @@ function Aeropuerto({ llegadas, alVolver }) {
   const etiqueta = { fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 };
 
   return (<>
-    <button className="nb" onClick={alVolver} style={{ background: "none", border: "none", padding: "2px 0", marginBottom: 8, color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>
+    <button className="nb" onClick={alVolver} style={{ background: "none", border: "none", padding: "12px 18px 12px 0", margin: "-10px 0 -2px", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>
     <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Llegadas al aeropuerto</div>
     <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>Vuelos que aterrizan en Barajas, por terminal.</div>
 
@@ -2248,7 +2248,7 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
             ].filter(Boolean);
             return (
               <div style={{ ...card, padding: verJornada ? 16 : "13px 16px", marginBottom: 14 }}>
-                <button className="nb" onClick={() => setVerJornada((v) => !v)} aria-expanded={verJornada} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <button className="nb" onClick={() => setVerJornada((v) => !v)} aria-expanded={verJornada} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: "13px 0", margin: "-13px 0", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
                   <span style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, flexShrink: 0 }}>Tu jornada</span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.t3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "right" }}>{verJornada ? "" : [form.inicio && form.fin ? `${form.inicio}–${form.fin}` : form.inicio ? `desde ${form.inicio}` : null, jornadaHoy.carreras ? `${jornadaHoy.carreras} carreras` : null, jornadaHoy.propinas ? `propinas ${fmt0(jornadaHoy.propinas)}` : null, combustibleDe(form) ? `combustible ${fmt0(combustibleDe(form))}` : null].filter(Boolean).join(" · ") || "horas, carreras, propinas, combustible"}</span>
                   <span style={{ color: C.t2, flexShrink: 0 }}>{verJornada ? "▴" : "▾"}</span>
@@ -2447,7 +2447,7 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
         {view === "gasolineras" && <Gasolineras alVolver={() => setView("gastos")} />}
         {view === "aeropuerto" && (llegadas
           ? <Aeropuerto llegadas={llegadas} alVolver={() => setView("calendario")} />
-          : <button className="nb" onClick={() => setView("calendario")} style={{ background: "none", border: "none", padding: "2px 0", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>)}
+          : <button className="nb" onClick={() => setView("calendario")} style={{ background: "none", border: "none", padding: "12px 18px 12px 0", margin: "-10px 0", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>)}
 
         {view === "calendario" && (() => {
           const huecos = primerDiaSemana(calMes);
@@ -2796,7 +2796,7 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
       </div>
       <button className="saveBtn" onClick={() => setCfg((c) => ({ ...DEFAULT_CFG, plataformas: c.plataformas }))} style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surf, color: C.t2, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Restaurar valores por defecto</button>
       <div style={{ textAlign: "center", fontSize: 11, color: C.t3, margin: "14px 0 20px" }}>
-        <a href="./privacidad.html" target="_blank" rel="noopener" style={{ color: C.accDim, fontWeight: 700, textDecoration: "none", fontSize: 12 }}>Política de privacidad</a>
+        <a href="./privacidad.html" target="_blank" rel="noopener" style={{ display: "inline-block", padding: "12px 16px", margin: "-12px 0", color: C.accDim, fontWeight: 700, textDecoration: "none", fontSize: 12 }}>Política de privacidad</a>
         <div style={{ marginTop: 7 }}>TXpro · versión {APP_VERSION}</div>
         <div style={{ marginTop: 3 }}>Tus datos se guardan solo en este móvil.</div>
       </div>
