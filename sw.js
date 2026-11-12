@@ -1,6 +1,6 @@
 // TXpro service worker. The cache name carries the app version, so a new
 // release fetches everything fresh and the old cache is dropped on activate.
-const VERSION = "1.16.0";
+const VERSION = "1.17.0";
 const CACHE = `txpro-${VERSION}`;
 const SHELL = [
   "./",
@@ -11,6 +11,7 @@ const SHELL = [
   "./vendor/react-dom.production.min.js",
   "./manifest.webmanifest",
   "./eventos.json",
+  "./trenes.json",
   "./mapa-madrid.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -62,7 +63,7 @@ self.addEventListener("fetch", (event) => {
   // El calendario de días fuertes cambia sin que cambie la versión de la app,
   // así que aquí la caché va detrás: primero la red, y lo guardado solo como
   // red de seguridad para el que esté sin cobertura.
-  if (new URL(request.url).pathname.endsWith("/eventos.json")) {
+  if (/\/(eventos|trenes)\.json$/.test(new URL(request.url).pathname)) {
     event.respondWith(
       fetch(request)
         .then((res) => {
@@ -90,5 +91,40 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
     )
+  );
+});
+
+// AVISOS AL MÓVIL. El servidor manda, la tarde antes, lo que hay en Madrid al
+// día siguiente. Aquí solo se enseña el aviso y, al tocarlo, se abre la app en
+// el Calendario. Del aviso se acepta lo justo: un título, un texto y poco más.
+self.addEventListener("push", (event) => {
+  let a = {};
+  try { a = event.data ? event.data.json() : {}; } catch { a = {}; }
+  const titulo = typeof a.titulo === "string" && a.titulo ? a.titulo.slice(0, 120) : "TXpro";
+  event.waitUntil(
+    self.registration.showNotification(titulo, {
+      body: typeof a.cuerpo === "string" ? a.cuerpo.slice(0, 400) : "",
+      icon: "./icons/icon-192.png",
+      badge: "./icons/icon-192.png",
+      tag: typeof a.etiqueta === "string" ? a.etiqueta.slice(0, 40) : "txpro",
+      lang: "es",
+      data: { url: a.url === "./#calendario" ? a.url : "./" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const destino = (event.notification.data && event.notification.data.url) || "./";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((abiertas) => {
+      for (const c of abiertas) {
+        if ("focus" in c) {
+          if (destino !== "./") c.postMessage({ type: "IR_A", vista: "calendario" });
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(new URL(destino, self.registration.scope).href);
+    })
   );
 });
