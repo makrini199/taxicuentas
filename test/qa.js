@@ -10,6 +10,17 @@ const { chromium } = require('playwright');
 (async () => {
   const EJECUTABLE = process.env.CHROMIUM_PATH;  // opcional: navegador propio
   const b = await chromium.launch({ args: ['--lang=es-ES'], ...(EJECUTABLE ? { executablePath: EJECUTABLE } : {}) });
+  // Quien abre la app por primera vez elige entre conductor y empresa. Casi todas
+  // las pruebas son del conductor, así que entran ya como tal; las de la entrada
+  // y la empresa usan contextoNuevo, sin nada puesto.
+  // Ninguna prueba sale a internet a por los vuelos: por defecto el servidor
+  // «contesta» que no hay datos, y las pruebas del aeropuerto ponen los suyos.
+  const VUELOS = '**/functions/v1/llegadas';
+  const crudoNuevo = b.newContext.bind(b);
+  // La cara de empresa o flota va escondida en la app publicada; aquí se enciende
+  // para seguir probándola. La prueba de «flota escondida» usa crudoNuevo.
+  const contextoNuevo = async (o) => { const c = await crudoNuevo(o); await c.addInitScript(() => { try { localStorage.setItem('tc_lab_flota', 'true'); } catch {} }); await c.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' })); return c; };
+  b.newContext = async (o) => { const c = await contextoNuevo(o); await c.addInitScript(() => { try { if (!localStorage.getItem('tc_rol')) localStorage.setItem('tc_rol', JSON.stringify('conductor')); } catch {} }); return c; };
   const ctx = await b.newContext({ viewport: { width: 360, height: 700 }, deviceScaleFactor: 2, locale: 'es-ES', timezoneId: 'Europe/Madrid', acceptDownloads: true });
   const p = await ctx.newPage();
   const errores = [];
@@ -263,6 +274,8 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(600);
   comprobar('no se puede quitar una con cifras dentro', await p.getByRole('button', { name: 'Quitar RTI' }).count() === 0);
   const comentarios = await p.getByRole('link', { name: 'Enviar comentarios' }).getAttribute('href').catch(() => null);
+  const grupoWa = p.getByLabel('Grupo de conductores').getByRole('link', { name: 'Entrar al grupo de WhatsApp' });
+  comprobar('enlace al grupo de WhatsApp de conductores', (await grupoWa.getAttribute('href').catch(() => null)) === 'https://chat.whatsapp.com/BF8BL89IBtE8BcqoRXg413' && (await grupoWa.getAttribute('target')) === '_blank');
   comprobar('botón para mandar ideas o fallos', !!comentarios && comentarios.startsWith('mailto:proyecto.txpro@gmail.com?subject=') && decodeURIComponent(comentarios).includes('Ideas o fallos'), comentarios || 'no está');
 
   console.log('\n— SIN CONEXIÓN —');
@@ -691,7 +704,7 @@ const { chromium } = require('playwright');
   await ph.waitForTimeout(300);
   await abrir(ph, /^Tu jornada/);
   const reloj = await ph.evaluate(() => JSON.parse(localStorage.getItem('tc_reloj') || 'null'));
-  const ahoraHM = await ph.evaluate(() => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; });
+  const ahoraHM = await ph.evaluate((ini) => { const d = new Date(ini || Date.now()); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }, reloj && reloj.inicio);
   comprobar('«Empezar jornada» pone en marcha el cronómetro', !!reloj && (await ph.getByLabel('Hora de empezar').inputValue()) === ahoraHM, JSON.stringify(reloj));
   // Dos horas antes, con un cuarto de hora de pausa: así se ve la cuenta.
   await ph.evaluate(() => { const r = JSON.parse(localStorage.getItem('tc_reloj')); r.inicio -= 2 * 3600000; r.pausado = 15 * 60000; localStorage.setItem('tc_reloj', JSON.stringify(r)); });
@@ -831,6 +844,300 @@ const { chromium } = require('playwright');
   comprobar('y el completo también', /^TXpro-\d{4}-\d{2}-completo\.pdf$/.test(pdfCompleto.nombre) && pdfCompleto.buf.toString('latin1').startsWith('%PDF-1.4'), pdfCompleto.nombre);
   comprobar('año e informe sin errores', errAnio.length === 0, errAnio.join(' | '));
   await ca.close();
+
+  console.log('\n— LAS DOS CARAS: CONDUCTOR Y EMPRESA O FLOTA —');
+  const cf = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  const pf = await cf.newPage(); const errFlota = []; pf.on('pageerror', (e) => errFlota.push(e.message));
+  pf.on('dialog', (d) => d.accept());
+  await pf.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pf.waitForSelector('text=¿Cómo vas a usar TXpro?');
+  comprobar('la primera vez pregunta cómo se va a usar', (await pf.getByRole('button', { name: /Soy conductor/ }).count()) === 1 && (await pf.getByRole('button', { name: /Soy empresa o flota/ }).count()) === 1);
+  await pf.getByRole('button', { name: /Soy empresa o flota/ }).click(); await pf.waitForTimeout(300);
+  comprobar('la empresa empieza sin conductores', (await pf.getByLabel('Flota vacía').count()) === 1);
+  // La flota de ejemplo se pone y se quita sin dejar rastro.
+  await pf.getByRole('button', { name: /flota de ejemplo/ }).click(); await pf.waitForTimeout(300);
+  comprobar('se puede ver con una flota de ejemplo', (await pf.getByLabel('Conductores').getByRole('button').count()) === 3 && /Facturado por la flota · 3 de 3 conductores/.test(await pf.getByLabel('Resumen de la flota').innerText()));
+  await pf.getByRole('button', { name: 'Quitar' }).click(); await pf.waitForTimeout(300);
+  comprobar('y quitarla', (await pf.getByLabel('Flota vacía').count()) === 1);
+  // Alta de un conductor al 60 %.
+  await pf.getByRole('button', { name: 'Dar de alta un conductor' }).click(); await pf.waitForTimeout(300);
+  await pf.locator('#fNombre').fill('Pepe Ruiz'); await pf.locator('#fPct').fill('60');
+  await pf.locator('.saveBtn', { hasText: 'Dar de alta' }).click(); await pf.waitForTimeout(300);
+  const fichaTxt = await pf.getByLabel('Ficha del conductor').innerText();
+  comprobar('dar de alta a un conductor con su acuerdo', /Pepe Ruiz/.test(fichaTxt) && /Al 60 %/.test(fichaTxt), fichaTxt.replace(/\n/g, ' '));
+  comprobar('recién dado de alta no tiene cuentas', /Sin cuentas en/.test(await pf.locator('body').innerText()));
+  // Sus cuentas llegan con su copia de seguridad: 100 € de taxímetro en
+  // efectivo. Al 60 % le tocan 40 a la empresa, que no ha cobrado nada → el
+  // conductor le debe 40. Lo mismo que ve él en su móvil.
+  const fsF = require('fs'); const osF = require('os'); const pathF = require('path');
+  const hoyF = await pf.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const copiaF = pathF.join(fsF.mkdtempSync(pathF.join(osF.tmpdir(), 'txpro-')), 'copia.json');
+  fsF.writeFileSync(copiaF, JSON.stringify({ app: 'txpro', formato: 3, days: { [hoyF]: { taximetro: 100, visa: 0 } }, gastos: [], cfg: {} }));
+  await pf.locator('input[aria-label="Copia del conductor"]').setInputFiles(copiaF); await pf.waitForTimeout(400);
+  comprobar('se cargan las cuentas del conductor desde su copia', /Cargados 1 días de Pepe Ruiz/.test(await pf.locator('body').innerText()));
+  const cuentasF = await pf.getByLabel('Cuentas del conductor', { exact: true }).innerText();
+  comprobar('las cuentas salen con su acuerdo', /100,00\s€/.test(cuentasF) && /EMPRESA\s+40,00\s€/i.test(cuentasF) && /SU EFECTIVO\s+100,00\s€/i.test(cuentasF), cuentasF.replace(/\n/g, ' '));
+  comprobar('y el saldo, visto desde la empresa', /TE DEBE EL CONDUCTOR[\s\S]*40,00\s€/i.test(await pf.getByLabel('Saldo con el conductor').innerText()));
+  await pf.getByRole('button', { name: '‹ Flota' }).click(); await pf.waitForTimeout(300);
+  const panelF = await pf.locator('body').innerText();
+  comprobar('el panel suma la flota y dice quién debe', /Te deben 40,00\s€ · 1 conductor/.test(panelF) && /Pepe Ruiz[\s\S]*Te debe 40,00\s€/.test(panelF));
+  // Un archivo que no es una copia no rompe nada.
+  await pf.getByLabel('Conductores').getByRole('button').first().click(); await pf.waitForTimeout(300);
+  fsF.writeFileSync(copiaF, 'esto no es una copia');
+  await pf.locator('input[aria-label="Copia del conductor"]').setInputFiles(copiaF); await pf.waitForTimeout(400);
+  comprobar('un archivo cualquiera no rompe nada', /No se pudo leer el archivo/.test(await pf.locator('body').innerText()) && /100,00\s€/.test(await pf.getByLabel('Cuentas del conductor', { exact: true }).innerText()));
+  // Todo queda guardado, y se puede pasar a conductor y volver.
+  await pf.reload({ waitUntil: 'load' }); await pf.waitForSelector('text=Facturado por la flota');
+  comprobar('la flota sigue al volver a abrir', /Pepe Ruiz/.test(await pf.locator('body').innerText()));
+  await pf.getByLabel('Ajustes').click(); await pf.waitForTimeout(300);
+  await pf.getByRole('button', { name: 'Cambiar a conductor' }).click();
+  await pf.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('de empresa se puede pasar a conductor', true);
+  await pf.getByLabel('Ajustes').click(); await pf.waitForTimeout(300);
+  await pf.getByRole('button', { name: 'Cambiar a empresa o flota' }).click(); await pf.waitForTimeout(300);
+  comprobar('y volver, con la flota intacta', /Pepe Ruiz/.test(await pf.locator('body').innerText()));
+  await pf.getByLabel('Conductores').getByRole('button').first().click(); await pf.waitForTimeout(300);
+  await pf.getByRole('button', { name: 'Dar de baja' }).click(); await pf.waitForTimeout(300);
+  comprobar('dar de baja lo quita de la flota', (await pf.getByLabel('Flota vacía').count()) === 1);
+  comprobar('empresa sin errores', errFlota.length === 0, errFlota.join(' | '));
+  await cf.close();
+  // Quien ya llevaba sus cuentas no ve la pregunta: sigue como conductor.
+  const cv = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  await cv.addInitScript(() => { if (!localStorage.getItem('tc_days')) localStorage.setItem('tc_days', JSON.stringify({ '2026-01-10': { taximetro: 100 } })); });
+  const pvj = await cv.newPage();
+  await pvj.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  const directo = await pvj.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('quien ya tenía cuentas entra directo como conductor', directo);
+  await cv.close();
+
+  console.log('\n— EMPRESA: APUNTAR DÍAS, INFORME, COCHES E INVITACIÓN —');
+  const ce = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block', acceptDownloads: true, permissions: ['clipboard-read', 'clipboard-write'] });
+  await ce.addInitScript(() => {
+    if (sessionStorage.getItem('sembrado')) return; sessionStorage.setItem('sembrado', '1');
+    localStorage.setItem('tc_rol', JSON.stringify('empresa'));
+    localStorage.setItem('tc_flota', JSON.stringify({ empresa: 'Taxis Prueba', conductores: [{ id: 'c1', nombre: 'Ana Gil', acuerdo: { modo: 'fijo', cuota: '100', cuotaPor: 'dia' } }], vehiculos: [] }));
+  });
+  const pe = await ce.newPage(); const errEmp = []; pe.on('pageerror', (e) => errEmp.push(e.message));
+  pe.on('dialog', (d) => d.accept());
+  await pe.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pe.waitForSelector('text=Facturado por la flota');
+  await pe.getByLabel('Conductores').getByRole('button').first().click(); await pe.waitForTimeout(300);
+  // La empresa apunta un día: 300 € de taxímetro, 250 con tarjeta. Cuota de 100
+  // al día: la empresa cobró 250, se queda 100 y le debe 150 al conductor.
+  await pe.getByRole('button', { name: 'Apuntar un día' }).click(); await pe.waitForTimeout(300);
+  await pe.locator('input[aria-label="Taxímetro"]').fill('300'); await pe.locator('input[aria-label="Tarjeta"]').fill('250'); await pe.waitForTimeout(200);
+  const cuentaDia = await pe.getByLabel('Cuenta del día').innerText();
+  comprobar('la empresa ve la cuenta del día mientras apunta', /Facturado 300,00\s€/.test(cuentaDia) && /efectivo del conductor 50,00\s€/.test(cuentaDia) && /Le debes 150,00\s€/.test(cuentaDia), cuentaDia.replace(/\n/g, ' '));
+  await pe.getByRole('button', { name: 'Guardar el día' }).click(); await pe.waitForTimeout(400);
+  const trasDia = await pe.locator('body').innerText();
+  comprobar('y el día queda en las cuentas del conductor', /Guardado el \d\d\/\d\d/.test(trasDia) && /EMPRESA\s+100,00\s€/i.test(await pe.getByLabel('Cuentas del conductor', { exact: true }).innerText()) && /LE DEBES AL CONDUCTOR[\s\S]*150,00\s€/i.test(await pe.getByLabel('Saldo con el conductor').innerText()));
+  // El informe en PDF de ese conductor.
+  const [dlEmp] = await Promise.all([pe.waitForEvent('download'), pe.getByRole('button', { name: 'Informe en PDF' }).click()]);
+  const pdfEmp = require('fs').readFileSync(await dlEmp.path()).toString('latin1');
+  comprobar('la empresa saca el informe en PDF del conductor', /^TXpro-\d{4}-\d{2}-Ana-Gil\.pdf$/.test(dlEmp.suggestedFilename()) && pdfEmp.startsWith('%PDF-1.4') && pdfEmp.trimEnd().endsWith('%%EOF'), dlEmp.suggestedFilename());
+  // La invitación: un enlace con el acuerdo.
+  await pe.getByRole('button', { name: 'Enviar invitación' }).click(); await pe.waitForTimeout(400);
+  const enlaceInv = (await pe.getByLabel('Enlace de invitación').innerText()).trim();
+  comprobar('la invitación es un enlace a la app', /^http:\/\/localhost:8080\/.*\?alta=[A-Za-z0-9_-]+$/.test(enlaceInv), enlaceInv.slice(0, 60));
+  // Coches: alta, quién lo lleva y un gasto.
+  await pe.getByRole('button', { name: /^Coches/ }).click(); await pe.waitForTimeout(300);
+  comprobar('la empresa empieza sin coches', (await pe.getByLabel('Sin coches').count()) === 1);
+  await pe.getByRole('button', { name: 'Añadir un coche' }).click(); await pe.waitForTimeout(300);
+  await pe.locator('#vMatricula').fill('1234 abc'); await pe.locator('#vLicencia').fill('05123'); await pe.locator('#vConductor').selectOption('c1');
+  await pe.getByRole('button', { name: 'Añadir el coche' }).click(); await pe.waitForTimeout(300);
+  await pe.locator('input[aria-label="Importe del gasto"]').fill('120,50');
+  await pe.getByRole('button', { name: 'Guardar gasto' }).click(); await pe.waitForTimeout(300);
+  comprobar('se apuntan los gastos de un coche', /Seguro[\s\S]*120,50\s€/.test(await pe.getByLabel('Gastos del coche').innerText()));
+  await pe.getByRole('button', { name: '‹ Coches' }).click(); await pe.waitForTimeout(300);
+  const cochesTxt = await pe.getByLabel('Coches', { exact: true }).innerText();
+  comprobar('el coche sale con su matrícula, licencia y conductor', /1234 ABC · licencia 05123/.test(cochesTxt) && /Ana Gil/.test(cochesTxt) && /−120,50\s€/.test(cochesTxt), cochesTxt.replace(/\n/g, ' '));
+  await pe.getByRole('button', { name: /^Flota/ }).click(); await pe.waitForTimeout(300);
+  const panelEmp = await pe.getByLabel('Resumen de la flota').innerText();
+  comprobar('el panel resta los gastos de los coches', /Gastos de los coches −120,50\s€/.test(panelEmp) && /le quedan .?20,50\s€/.test(panelEmp), panelEmp.replace(/\n/g, ' ').slice(-120));
+  await pe.getByLabel('Conductores').getByRole('button').first().click(); await pe.waitForTimeout(300);
+  comprobar('y la ficha del conductor dice qué coche lleva', /1234 ABC · licencia 05123/.test(await pe.getByLabel('Ficha del conductor').innerText()));
+  comprobar('empresa (días, coches, informe) sin errores', errEmp.length === 0, errEmp.join(' | '));
+  await ce.close();
+
+  // El conductor abre la invitación en su móvil: queda en la flota, con el
+  // acuerdo de la empresa (100 € al día) y sin poder cambiarlo.
+  const ci = await contextoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  const pi = await ci.newPage(); const errInv = []; pi.on('pageerror', (e) => errInv.push(e.message));
+  pi.on('dialog', (d) => d.accept());
+  await pi.goto(enlaceInv, { waitUntil: 'load' });
+  await pi.waitForSelector('text=Invitación a una flota');
+  const invTxt = await pi.getByLabel('Invitación a una flota').innerText();
+  comprobar('el conductor ve quién le invita y con qué acuerdo', /Taxis Prueba te ha dado de alta como Ana Gil/.test(invTxt) && /Cuota de 100\s€ por día/.test(invTxt), invTxt.replace(/\n/g, ' ').slice(0, 140));
+  await pi.getByRole('button', { name: 'Aceptar y unirme' }).click();
+  await pi.waitForSelector('text=INGRESOS DEL DÍA');
+  comprobar('al aceptar, el enlace desaparece de la dirección', !/alta=/.test(pi.url()), pi.url());
+  await pi.locator('input[aria-label="Taxímetro"]').fill('300'); await pi.waitForTimeout(300);
+  const hoyInv = await hoyTxt(pi);
+  comprobar('sus cuentas van con el acuerdo de la flota', /tu parte 200,00/.test(hoyInv) && /Debes a la empresa 100,00/.test(hoyInv), hoyInv.slice(0, 120).replace(/\n/g, ' '));
+  await pi.getByLabel('Ajustes').click(); await pi.waitForTimeout(300);
+  const ajInv = await pi.locator('body').innerText();
+  comprobar('y en Ajustes no puede cambiar el acuerdo', /TU FLOTA/i.test(ajInv) && /Taxis Prueba/.test(ajInv) && /no se puede cambiar desde aquí/.test(ajInv) && (await pi.locator('#cfgPct').count()) === 0 && (await pi.locator('#cfgCuota').count()) === 0);
+  await pi.reload({ waitUntil: 'load' }); await pi.waitForSelector('text=INGRESOS DEL DÍA');
+  await pi.getByLabel('Ajustes').click(); await pi.waitForTimeout(300);
+  comprobar('el vínculo sigue al volver a abrir', (await pi.getByLabel('Tu flota').count()) === 1);
+  await pi.getByRole('button', { name: 'Salir de la flota' }).click(); await pi.waitForTimeout(300);
+  comprobar('si sale de la flota, vuelve a poner él su acuerdo', (await pi.getByLabel('Tu flota').count()) === 0 && (await pi.locator('#cfgPct').count()) === 1);
+  comprobar('invitación sin errores', errInv.length === 0, errInv.join(' | '));
+  // Un enlace roto o trucado no rompe nada: la app abre como siempre.
+  await pi.goto('http://localhost:8080/index.html?alta=esto-no-es-una-invitacion', { waitUntil: 'load' });
+  const abreIgual = await pi.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('una invitación rota se ignora', abreIgual && (await pi.getByLabel('Invitación a una flota').count()) === 0);
+  await ci.close();
+
+  console.log('\n— GASOLINERAS BARATAS —');
+  // La lista del Ministerio, de mentira y pequeña: dos baratas (una lejos), una
+  // cara pegada al conductor, una media, y dos filas rotas que hay que descartar.
+  const eess = (o) => ({ 'C.P.': '28000', 'Dirección': o.dir, Horario: o.h || 'L-D: 24H', Latitud: o.lat, 'Longitud (WGS84)': o.lon, Municipio: o.muni || 'Madrid', PrecioProducto: o.precio, 'Rótulo': o.rotulo, IDEESS: o.id });
+  const listaGas = { Fecha: '11/11/2026 21:00:00', ResultadoConsulta: 'OK', ListaEESSPrecio: [
+    eess({ id: '1', rotulo: 'BARATA SUR', dir: 'CALLE UNO, 1', lat: '40,400000', lon: '-3,690000', precio: '1,400' }),
+    eess({ id: '2', rotulo: 'CARA CERCA', dir: 'PASEO DOS, 2, ', lat: '40,407000', lon: '-3,689000', precio: '1,800', h: 'L-D: 06:00-22:00' }),
+    eess({ id: '3', rotulo: 'LEJOS BARATA', dir: 'AVENIDA TRES, 3', lat: '40,480000', lon: '-3,370000', precio: '1,300', muni: 'Alcalá de Henares' }),
+    eess({ id: '4', rotulo: 'SIN PRECIO', dir: 'CALLE CUATRO', lat: '40,410000', lon: '-3,690000', precio: '' }),
+    eess({ id: '5', rotulo: 'SIN SITIO', dir: 'CALLE CINCO', lat: '', lon: '', precio: '1,100' }),
+    eess({ id: '6', rotulo: 'MEDIA', dir: 'CALLE SEIS, 6', lat: '40,420000', lon: '-3,700000', precio: '1,600' }),
+    'basura', null,
+  ] };
+  const listaDiesel = { ListaEESSPrecio: [eess({ id: '9', rotulo: 'SOLO DIESEL', dir: 'CALLE NUEVE, 9', lat: '40,405000', lon: '-3,690000', precio: '1,555' })] };
+  const pedidasGas = [];
+  let gasCortado = false;
+  const rutaGas = async (c) => c.route('**/ServiciosRESTCarburantes/**', (r) => {
+    const id = r.request().url().split('/').pop(); pedidasGas.push(id);
+    if (gasCortado) return r.abort();
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(id === '4' ? listaDiesel : listaGas) });
+  });
+  const abrirGas = async (pg) => { await pg.getByRole('button', { name: 'Gastos', exact: true }).click(); await pg.waitForTimeout(250); await pg.getByRole('button', { name: /Gasolineras baratas/ }).click(); await pg.waitForSelector('[aria-label="La más barata"], [aria-label="Sin resultados"], [role="alert"]'); await pg.waitForTimeout(250); };
+  // 1) Sin dar la ubicación: la más barata de toda la Comunidad.
+  const cg = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', timezoneId: 'Europe/Madrid', serviceWorkers: 'block' });
+  await rutaGas(cg);
+  const pgas = await cg.newPage(); const errGas = []; pgas.on('pageerror', (e) => errGas.push(e.message));
+  await pgas.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pgas.waitForSelector('text=INGRESOS DEL DÍA'); await pgas.waitForTimeout(400);
+  comprobar('la app no consulta precios hasta que se abre Gasolineras', pedidasGas.length === 0, pedidasGas.join(','));
+  await abrirGas(pgas);
+  const sinPos = await pgas.getByLabel('La más barata').innerText();
+  comprobar('sin ubicación: la más barata de la Comunidad', /LA MÁS BARATA DE LA COMUNIDAD DE MADRID/i.test(sinPos) && /1,300/.test(sinPos) && /LEJOS BARATA/.test(sinPos) && /Avenida Tres, 3 · Alcalá de Henares/.test(sinPos), sinPos.replace(/\n/g, ' ').slice(0, 130));
+  comprobar('descarta las filas sin precio o sin sitio y saca la media y el ahorro', /media de las 4 gasolineras/.test(sinPos) && /1,525\s€\/l/.test(sinPos) && /40 litros aquí te ahorras 9,00\s€/.test(sinPos), sinPos.replace(/\n/g, ' ').slice(-120));
+  comprobar('pide solo el combustible elegido (gasolina 95)', pedidasGas.join(',') === '1', pedidasGas.join(','));
+  comprobar('el enlace lleva a la gasolinera en el mapa', (await pgas.getByLabel('La más barata').getByRole('link', { name: 'Cómo llegar' }).getAttribute('href')) === 'https://www.google.com/maps/dir/?api=1&destination=40.48,-3.37');
+  await pgas.getByLabel('Buscar gasolinera').fill('alcala'); await pgas.waitForTimeout(200);
+  const listaBusca = await pgas.getByLabel('Lista de gasolineras').innerText();
+  comprobar('se puede buscar por municipio sin acentos', /LEJOS BARATA/.test(listaBusca) && !/BARATA SUR/.test(listaBusca));
+  await pgas.getByLabel('Buscar gasolinera').fill('zzz'); await pgas.waitForTimeout(200);
+  comprobar('si no hay ninguna, lo dice', (await pgas.getByLabel('Sin resultados').count()) === 1 && (await pgas.getByLabel('La más barata').count()) === 0);
+  // Sin permiso de ubicación: lo explica y deja buscar a mano.
+  await pgas.getByLabel('Buscar gasolinera').fill('');
+  await pgas.getByRole('button', { name: 'Usar mi ubicación' }).click(); await pgas.waitForTimeout(500);
+  comprobar('sin permiso de ubicación, lo explica', /no ha dado permiso de ubicación|No he podido saber dónde estás/.test(await pgas.getByLabel('Tu ubicación').innerText()));
+  // Otro combustible: otra consulta y otra lista.
+  await pgas.getByRole('button', { name: 'Diésel' }).click(); await pgas.waitForSelector('text=SOLO DIESEL');
+  comprobar('al cambiar de combustible pide el otro', pedidasGas.join(',') === '1,4' && /1,555/.test(await pgas.getByLabel('La más barata').innerText()), pedidasGas.join(','));
+  // Sin cobertura: enseña lo último que bajó, y avisa.
+  gasCortado = true;
+  await pgas.getByRole('button', { name: 'Actualizar precios' }).click(); await pgas.waitForSelector('[role="alert"]');
+  comprobar('sin cobertura enseña los últimos precios y avisa', /No he podido actualizar los precios/.test(await pgas.locator('[role="alert"]').innerText()) && /1,555/.test(await pgas.getByLabel('La más barata').innerText()));
+  await pgas.getByRole('button', { name: 'GLP' }).click(); await pgas.waitForSelector('[role="alert"]'); await pgas.waitForTimeout(200);
+  comprobar('y si no hay nada guardado de ese combustible, deja reintentar', /No he podido bajar los precios/.test(await pgas.locator('[role="alert"]').innerText()) && (await pgas.getByRole('button', { name: 'Reintentar' }).count()) === 1 && (await pgas.getByLabel('La más barata').count()) === 0);
+  gasCortado = false;
+  await pgas.getByRole('button', { name: 'Reintentar' }).click(); await pgas.waitForSelector('[aria-label="La más barata"]');
+  comprobar('al volver la cobertura, reintentar funciona', /1,300/.test(await pgas.getByLabel('La más barata').innerText()));
+  await pgas.getByRole('button', { name: '‹ Gastos' }).click(); await pgas.waitForTimeout(250);
+  comprobar('y se vuelve a Gastos', /Nuevo gasto/i.test(await pgas.locator('body').innerText()));
+  comprobar('gasolineras sin errores', errGas.length === 0, errGas.join(' | '));
+  await cg.close();
+
+  // 2) Con ubicación (Atocha): solo las de alrededor, con su distancia.
+  const cg2 = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', timezoneId: 'Europe/Madrid', serviceWorkers: 'block', geolocation: { latitude: 40.4066, longitude: -3.6892 }, permissions: ['geolocation'] });
+  await rutaGas(cg2);
+  const pg2 = await cg2.newPage(); const errGas2 = []; pg2.on('pageerror', (e) => errGas2.push(e.message));
+  await pg2.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pg2.waitForSelector('text=INGRESOS DEL DÍA');
+  await abrirGas(pg2); await pg2.waitForSelector('text=A MENOS DE 5 KM');
+  const conPos = await pg2.getByLabel('La más barata').innerText();
+  comprobar('con ubicación: la más barata de alrededor, con su distancia', /A MENOS DE 5 KM/i.test(conPos) && /1,400/.test(conPos) && /BARATA SUR/.test(conPos) && /a 7\d0 m/.test(conPos), conPos.replace(/\n/g, ' ').slice(0, 120));
+  comprobar('la media y el ahorro son los de la zona', /media de las 3 gasolineras a menos de 5 km es 1,600\s€\/l/.test(conPos) && /te ahorras 8,00\s€/.test(conPos), conPos.replace(/\n/g, ' ').slice(-110));
+  const ordenDe = async () => (await pg2.getByLabel('Lista de gasolineras').getByRole('link').allInnerTexts()).map((t) => t.split('\n')[0]).join(' > ');
+  comprobar('ordenadas por precio', (await ordenDe()) === 'BARATA SUR > MEDIA > CARA CERCA', await ordenDe());
+  const filaCara = await pg2.getByLabel('Lista de gasolineras').getByRole('link').nth(2).innerText();
+  comprobar('cada una dice cuánto se aparta de la media y su horario', /Paseo Dos, 2 · Madrid/.test(filaCara) && /50 m · L-D: 06:00-22:00/.test(filaCara) && /1,800\s+\+0,200/.test(filaCara), filaCara.replace(/\n/g, ' '));
+  await pg2.getByRole('button', { name: 'Más cerca' }).click(); await pg2.waitForTimeout(200);
+  comprobar('o por cercanía', (await ordenDe()) === 'CARA CERCA > BARATA SUR > MEDIA', await ordenDe());
+  await pg2.getByRole('button', { name: 'Abiertas 24 h' }).click(); await pg2.waitForTimeout(200);
+  comprobar('el filtro de 24 h quita las que cierran', (await ordenDe()) === 'BARATA SUR > MEDIA' && /te ahorras 4,00\s€/.test(await pg2.getByLabel('La más barata').innerText()), await ordenDe());
+  await pg2.getByRole('button', { name: 'Abiertas 24 h' }).click();
+  await pg2.getByRole('button', { name: '2 km', exact: true }).click(); await pg2.waitForTimeout(200);
+  comprobar('y la distancia acota la zona', /A MENOS DE 2 KM/i.test(await pg2.getByLabel('La más barata').innerText()) && (await ordenDe()) === 'CARA CERCA > BARATA SUR > MEDIA');
+  // Lo elegido se recuerda; la ubicación no se guarda.
+  const guardadoGas = await pg2.evaluate(() => ({ pref: localStorage.getItem('tc_gas'), todo: JSON.stringify(localStorage) }));
+  comprobar('recuerda lo elegido y no guarda la ubicación', /"radio":2/.test(guardadoGas.pref) && /"orden":"cerca"/.test(guardadoGas.pref) && !/40\.4066/.test(guardadoGas.todo) && !/3\.6892/.test(guardadoGas.todo));
+  comprobar('gasolineras con ubicación sin errores', errGas2.length === 0, errGas2.join(' | '));
+  await cg2.close();
+
+  console.log('\n— LLEGADAS AL AEROPUERTO —');
+  // Mientras el servidor no dé vuelos, la pantalla ni se ofrece. Con datos, se prueban con vuelos alrededor de ahora.
+  const enMin = (m) => new Date(Date.now() + m * 60000).toISOString();
+  const vuelo = (m, terminal, origen, extra) => ({ hora: enMin(m), prevista: enMin(m), terminal, origen, num: 'XX' + Math.abs(m), cia: 'Prueba Air', estado: '', ...(extra || {}) });
+  const llegadasDe = (minActualizado) => ({ actualizado: enMin(minActualizado), vuelos: [
+    vuelo(-40, 'T1', 'Hace Rato'), vuelo(-20, 'T4', 'Recién'),
+    vuelo(10, 'T4S', 'Lima'), vuelo(20, 'T1', 'Roma', { prevista: enMin(50) }), vuelo(30, 'T2', 'París'),
+    vuelo(40, 'T4', 'Cancelado', { estado: 'cancelado' }), vuelo(45, '3', 'Viena'), vuelo(90, 'T4', 'Miami'),
+    { hora: 'nada', terminal: 'T4', origen: 'Roto' }, null, 'basura',
+  ] });
+  const ctxAero = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', timezoneId: 'Europe/Madrid', serviceWorkers: 'block' });
+  const pgAero = await ctxAero.newPage(); const errAero = []; pgAero.on('pageerror', (e) => errAero.push(e.message)); pgAero.on('console', (m) => { if (m.type() === 'error') errAero.push(m.text()); });
+  await pgAero.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pgAero.waitForSelector('text=INGRESOS DEL DÍA');
+  const irACalendario = async () => { await pgAero.getByRole('button', { name: 'Diario', exact: true }).click(); await pgAero.waitForTimeout(150); await pgAero.getByRole('button', { name: 'Calendario', exact: true }).click(); await pgAero.waitForTimeout(500); };
+  await irACalendario();
+  comprobar('sin datos de vuelos, el Calendario no ofrece el aeropuerto', (await pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ }).count()) === 0);
+  await ctxAero.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(llegadasDe(-240)) }));
+  await irACalendario();
+  comprobar('con datos de hace cuatro horas, tampoco', (await pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ }).count()) === 0);
+  await ctxAero.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado": "ayer", "vuelos": "muchos"' }));
+  await irACalendario();
+  comprobar('un archivo roto no ofrece nada ni rompe la app', (await pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ }).count()) === 0 && /día trabajado|días trabajados/.test(await pgAero.locator('body').innerText()));
+  await ctxAero.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(llegadasDe(-5)) }));
+  await irACalendario();
+  const tarjetaAero = pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ });
+  comprobar('con datos frescos, el Calendario dice cuántos vuelos llegan', (await tarjetaAero.count()) === 1 && /4 vuelos en la próxima hora/.test(await tarjetaAero.innerText()), (await tarjetaAero.count()) ? (await tarjetaAero.innerText()).replace(/\n/g, ' ') : 'no está');
+  await tarjetaAero.click(); await pgAero.waitForSelector('[aria-label="Próxima hora"]');
+  const horaTxtAero = (await pgAero.getByLabel('Próxima hora').innerText()).replace(/\s+/g, ' ');
+  comprobar('la próxima hora por terminal: T4S cuenta como T4, T3 como T2, y los cancelados no', /EN LA PRÓXIMA HORA 4 vuelos T1 1 T2 2 T4 1/i.test(horaTxtAero), horaTxtAero.slice(0, 80));
+  comprobar('y dice cuántos acaban de aterrizar', /Han aterrizado 1 vuelo en la última media hora/.test(horaTxtAero));
+  const filasAero = async () => (await pgAero.getByLabel('Próximos vuelos').innerText()).replace(/\s+/g, ' ');
+  const todasAero = await filasAero();
+  comprobar('la lista va por hora prevista, sin cancelados ni filas rotas', /Lima .* París .* Viena .* Roma .* Miami/.test(todasAero) && !/Cancelado|Roto|Recién|Hace Rato/.test(todasAero), todasAero.slice(0, 160));
+  comprobar('un retraso se ve, con su hora nueva', /Roma XX20 · Prueba Air · 30 min de retraso/.test(todasAero));
+  await pgAero.getByLabel('Terminal').getByRole('button', { name: 'T4', exact: true }).click(); await pgAero.waitForTimeout(200);
+  const soloT4 = await filasAero();
+  comprobar('se puede mirar una sola terminal', /Lima .* Miami/.test(soloT4) && !/París|Roma|Viena/.test(soloT4) && /LAS PRÓXIMAS 12 HORAS · T4/i.test(await pgAero.getByLabel('Llegadas por hora').innerText()));
+  const barras = (await pgAero.getByLabel('Llegadas por hora').innerText()).match(/\b\d+\b(?!h)/g) || [];
+  comprobar('las barras suman los vuelos de esa terminal', /El pico de la T4/.test(await pgAero.getByLabel('Llegadas por hora').innerText()), barras.join(','));
+  await pgAero.getByRole('button', { name: '‹ Calendario' }).click(); await pgAero.waitForTimeout(300);
+  comprobar('y se vuelve al Calendario', /día trabajado|días trabajados/.test(await pgAero.locator('body').innerText()));
+  comprobar('aeropuerto sin errores', errAero.length === 0, errAero.join(' | '));
+  await ctxAero.close();
+
+  console.log('\n— LA FLOTA, ESCONDIDA HASTA QUE HAYA SERVIDOR —');
+  const cEsc = await crudoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  await cEsc.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' }));
+  const pEsc = await cEsc.newPage(); const errEsc = []; pEsc.on('pageerror', (e) => errEsc.push(e.message));
+  await pEsc.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  const directoEsc = await pEsc.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('quien abre la app por primera vez entra directoEsc al Diario, sin elegir conductor o empresa', directoEsc && (await pEsc.getByRole('button', { name: /Soy empresa o flota/ }).count()) === 0);
+  await pEsc.getByLabel('Ajustes').click(); await pEsc.waitForTimeout(300);
+  const ajEsc = await pEsc.locator('body').innerText();
+  comprobar('y en Ajustes no hay nada de empresa o flota', !/empresa o flota/i.test(ajEsc) && !/Tipo de cuenta/i.test(ajEsc) && (await pEsc.locator('#cfgPct').count()) === 1);
+  await pEsc.evaluate(() => localStorage.setItem('tc_rol', JSON.stringify('empresa')));
+  await pEsc.goto('http://localhost:8080/index.html?alta=eyJ2IjoxLCJlIjoiVGF4aXMiLCJuIjoiQW5hIiwiYSI6eyJtb2RvIjoiZmlqbyIsImN1b3RhIjoiMTAwIiwiY3VvdGFQb3IiOiJkaWEifX0', { waitUntil: 'load' });
+  const sigueDiario = await pEsc.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('ni una invitación ni un rol de empresa guardado sacan la cara escondida', sigueDiario && (await pEsc.getByLabel('Invitación a una flota').count()) === 0 && (await pEsc.locator('text=Facturado por la flota').count()) === 0);
+  comprobar('flota escondida sin errores', errEsc.length === 0, errEsc.join(' | '));
+  await cEsc.close();
 
   console.log('\n— MODO OSCURO —');
   const fondo = (pg) => pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
