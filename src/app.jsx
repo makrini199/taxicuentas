@@ -1287,10 +1287,10 @@ const FLOTA_KEY = "tc_flota";
 const VINCULO_KEY = "tc_vinculo";
 // Sin rol guardado: quien ya tiene cuentas apuntadas es conductor; quien abre
 // la app por primera vez elige.
-// La cara de empresa o flota está hecha, pero escondida hasta que haya servidor
-// para que conductor y empresa vean lo mismo. Mientras, la app es solo la del
-// conductor. Para probarla en un móvil: localStorage tc_lab_flota = true.
-const FLOTA_ACTIVA = loadStorage("tc_lab_flota", false) === true;
+// La cara de empresa o flota. Todavía sin servidor: cada móvil lleva lo suyo, y
+// conductor y empresa se pasan las cuentas con la copia de seguridad y el
+// enlace de invitación. Este interruptor la esconde si hiciera falta.
+const FLOTA_ACTIVA = true;
 const leerRol = () => {
   const r = loadStorage(ROL_KEY, null);
   if (r === "empresa" || r === "conductor") return r;
