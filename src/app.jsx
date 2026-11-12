@@ -1110,7 +1110,7 @@ function Aeropuerto({ llegadas, alVolver }) {
     </div> : <div role="status" style={{ ...card, padding: 16, marginBottom: 12, fontSize: 13, color: C.t2 }} aria-label="Sin vuelos">No hay más llegadas{terminal ? ` en la ${terminal}` : ""} en los datos de ahora.</div>}
 
     <div style={{ fontSize: 11.5, color: viejo ? C.red : C.t3, lineHeight: 1.55, marginBottom: 8 }} aria-label="Hora de los datos">
-      Datos de las {horaCorta(llegadas.actualizado)}.{viejo ? " Tienen más de una hora: los retrasos pueden haber cambiado." : ""} La T4S cuenta como T4, que es por donde se sale. Los horarios pueden cambiar sin aviso.
+      Datos de las {horaCorta(llegadas.actualizado)}.{viejo ? " Tienen más de una hora: los retrasos pueden haber cambiado." : ""} La T4S cuenta como T4, que es por donde se sale. Los horarios pueden cambiar sin aviso. Datos de vuelos: AeroDataBox.
     </div>
   </>);
 }
@@ -1133,6 +1133,10 @@ const FLOTA_KEY = "tc_flota";
 const VINCULO_KEY = "tc_vinculo";
 // Sin rol guardado: quien ya tiene cuentas apuntadas es conductor; quien abre
 // la app por primera vez elige.
+// La cara de empresa o flota está hecha, pero escondida hasta que haya servidor
+// para que conductor y empresa vean lo mismo. Mientras, la app es solo la del
+// conductor. Para probarla en un móvil: localStorage tc_lab_flota = true.
+const FLOTA_ACTIVA = loadStorage("tc_lab_flota", false) === true;
 const leerRol = () => {
   const r = loadStorage(ROL_KEY, null);
   if (r === "empresa" || r === "conductor") return r;
@@ -1723,6 +1727,7 @@ function Raiz() {
   const cerrarInvitacion = () => { quitarInvitacionDeLaUrl(); setInvitacion(null); };
   const aceptar = () => { const v = { ...invitacion, desde: todayStr() }; try { localStorage.setItem(VINCULO_KEY, JSON.stringify(v)); } catch {} setVinculo(v); cerrarInvitacion(); cambiar("conductor"); };
   const salirDeFlota = () => { try { localStorage.removeItem(VINCULO_KEY); } catch {} setVinculo(null); };
+  if (!FLOTA_ACTIVA) return <TXpro />;
   if (invitacion) return <Invitacion inv={invitacion} alAceptar={aceptar} alRechazar={cerrarInvitacion} />;
   if (!rol) return <Entrada alElegir={cambiar} />;
   return rol === "empresa" ? <Flota alCambiarRol={cambiar} /> : <TXpro alCambiarRol={cambiar} vinculo={vinculo} alSalirDeFlota={salirDeFlota} />;

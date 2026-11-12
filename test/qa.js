@@ -17,7 +17,9 @@ const { chromium } = require('playwright');
   // «contesta» que no hay datos, y las pruebas del aeropuerto ponen los suyos.
   const VUELOS = '**/functions/v1/llegadas';
   const crudoNuevo = b.newContext.bind(b);
-  const contextoNuevo = async (o) => { const c = await crudoNuevo(o); await c.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' })); return c; };
+  // La cara de empresa o flota va escondida en la app publicada; aquí se enciende
+  // para seguir probándola. La prueba de «flota escondida» usa crudoNuevo.
+  const contextoNuevo = async (o) => { const c = await crudoNuevo(o); await c.addInitScript(() => { try { localStorage.setItem('tc_lab_flota', 'true'); } catch {} }); await c.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' })); return c; };
   b.newContext = async (o) => { const c = await contextoNuevo(o); await c.addInitScript(() => { try { if (!localStorage.getItem('tc_rol')) localStorage.setItem('tc_rol', JSON.stringify('conductor')); } catch {} }); return c; };
   const ctx = await b.newContext({ viewport: { width: 360, height: 700 }, deviceScaleFactor: 2, locale: 'es-ES', timezoneId: 'Europe/Madrid', acceptDownloads: true });
   const p = await ctx.newPage();
@@ -1119,6 +1121,23 @@ const { chromium } = require('playwright');
   comprobar('y se vuelve al Calendario', /día trabajado|días trabajados/.test(await pgAero.locator('body').innerText()));
   comprobar('aeropuerto sin errores', errAero.length === 0, errAero.join(' | '));
   await ctxAero.close();
+
+  console.log('\n— LA FLOTA, ESCONDIDA HASTA QUE HAYA SERVIDOR —');
+  const cEsc = await crudoNuevo({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  await cEsc.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' }));
+  const pEsc = await cEsc.newPage(); const errEsc = []; pEsc.on('pageerror', (e) => errEsc.push(e.message));
+  await pEsc.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  const directoEsc = await pEsc.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('quien abre la app por primera vez entra directoEsc al Diario, sin elegir conductor o empresa', directoEsc && (await pEsc.getByRole('button', { name: /Soy empresa o flota/ }).count()) === 0);
+  await pEsc.getByLabel('Ajustes').click(); await pEsc.waitForTimeout(300);
+  const ajEsc = await pEsc.locator('body').innerText();
+  comprobar('y en Ajustes no hay nada de empresa o flota', !/empresa o flota/i.test(ajEsc) && !/Tipo de cuenta/i.test(ajEsc) && (await pEsc.locator('#cfgPct').count()) === 1);
+  await pEsc.evaluate(() => localStorage.setItem('tc_rol', JSON.stringify('empresa')));
+  await pEsc.goto('http://localhost:8080/index.html?alta=eyJ2IjoxLCJlIjoiVGF4aXMiLCJuIjoiQW5hIiwiYSI6eyJtb2RvIjoiZmlqbyIsImN1b3RhIjoiMTAwIiwiY3VvdGFQb3IiOiJkaWEifX0', { waitUntil: 'load' });
+  const sigueDiario = await pEsc.waitForSelector('text=INGRESOS DEL DÍA', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('ni una invitación ni un rol de empresa guardado sacan la cara escondida', sigueDiario && (await pEsc.getByLabel('Invitación a una flota').count()) === 0 && (await pEsc.locator('text=Facturado por la flota').count()) === 0);
+  comprobar('flota escondida sin errores', errEsc.length === 0, errEsc.join(' | '));
+  await cEsc.close();
 
   console.log('\n— MODO OSCURO —');
   const fondo = (pg) => pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
