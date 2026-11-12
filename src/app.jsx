@@ -384,6 +384,7 @@ const TRAZOS = {
   ajustes: <><circle cx="12" cy="12" r="3.1" /><path d="M18.9 14.6a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.5 1.5 0 0 0-2.6-1.2l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.5 1.5 0 0 0 1.2-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.5 1.5 0 0 0 2.6 1.2l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.5 1.5 0 0 0-1.4.9z" /></>,
 };
 TRAZOS.resumen = TRAZOS.mensual;
+TRAZOS.tren = <><rect x="5.200" y="3.400" width="13.600" height="13.200" rx="3" /><path d="M5.200 11.200h13.600" /><path d="M9 14h.010M15 14h.010" /><path d="m8.200 16.600-2.200 3.600M15.800 16.600l2.200 3.600" /><path d="M9.800 6.600h4.400" /></>;
 TRAZOS.avion = <><path d="M10.200 13.800 3.400 11.600l1.500-1.500 6.500.900 4.300-4.300c1.200-1.200 3.400-1.700 4.300-.800s.400 3.100-.800 4.300l-4.300 4.300.900 6.500-1.500 1.500-2.200-6.800" /><path d="m10.200 13.800-2.700 2.700M7.500 16.500l-2.300-.400M7.500 16.500l.400 2.300" /></>;
 TRAZOS.flota = <><circle cx="9" cy="8.2" r="3.2" /><path d="M2.8 19.6c.6-3.4 3-5.4 6.2-5.4s5.6 2 6.2 5.4" /><circle cx="17.2" cy="9.2" r="2.5" /><path d="M17 14.4c2.3.3 3.8 1.800 4.300 4.400" /></>;
 TRAZOS.coche = <><path d="M4.4 16.4v-4.2l1.8-4.4a2 2 0 0 1 1.900-1.300h7.800a2 2 0 0 1 1.900 1.300l1.800 4.400v4.200" /><path d="M3.2 16.400h17.600" /><path d="M5.800 16.400v2.300M18.200 16.400v2.300" /><path d="M5 11.900h14" /><circle cx="7.700" cy="14.100" r="0.900" /><circle cx="16.300" cy="14.100" r="0.900" /></>;
@@ -1025,21 +1026,83 @@ const limpiarLlegadas = (crudo) => {
 };
 const llegadasVigentes = (ll, ahora) => !!ll && ahora - ll.actualizado < LLEGADAS_VIEJAS && ll.vuelos.some((v) => !v.cancelado && v.prev > ahora);
 const horaCorta = (ms) => new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-const cuantosVuelos = (n) => `${n} ${n === 1 ? "vuelo" : "vuelos"}`;
-// Lo que llega en la próxima hora y lo que acaba de aterrizar.
-const resumenLlegadas = (ll, ahora) => {
+const cuantosDe = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+const cuantosVuelos = (n) => cuantosDe(n, "vuelo", "vuelos");
+// Lo que llega en la próxima hora y lo que acaba de llegar (en los últimos «min» minutos).
+const resumenLlegadas = (ll, ahora, grupos = TERMINALES, min = 30) => {
   const vivos = ll.vuelos.filter((v) => !v.cancelado);
   const hora = vivos.filter((v) => v.prev > ahora && v.prev <= ahora + 3600000);
-  const recien = vivos.filter((v) => v.prev <= ahora && v.prev > ahora - 30 * 60000);
-  return { hora, recien, porTerminal: TERMINALES.map((t) => [t, hora.filter((v) => v.t === t).length]) };
+  const recien = vivos.filter((v) => v.prev <= ahora && v.prev > ahora - min * 60000);
+  return { hora, recien, porTerminal: grupos.map((t) => [t, hora.filter((v) => v.t === t).length]) };
 };
 
-function Aeropuerto({ llegadas, alVolver }) {
+// LLEGADAS DE TREN. Renfe publica sus horarios con licencia abierta (CC BY 4.0).
+// scripts/trenes.mjs saca de ahí los trenes que llegan a Atocha y a Chamartín y
+// los deja en trenes.json, junto a la app:
+//
+//   { "actualizado": "2026-11-12", "desde": "2026-11-12", "dias": 35,
+//     "trenes": [["A", "08:32", "Barcelona", "AVE", "03062", "1111100…"]] }
+//
+// Cada tren lleva su estación (A = Atocha, C = Chamartín), la hora, el origen,
+// el tipo, el número y un 1 o un 0 por cada día desde «desde», según circule.
+// Son horarios programados: sin retrasos, y sin los trenes de Iryo ni Ouigo.
+const ESTACIONES_TREN = ["Atocha", "Chamartín"];
+const TIPOS_TREN = { "REG.EXP.": "Regional Exprés", PROXIMDAD: "Proximidad", MD: "Media Distancia", REGIONAL: "Regional", "AVE INT": "AVE internacional", "AVANT EXP": "Avant Exprés", ALVIA: "Alvia", AVANT: "Avant", AVLO: "Avlo", EUROMED: "Euromed", TRENCELTA: "Tren Celta" };
+const limpiarTrenes = (crudo) => {
+  if (!crudo || typeof crudo !== "object" || !Array.isArray(crudo.trenes) || !ES_FECHA.test(crudo.desde || "")) return null;
+  const dias = Math.floor(Number(crudo.dias));
+  if (!(dias >= 1 && dias <= 120)) return null;
+  const trenes = [];
+  for (const t of crudo.trenes) {
+    if (!Array.isArray(t) || t.length < 6) continue;
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(t[1]));
+    if (!m || (t[0] !== "A" && t[0] !== "C") || !/^[01]+$/.test(String(t[5]))) continue;
+    const tipo = textoCorto(t[3], 20);
+    trenes.push({ est: t[0] === "A" ? "Atocha" : "Chamartín", h: Number(m[1]), min: Number(m[2]), origen: textoCorto(t[2], 40), tipo: TIPOS_TREN[tipo] || tipo, num: textoCorto(t[4], 8), dias: String(t[5]) });
+  }
+  return trenes.length ? { actualizado: ES_FECHA.test(crudo.actualizado || "") ? crudo.actualizado : crudo.desde, desde: crudo.desde, dias, trenes } : null;
+};
+// Los trenes de ayer, hoy y mañana, con la misma forma que los vuelos, para
+// que los pinte la misma pantalla.
+const llegadasDeTren = (tr, ahora) => {
+  if (!tr) return null;
+  const [a, m, d] = tr.desde.split("-").map(Number);
+  const hoy = new Date(ahora); hoy.setHours(0, 0, 0, 0);
+  const i0 = Math.round((hoy.getTime() - new Date(a, m - 1, d).getTime()) / 86400000);
+  const vuelos = [];
+  for (const k of [-1, 0, 1]) {
+    const i = i0 + k; if (i < 0 || i >= tr.dias) continue;
+    for (const t of tr.trenes) {
+      if (t.dias[i] !== "1") continue;
+      const cuando = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + k, t.h, t.min).getTime();
+      vuelos.push({ prog: cuando, prev: cuando, t: t.est, origen: t.origen, num: t.tipo, cia: t.num, cancelado: false });
+    }
+  }
+  vuelos.sort((x, y) => x.prev - y.prev);
+  return { actualizado: new Date(Number(tr.actualizado.slice(0, 4)), Number(tr.actualizado.slice(5, 7)) - 1, Number(tr.actualizado.slice(8, 10))).getTime(), vuelos };
+};
+const trenesVigentes = (ll, ahora) => !!ll && ll.vuelos.some((v) => v.prev > ahora);
+
+// Las palabras de cada pantalla de llegadas. La pantalla es la misma.
+const LLEGADAS_AEROPUERTO = {
+  titulo: "Llegadas al aeropuerto", sub: "Vuelos que aterrizan en Barajas, por terminal.", grupos: TERMINALES, grupo: "Terminal", todas: "Todas",
+  uno: "vuelo", varios: "vuelos", lista: "Próximos vuelos", sin: "Sin vuelos", recienMin: 30, caduca: 3600000, deGrupo: (g) => `de la ${g}`, enGrupo: (g) => `en la ${g}`,
+  recien: (n) => (n ? <>Han aterrizado <strong>{cuantosVuelos(n)}</strong> en la última media hora: su gente está saliendo ahora.</> : <>No ha aterrizado ninguno en la última media hora.</>),
+  pie: (ll, viejo) => <>Datos de las {horaCorta(ll.actualizado)}.{viejo ? " Tienen más de una hora: los retrasos pueden haber cambiado." : ""} La T4S cuenta como T4, que es por donde se sale. Los horarios pueden cambiar sin aviso. Datos de vuelos: AeroDataBox.</>,
+};
+const LLEGADAS_TREN = {
+  titulo: "Llegadas de tren", sub: "Trenes de Renfe que llegan a Atocha y a Chamartín.", grupos: ESTACIONES_TREN, grupo: "Estación", todas: "Las dos",
+  uno: "tren", varios: "trenes", lista: "Próximos trenes", sin: "Sin trenes", recienMin: 15, caduca: Infinity, deGrupo: (g) => `de ${g}`, enGrupo: (g) => `en ${g}`,
+  recien: (n) => (n ? <>Han llegado <strong>{cuantosDe(n, "tren", "trenes")}</strong> en el último cuarto de hora: su gente está saliendo ahora.</> : <>No ha llegado ninguno en el último cuarto de hora.</>),
+  pie: (ll) => <>Horarios programados de Renfe, publicados el {new Date(ll.actualizado).toLocaleDateString("es-ES", { day: "numeric", month: "long" })}. No llevan los retrasos ni los trenes de Iryo y Ouigo. Fuente: Renfe, CC BY 4.0.</>,
+};
+
+function PantallaLlegadas({ llegadas, alVolver, que }) {
   const [ahora, setAhora] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setAhora(Date.now()), 30000); return () => clearInterval(id); }, []);
   const [terminal, setTerminal] = useState("");
   const [cuantos, setCuantos] = useState(12);
-  const { hora, recien, porTerminal } = useMemo(() => resumenLlegadas(llegadas, ahora), [llegadas, ahora]);
+  const { hora, recien, porTerminal } = useMemo(() => resumenLlegadas(llegadas, ahora, que.grupos, que.recienMin), [llegadas, ahora, que]);
   const vivos = useMemo(() => llegadas.vuelos.filter((v) => !v.cancelado && (!terminal || v.t === terminal)), [llegadas, terminal]);
   // Las próximas doce horas, de hora en hora de reloj.
   const tramos = useMemo(() => {
@@ -1048,21 +1111,21 @@ function Aeropuerto({ llegadas, alVolver }) {
   }, [vivos, ahora]);
   const tope = Math.max(1, ...tramos.map((t) => t.n));
   const pico = tramos.reduce((m, t) => (t.n > m.n ? t : m), tramos[0]);
-  const proximos = vivos.filter((v) => v.prev > ahora);
-  const viejo = ahora - llegadas.actualizado > 3600000;
+  const proximos = vivos.filter((v) => v.prev > ahora && v.prev < ahora + 12 * 3600000);
+  const viejo = ahora - llegadas.actualizado > que.caduca;
   const chip = (on) => ({ padding: "8px 14px", borderRadius: 999, border: `1px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}22` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" });
   const etiqueta = { fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 };
 
   return (<>
     <button className="nb" onClick={alVolver} style={{ background: "none", border: "none", padding: "12px 18px 12px 0", margin: "-10px 0 -2px", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>
-    <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>Llegadas al aeropuerto</div>
-    <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>Vuelos que aterrizan en Barajas, por terminal.</div>
+    <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>{que.titulo}</div>
+    <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>{que.sub}</div>
 
     <div style={{ ...card, padding: 16, marginBottom: 12, borderColor: `${C.blue}55` }} aria-label="Próxima hora">
       <div style={etiqueta}>En la próxima hora</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
         <span style={{ fontSize: 34, fontWeight: 900, color: C.blue, letterSpacing: -0.5 }}>{hora.length}</span>
-        <span style={{ fontSize: 14, fontWeight: 800, color: C.t2 }}>{hora.length === 1 ? "vuelo" : "vuelos"}</span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: C.t2 }}>{hora.length === 1 ? que.uno : que.varios}</span>
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         {porTerminal.map(([t, n]) => <div key={t} style={{ flex: 1, background: C.inp, border: `1px solid ${C.linea}`, borderRadius: 12, padding: "9px 6px", textAlign: "center" }}>
@@ -1070,13 +1133,11 @@ function Aeropuerto({ llegadas, alVolver }) {
           <div style={{ fontSize: 20, fontWeight: 900, color: n ? C.t1 : C.t3 }}>{n}</div>
         </div>)}
       </div>
-      <div style={{ fontSize: 12.5, color: C.t1, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.linea}`, lineHeight: 1.5 }}>
-        {recien.length ? <>Han aterrizado <strong>{cuantosVuelos(recien.length)}</strong> en la última media hora: su gente está saliendo ahora.</> : <>No ha aterrizado ninguno en la última media hora.</>}
-      </div>
+      <div style={{ fontSize: 12.5, color: C.t1, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.linea}`, lineHeight: 1.5 }}>{que.recien(recien.length)}</div>
     </div>
 
-    <div role="group" aria-label="Terminal" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 10 }}>
-      {[["", "Todas"], ...TERMINALES.map((t) => [t, t])].map(([t, nombre]) => <button key={nombre} className="nb" aria-pressed={terminal === t} onClick={() => { setTerminal(t); setCuantos(12); }} style={chip(terminal === t)}>{nombre}</button>)}
+    <div role="group" aria-label={que.grupo} style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, marginBottom: 10 }}>
+      {[["", que.todas], ...que.grupos.map((t) => [t, t])].map(([t, nombre]) => <button key={nombre} className="nb" aria-pressed={terminal === t} onClick={() => { setTerminal(t); setCuantos(12); }} style={chip(terminal === t)}>{nombre}</button>)}
     </div>
 
     <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Llegadas por hora">
@@ -1090,12 +1151,12 @@ function Aeropuerto({ llegadas, alVolver }) {
       <div style={{ display: "flex", gap: 4, marginTop: 5 }}>
         {tramos.map((t, i) => <div key={t.a} style={{ flex: 1, textAlign: "center", fontSize: 10, color: C.t3, fontWeight: 600 }}>{i % 2 === 0 ? `${new Date(t.a).getHours()}h` : ""}</div>)}
       </div>
-      {pico.n > 0 && <div style={{ fontSize: 12.5, color: C.t1, marginTop: 12, lineHeight: 1.5 }}>El pico{terminal ? ` de la ${terminal}` : ""}: de <strong>{horaCorta(pico.a)}</strong> a <strong>{horaCorta(pico.a + 3600000)}</strong>, con <strong>{cuantosVuelos(pico.n)}</strong>.</div>}
+      {pico.n > 0 && <div style={{ fontSize: 12.5, color: C.t1, marginTop: 12, lineHeight: 1.5 }}>El pico{terminal ? ` ${que.deGrupo(terminal)}` : ""}: de <strong>{horaCorta(pico.a)}</strong> a <strong>{horaCorta(pico.a + 3600000)}</strong>, con <strong>{cuantosDe(pico.n, que.uno, que.varios)}</strong>.</div>}
     </div>
 
-    {proximos.length > 0 ? <div style={{ ...card, padding: "4px 14px", marginBottom: 12 }} aria-label="Próximos vuelos">
+    {proximos.length > 0 ? <div style={{ ...card, padding: "4px 14px", marginBottom: 12 }} aria-label={que.lista}>
       {proximos.slice(0, cuantos).map((v, i) => { const retraso = Math.round((v.prev - v.prog) / 60000); return (
-        <div key={`${v.num}-${v.prog}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: i ? `1px solid ${C.linea}` : "none" }}>
+        <div key={`${v.num}-${v.cia}-${v.prog}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: i ? `1px solid ${C.linea}` : "none" }}>
           <div style={{ width: 54, flexShrink: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 900, color: retraso >= 15 ? C.red : C.t1 }}>{horaCorta(v.prev)}</div>
             {retraso >= 15 && <div style={{ fontSize: 10.5, color: C.t3, textDecoration: "line-through" }}>{horaCorta(v.prog)}</div>}
@@ -1107,12 +1168,105 @@ function Aeropuerto({ llegadas, alVolver }) {
           <div style={{ flexShrink: 0, minWidth: 34, textAlign: "center", padding: "4px 7px", borderRadius: 8, background: v.t ? `${C.blue}18` : C.inp, color: v.t ? C.blue : C.t3, fontSize: 12, fontWeight: 900 }}>{v.t || "—"}</div>
         </div>); })}
       {proximos.length > cuantos && <button className="nb" onClick={() => setCuantos((n) => n + 20)} style={{ width: "100%", margin: "6px 0 10px", padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Ver más ({proximos.length - cuantos})</button>}
-    </div> : <div role="status" style={{ ...card, padding: 16, marginBottom: 12, fontSize: 13, color: C.t2 }} aria-label="Sin vuelos">No hay más llegadas{terminal ? ` en la ${terminal}` : ""} en los datos de ahora.</div>}
+    </div> : <div role="status" style={{ ...card, padding: 16, marginBottom: 12, fontSize: 13, color: C.t2 }} aria-label={que.sin}>No hay más llegadas{terminal ? ` ${que.enGrupo(terminal)}` : ""} en las próximas horas.</div>}
 
-    <div style={{ fontSize: 11.5, color: viejo ? C.red : C.t3, lineHeight: 1.55, marginBottom: 8 }} aria-label="Hora de los datos">
-      Datos de las {horaCorta(llegadas.actualizado)}.{viejo ? " Tienen más de una hora: los retrasos pueden haber cambiado." : ""} La T4S cuenta como T4, que es por donde se sale. Los horarios pueden cambiar sin aviso. Datos de vuelos: AeroDataBox.
-    </div>
+    <div style={{ fontSize: 11.5, color: viejo ? C.red : C.t3, lineHeight: 1.55, marginBottom: 8 }} aria-label="Hora de los datos">{que.pie(llegadas, viejo)}</div>
   </>);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AVISOS AL MÓVIL DE LOS DÍAS FUERTES
+// Quien quiere, se apunta: el navegador da una dirección a la que mandarle
+// avisos y la app se la pasa al servidor (Supabase, función «avisos»). La tarde
+// antes, a las 20:00, el servidor mira el calendario de eventos y avisa de lo
+// que hay al día siguiente. No se guarda nada más: ni nombre, ni cuentas.
+// ═══════════════════════════════════════════════════════════════════════════
+const AVISOS_URL = "https://vkeslzurpaxiwgktlquf.supabase.co/functions/v1/avisos";
+const AVISOS_CLAVE = "BHr7Sygte_ElB4w6Oe6Ez0pB5FRa7rPCgPsFshXGhr2KxumLFueN_X_Vxl89g7T2tI_qkf7_-zcQfIHOreFSVdw";   // pública: solo sirve para apuntarse
+const AVISOS_KEY = "tc_avisos";
+const avisosPosibles = () => { try { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; } catch { return false; } };
+const claveEnBytes = (b64) => { const t = atob(b64.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(b64.length / 4) * 4, "=")); return Uint8Array.from(t, (c) => c.charCodeAt(0)); };
+// El service worker, pero sin quedarse esperando para siempre si no lo hay.
+const registroSW = () => Promise.race([navigator.serviceWorker.ready, new Promise((_, no) => setTimeout(() => no(new Error("sin service worker")), 5000))]);
+const pedirAvisos = async (cuerpo) => {
+  const r = await fetch(AVISOS_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d && d.error ? d.error : "sin respuesta");
+  return d;
+};
+
+function TarjetaAvisos() {
+  const [estado, setEstado] = useState("cargando");   // cargando | no | denegado | apagado | encendido
+  const [nivel, setNivel] = useState(() => (loadStorage(AVISOS_KEY, null) || {}).nivel === "gordos" ? "gordos" : "todos");
+  const [ocupado, setOcupado] = useState(false);
+  const [nota, setNota] = useState("");
+  const guardar = (n) => { try { if (n) localStorage.setItem(AVISOS_KEY, JSON.stringify({ activo: true, nivel: n })); else localStorage.removeItem(AVISOS_KEY); } catch {} };
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      if (!avisosPosibles()) return "no";
+      if (Notification.permission === "denied") return "denegado";
+      try { const reg = await navigator.serviceWorker.getRegistration(); const sus = reg ? await reg.pushManager.getSubscription() : null; return sus && (loadStorage(AVISOS_KEY, null) || {}).activo ? "encendido" : "apagado"; } catch { return "apagado"; }
+    })().then((e) => { if (vivo) setEstado(e); });
+    return () => { vivo = false; };
+  }, []);
+
+  const con = async (hacer) => { setOcupado(true); setNota(""); try { await hacer(); } catch (e) { setNota("No se ha podido. Comprueba la conexión y vuelve a probar."); } setOcupado(false); };
+  const activar = () => con(async () => {
+    const permiso = await Notification.requestPermission();
+    if (permiso !== "granted") { setEstado(permiso === "denied" ? "denegado" : "apagado"); return; }
+    const reg = await registroSW();
+    const sus = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveEnBytes(AVISOS_CLAVE) }));
+    await pedirAvisos({ accion: "alta", nivel, suscripcion: sus.toJSON() });
+    guardar(nivel); setEstado("encendido");
+  });
+  const cambiarNivel = (n) => con(async () => {
+    const sus = await (await registroSW()).pushManager.getSubscription();
+    if (!sus) { setEstado("apagado"); return; }
+    await pedirAvisos({ accion: "alta", nivel: n, suscripcion: sus.toJSON() });
+    setNivel(n); guardar(n);
+  });
+  const probar = () => con(async () => {
+    const sus = await (await registroSW()).pushManager.getSubscription();
+    if (!sus) { setEstado("apagado"); return; }
+    try { const r = await pedirAvisos({ accion: "prueba", endpoint: sus.endpoint }); setNota(r.ok ? "Enviado. Te llega en unos segundos." : "El aviso no ha salido. Desactiva los avisos y vuelve a activarlos."); }
+    catch (e) { setNota(/minuto/.test(e.message) ? "Espera un minuto antes de pedir otro." : "No se ha podido enviar. Comprueba la conexión."); }
+  });
+  const desactivar = () => con(async () => {
+    const sus = await (await registroSW()).pushManager.getSubscription();
+    if (sus) { try { await pedirAvisos({ accion: "baja", endpoint: sus.endpoint }); } catch {} await sus.unsubscribe(); }
+    guardar(null); setEstado("apagado");
+  });
+
+  const boton = { width: "100%", padding: 11, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit", opacity: ocupado ? 0.6 : 1 };
+  const chip = (on) => ({ flex: 1, padding: "9px 8px", borderRadius: 10, border: `1px solid ${on ? C.acc : C.border}`, background: on ? `${C.acc}22` : C.surf, color: on ? C.accDim : C.t2, fontWeight: on ? 800 : 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" });
+  if (estado === "cargando") return null;
+  return (
+    <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Avisos de días fuertes">
+      <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Avisos de días fuertes</div>
+      {estado === "no" && <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5 }}>Este móvil o este navegador no admite avisos. En iPhone hace falta tener TXpro añadida a la pantalla de inicio.</div>}
+      {estado === "denegado" && <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5 }}>El móvil tiene bloqueados los avisos de TXpro. Actívalos en los ajustes del teléfono, en Notificaciones, y vuelve aquí.</div>}
+      {estado === "apagado" && <>
+        <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>La tarde antes, a las 20:00, te aviso de lo que hay en Madrid al día siguiente: fútbol, conciertos, ferias. Si no hay nada, no te molesto.</div>
+        <button className="saveBtn" onClick={activar} disabled={ocupado} style={{ ...boton, border: "none", background: `linear-gradient(135deg,${C.acc},${C.accDim})`, color: "#0d0f14" }}>{ocupado ? "Activando…" : "Activar avisos"}</button>
+      </>}
+      {estado === "encendido" && <>
+        <div style={{ fontSize: 13, color: C.green, fontWeight: 800, marginBottom: 4 }}>Avisos activados</div>
+        <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Te llegan a las 20:00, la tarde antes. ¿De qué días?</div>
+        <div role="group" aria-label="De qué días avisar" style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          <button className="nb" aria-pressed={nivel === "todos"} disabled={ocupado} onClick={() => nivel !== "todos" && cambiarNivel("todos")} style={chip(nivel === "todos")}>Todos los días</button>
+          <button className="nb" aria-pressed={nivel === "gordos"} disabled={ocupado} onClick={() => nivel !== "gordos" && cambiarNivel("gordos")} style={chip(nivel === "gordos")}>Solo los más fuertes</button>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="nb" onClick={probar} disabled={ocupado} style={boton}>Aviso de prueba</button>
+          <button className="nb" onClick={desactivar} disabled={ocupado} style={{ ...boton, color: C.t2, fontWeight: 700 }}>Desactivar</button>
+        </div>
+      </>}
+      {nota && <div role="status" style={{ fontSize: 12, color: C.t1, marginTop: 10, lineHeight: 1.5 }}>{nota}</div>}
+      {(estado === "apagado" || estado === "encendido") && <div style={{ fontSize: 11, color: C.t3, marginTop: 10, lineHeight: 1.5 }}>Para avisarte solo se guarda la dirección de avisos de este móvil. Nada de tus cuentas.</div>}
+    </div>
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1736,6 +1890,15 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
   const [tema, elegirTema] = useTema();
   const [days, setDays] = useState(loadDays);
   const [view, setView] = useState("diario");
+  // Al tocar un aviso de día fuerte, la app se abre (o vuelve) en el Calendario.
+  useEffect(() => {
+    const porDireccion = () => { if (window.location.hash === "#calendario") { setView("calendario"); try { window.history.replaceState(null, "", window.location.pathname + window.location.search); } catch {} } };
+    const porMensaje = (e) => { if (e.data && e.data.type === "IR_A" && e.data.vista === "calendario") setView("calendario"); };
+    porDireccion();
+    window.addEventListener("hashchange", porDireccion);
+    try { navigator.serviceWorker.addEventListener("message", porMensaje); } catch {}
+    return () => { window.removeEventListener("hashchange", porDireccion); try { navigator.serviceWorker.removeEventListener("message", porMensaje); } catch {} };
+  }, []);
   const [editDate, setEditDate] = useState(today);
   // Lo que se escribe y no se ha guardado todavía, por fecha. Quien apunta viaje a
   // viaje no va a darle a "Guardar día" tras cada carrera: si se le cierra la app
@@ -1778,6 +1941,17 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
     return () => { vivo = false; };
   }, []);
   const eventosPorDia = useMemo(() => indexarEventos(eventos.eventos), [eventos]);
+  // Los trenes: el horario va en un archivo junto a la app, como los eventos.
+  const [trenes, setTrenes] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch("./trenes.json", { cache: "no-cache" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((crudo) => { if (vivo) setTrenes(limpiarTrenes(crudo)); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  const llegadasTren = useMemo(() => (view === "calendario" || view === "trenes" ? llegadasDeTren(trenes, Date.now()) : null), [trenes, view]);
   // Las llegadas al aeropuerto cambian a cada rato: se piden cada vez que se
   // entra en Calendario o en su pantalla. No se guardan.
   const [llegadas, setLlegadas] = useState(null);
@@ -2445,8 +2619,11 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
           })}
         </>); })()}
         {view === "gasolineras" && <Gasolineras alVolver={() => setView("gastos")} />}
+        {view === "trenes" && (llegadasTren
+          ? <PantallaLlegadas que={LLEGADAS_TREN} llegadas={llegadasTren} alVolver={() => setView("calendario")} />
+          : <button className="nb" onClick={() => setView("calendario")} style={{ background: "none", border: "none", padding: "12px 18px 12px 0", margin: "-10px 0", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>)}
         {view === "aeropuerto" && (llegadas
-          ? <Aeropuerto llegadas={llegadas} alVolver={() => setView("calendario")} />
+          ? <PantallaLlegadas que={LLEGADAS_AEROPUERTO} llegadas={llegadas} alVolver={() => setView("calendario")} />
           : <button className="nb" onClick={() => setView("calendario")} style={{ background: "none", border: "none", padding: "12px 18px 12px 0", margin: "-10px 0", color: C.accDim, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>‹ Calendario</button>)}
 
         {view === "calendario" && (() => {
@@ -2466,12 +2643,22 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
           const flecha = { background: C.surf, border: `1px solid ${C.border}`, borderRadius: 10, width: 36, height: 36, fontSize: 18, color: C.t2, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 };
           const hayLlegadas = llegadasVigentes(llegadas, Date.now());
           const enUnaHora = hayLlegadas ? resumenLlegadas(llegadas, Date.now()).hora.length : 0;
+          const hayTrenes = trenesVigentes(llegadasTren, Date.now());
+          const trenesEnUnaHora = hayTrenes ? resumenLlegadas(llegadasTren, Date.now(), ESTACIONES_TREN, 15).hora.length : 0;
           return (<>
             {hayLlegadas && <button className="nb" onClick={() => { setView("aeropuerto"); setTimeout(() => { try { window.scrollTo(0, 0); } catch {} }, 0); }} style={{ ...card, width: "100%", padding: "13px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", color: C.t1, borderColor: `${C.blue}55` }}>
               <span style={{ width: 38, height: 38, borderRadius: 12, background: `${C.blue}18`, color: C.blue, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icono name="avion" size={21} /></span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: 14, fontWeight: 900 }}>Llegadas al aeropuerto</span>
                 <span style={{ display: "block", fontSize: 12, color: C.t2, marginTop: 1 }}>{enUnaHora ? `${cuantosVuelos(enUnaHora)} en la próxima hora` : "Sin llegadas en la próxima hora"}</span>
+              </span>
+              <span aria-hidden="true" style={{ fontSize: 20, color: C.t3, fontWeight: 700 }}>›</span>
+            </button>}
+            {hayTrenes && <button className="nb" onClick={() => { setView("trenes"); setTimeout(() => { try { window.scrollTo(0, 0); } catch {} }, 0); }} style={{ ...card, width: "100%", padding: "13px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", color: C.t1, borderColor: `${C.blue}55` }}>
+              <span style={{ width: 38, height: 38, borderRadius: 12, background: `${C.blue}18`, color: C.blue, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Icono name="tren" size={21} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 900 }}>Llegadas de tren</span>
+                <span style={{ display: "block", fontSize: 12, color: C.t2, marginTop: 1 }}>{trenesEnUnaHora ? `${cuantosDe(trenesEnUnaHora, "tren", "trenes")} en la próxima hora` : "Sin trenes en la próxima hora"}</span>
               </span>
               <span aria-hidden="true" style={{ fontSize: 20, color: C.t3, fontWeight: 700 }}>›</span>
             </button>}
@@ -2764,6 +2951,7 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
             <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Estás usando TXpro como <strong style={{ color: C.t1 }}>conductor</strong>. Si llevas una empresa o una flota, puedes dar de alta a tus conductores y ver las cuentas de cada uno. Tus cuentas de conductor se quedan guardadas.</div>
             <button className="nb" onClick={() => alCambiarRol("empresa")} style={{ width: "100%", padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surf, color: C.t1, fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cambiar a empresa o flota</button>
           </div>}
+          <TarjetaAvisos />
           <div style={{ ...card, padding: 16, marginBottom: 12 }} aria-label="Grupo de conductores">
             <div style={{ fontSize: 11, color: C.t2, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Grupo de conductores</div>
             <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Para hablar con otros compañeros que usan TXpro: dudas, avisos y trucos del día a día.</div>
@@ -2916,7 +3104,7 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
         </>); })()}
       </div>
       <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.surf, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 20, boxShadow: "0 -2px 14px rgba(30,34,54,0.08)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["resumen", "Resumen"]].map(([v, lb]) => { const enPestana = (x) => view === x || (x === "gastos" && view === "gasolineras") || (x === "calendario" && view === "aeropuerto"); return (
+        {[["diario", "Diario"], ["objetivos", "Objetivos"], ["gastos", "Gastos"], ["calendario", "Calendario"], ["resumen", "Resumen"]].map(([v, lb]) => { const enPestana = (x) => view === x || (x === "gastos" && view === "gasolineras") || (x === "calendario" && (view === "aeropuerto" || view === "trenes")); return (
           <button key={v} className="nb" onClick={() => setView(v)} style={{ flex: 1, padding: "12px 0 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderTop: `2px solid ${enPestana(v) ? C.acc : "transparent"}`, cursor: "pointer", color: enPestana(v) ? C.accDim : C.t3, fontWeight: enPestana(v) ? 800 : 500, fontSize: 10, fontFamily: "inherit", transition: "color 0.15s, border-color 0.15s" }}>
             <Icono name={v} />{lb}
           </button>

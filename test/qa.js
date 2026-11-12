@@ -19,7 +19,7 @@ const { chromium } = require('playwright');
   const crudoNuevo = b.newContext.bind(b);
   // La cara de empresa o flota va escondida en la app publicada; aquí se enciende
   // para seguir probándola. La prueba de «flota escondida» usa crudoNuevo.
-  const contextoNuevo = async (o) => { const c = await crudoNuevo(o); await c.addInitScript(() => { try { localStorage.setItem('tc_lab_flota', 'true'); } catch {} }); await c.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' })); return c; };
+  const contextoNuevo = async (o) => { const c = await crudoNuevo(o); await c.route('**/functions/v1/avisos', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type' }, body: '{"ok":true}' })); await c.addInitScript(() => { try { localStorage.setItem('tc_lab_flota', 'true'); } catch {} }); await c.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' })); return c; };
   b.newContext = async (o) => { const c = await contextoNuevo(o); await c.addInitScript(() => { try { if (!localStorage.getItem('tc_rol')) localStorage.setItem('tc_rol', JSON.stringify('conductor')); } catch {} }); return c; };
   const ctx = await b.newContext({ viewport: { width: 360, height: 700 }, deviceScaleFactor: 2, locale: 'es-ES', timezoneId: 'Europe/Madrid', acceptDownloads: true });
   const p = await ctx.newPage();
@@ -1138,6 +1138,114 @@ const { chromium } = require('playwright');
   comprobar('ni una invitación ni un rol de empresa guardado sacan la cara escondida', sigueDiario && (await pEsc.getByLabel('Invitación a una flota').count()) === 0 && (await pEsc.locator('text=Facturado por la flota').count()) === 0);
   comprobar('flota escondida sin errores', errEsc.length === 0, errEsc.join(' | '));
   await cEsc.close();
+
+  console.log('\n— LLEGADAS DE TREN —');
+  // El horario va en trenes.json. Aquí, trenes de mentira alrededor de ahora.
+  const enMadrid = (ms) => { const q = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms)).map((x) => [x.type, x.value])); return { f: `${q.year}-${q.month}-${q.day}`, hm: `${q.hour}:${q.minute}` }; };
+  const desdeTren = enMadrid(Date.now() - 86400000).f;
+  const trenQA = (min, est, origen, tipo, num) => { const e = enMadrid(Date.now() + min * 60000); const dias = ['0', '0', '0', '0']; dias[Math.round((Date.parse(e.f) - Date.parse(desdeTren)) / 86400000)] = '1'; return [est, e.hm, origen, tipo, num, dias.join('')]; };
+  const horarioTren = { actualizado: desdeTren, desde: desdeTren, dias: 4, trenes: [
+    trenQA(-20, 'A', 'Hace Rato', 'AVE', '1'), trenQA(-5, 'C', 'Recién', 'AVE', '2'),
+    trenQA(10, 'A', 'Barcelona', 'AVE', '03062'), trenQA(20, 'C', 'Vigo', 'ALVIA', '04254'), trenQA(30, 'A', 'Toledo', 'AVANT', '08173'), trenQA(90, 'C', 'Santander', 'ALVIA', '04142'),
+    ['A', enMadrid(Date.now() + 15 * 60000).hm, 'No Circula', 'AVE', '9', '0000'], ['X', '10:00', 'Roto', 'AVE', '8', '1111'], ['A', '25:99', 'Roto', 'AVE', '7', '1111'], 'basura', null,
+  ] };
+  const ctxTren = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', timezoneId: 'Europe/Madrid', serviceWorkers: 'block' });
+  const rutaTren = (cuerpo) => ctxTren.route('**/trenes.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo) }));
+  await rutaTren({ ...horarioTren, desde: '2026-01-01', actualizado: '2026-01-01' });
+  const pgTren = await ctxTren.newPage(); const errTren = []; pgTren.on('pageerror', (e) => errTren.push(e.message)); pgTren.on('console', (m) => { if (m.type() === 'error') errTren.push(m.text()); });
+  const abrirCalTren = async () => { await pgTren.goto('http://localhost:8080/index.html', { waitUntil: 'load' }); await pgTren.waitForSelector('text=INGRESOS DEL DÍA'); await pgTren.getByRole('button', { name: 'Calendario', exact: true }).click(); await pgTren.waitForTimeout(500); };
+  await abrirCalTren();
+  comprobar('con un horario de tren caducado, el Calendario no ofrece los trenes', (await pgTren.getByRole('button', { name: /Llegadas de tren/ }).count()) === 0);
+  await rutaTren('{"desde": "hoy", "trenes": [[');
+  await abrirCalTren();
+  comprobar('un horario de tren roto no ofrece nada ni rompe la app', (await pgTren.getByRole('button', { name: /Llegadas de tren/ }).count()) === 0 && /día trabajado|días trabajados/.test(await pgTren.locator('body').innerText()));
+  await rutaTren(horarioTren);
+  await abrirCalTren();
+  const tarjetaTren = pgTren.getByRole('button', { name: /Llegadas de tren/ });
+  comprobar('con el horario al día, el Calendario dice cuántos trenes llegan', (await tarjetaTren.count()) === 1 && /3 trenes en la próxima hora/.test(await tarjetaTren.innerText()), (await tarjetaTren.count()) ? (await tarjetaTren.innerText()).replace(/\n/g, ' ') : 'no está');
+  await tarjetaTren.click(); await pgTren.waitForSelector('[aria-label="Próxima hora"]');
+  const horaTren = (await pgTren.getByLabel('Próxima hora').innerText()).replace(/\s+/g, ' ');
+  comprobar('la próxima hora por estación, sin los que no circulan ni las filas rotas', /EN LA PRÓXIMA HORA 3 trenes Atocha 2 Chamartín 1/i.test(horaTren), horaTren.slice(0, 80));
+  comprobar('y dice cuántos acaban de llegar (último cuarto de hora)', /Han llegado 1 tren en el último cuarto de hora/.test(horaTren));
+  const filasTren = async () => (await pgTren.getByLabel('Próximos trenes').innerText()).replace(/\s+/g, ' ');
+  const todosTren = await filasTren();
+  comprobar('la lista de trenes va por hora, con su tipo y su estación', /Barcelona AVE · 03062 Atocha .*Vigo Alvia · 04254 Chamartín .*Toledo Avant · 08173 Atocha .*Santander/.test(todosTren) && !/No Circula|Roto|Recién|Hace Rato/.test(todosTren), todosTren.slice(0, 170));
+  await pgTren.getByLabel('Estación').getByRole('button', { name: 'Chamartín', exact: true }).click(); await pgTren.waitForTimeout(200);
+  const soloCham = await filasTren();
+  comprobar('se puede mirar una sola estación', /Vigo .*Santander/.test(soloCham) && !/Barcelona|Toledo/.test(soloCham) && /El pico de Chamartín/.test(await pgTren.getByLabel('Llegadas por hora').innerText()));
+  comprobar('el pie cita a Renfe y avisa de lo que no lleva', /Horarios programados de Renfe/.test(await pgTren.getByLabel('Hora de los datos').innerText()) && /Iryo y Ouigo/.test(await pgTren.getByLabel('Hora de los datos').innerText()) && /CC BY 4\.0/.test(await pgTren.getByLabel('Hora de los datos').innerText()));
+  await pgTren.getByRole('button', { name: '‹ Calendario' }).click(); await pgTren.waitForTimeout(300);
+  comprobar('y de los trenes se vuelve al Calendario', /día trabajado|días trabajados/.test(await pgTren.locator('body').innerText()));
+  comprobar('trenes sin errores', errTren.length === 0, errTren.join(' | '));
+  await ctxTren.close();
+  // El archivo de verdad que va con la app tiene que estar bien hecho.
+  const trenesReal = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'trenes.json'), 'utf8'));
+  comprobar('trenes.json: bien formado y con trenes', /^\d{4}-\d{2}-\d{2}$/.test(trenesReal.desde) && trenesReal.dias >= 14 && trenesReal.trenes.length > 100 && trenesReal.trenes.every((t) => Array.isArray(t) && t.length === 6 && /^[AC]$/.test(t[0]) && /^([01]\d|2[0-3]):[0-5]\d$/.test(t[1]) && t[2] && t[5].length === trenesReal.dias && /^[01]+$/.test(t[5])), `${trenesReal.trenes.length} trenes desde ${trenesReal.desde}`);
+
+  console.log('\n— AVISOS DE DÍAS FUERTES —');
+  // El navegador de pruebas no puede apuntarse de verdad a avisos, así que se le
+  // pone uno de mentira: lo que se comprueba es lo que hace la app con él.
+  const pedidasAv = [];
+  const ctxAv = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', timezoneId: 'Europe/Madrid', serviceWorkers: 'block' });
+  await ctxAv.route('**/functions/v1/avisos', (r) => {
+    const cab = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type' };
+    if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cab });
+    const c = JSON.parse(r.request().postData() || '{}'); pedidasAv.push(c);
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: cab, body: JSON.stringify(c.accion === 'prueba' ? { ok: true, estado: 201 } : { ok: true }) });
+  });
+  const ponerAvisosFalsos = (permisoFinal) => ctxAv.addInitScript((permisoFinal) => {
+    let sus = null, permiso = 'default';
+    const nueva = () => ({ endpoint: 'https://fcm.googleapis.com/fcm/send/qa', toJSON() { return { endpoint: this.endpoint, keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } }; }, unsubscribe: async () => { sus = null; return true; } });
+    const reg = { pushManager: { getSubscription: async () => sus, subscribe: async (o) => { window.__claveQA = o.applicationServerKey.length; window.__visibleQA = o.userVisibleOnly; sus = nueva(); return sus; } }, addEventListener() {}, installing: null, waiting: null, active: {} };
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { ready: Promise.resolve(reg), getRegistration: async () => reg, register: async () => reg, addEventListener() {}, removeEventListener() {}, controller: null } });
+    window.PushManager = function () {};
+    window.Notification = { get permission() { return permiso; }, requestPermission: async () => { permiso = permisoFinal; return permiso; } };
+  }, permisoFinal);
+  await ponerAvisosFalsos('granted');
+  const pgAv = await ctxAv.newPage(); const errAv = []; pgAv.on('pageerror', (e) => errAv.push(e.message));
+  await pgAv.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pgAv.waitForSelector('text=INGRESOS DEL DÍA');
+  await pgAv.getByLabel('Ajustes').click(); await pgAv.waitForSelector('[aria-label="Avisos de días fuertes"]');
+  const tarjetaAv = pgAv.getByLabel('Avisos de días fuertes');
+  comprobar('Ajustes ofrece los avisos y no apunta a nadie sin que lo pida', /a las 20:00/.test(await tarjetaAv.innerText()) && (await tarjetaAv.getByRole('button', { name: 'Activar avisos' }).count()) === 1 && pedidasAv.length === 0);
+  await tarjetaAv.getByRole('button', { name: 'Activar avisos' }).click(); await pgAv.waitForSelector('text=Avisos activados');
+  const altaAv = pedidasAv[0] || {};
+  comprobar('al activar, apunta este móvil en el servidor', pedidasAv.length === 1 && altaAv.accion === 'alta' && altaAv.nivel === 'todos' && altaAv.suscripcion && altaAv.suscripcion.endpoint === 'https://fcm.googleapis.com/fcm/send/qa' && !!altaAv.suscripcion.keys.p256dh, JSON.stringify(altaAv).slice(0, 120));
+  comprobar('con la clave del servidor y solo para avisos visibles', (await pgAv.evaluate(() => [window.__claveQA, window.__visibleQA].join())) === '65,true');
+  comprobar('lo que manda al servidor no lleva nada de las cuentas', !/tc_|taximetro|days|cfg/.test(JSON.stringify(pedidasAv)));
+  await tarjetaAv.getByRole('button', { name: 'Solo los más fuertes' }).click(); await pgAv.waitForTimeout(400);
+  comprobar('se puede elegir solo los días más fuertes', pedidasAv.length === 2 && pedidasAv[1].accion === 'alta' && pedidasAv[1].nivel === 'gordos' && (await tarjetaAv.getByRole('button', { name: 'Solo los más fuertes' }).getAttribute('aria-pressed')) === 'true');
+  await tarjetaAv.getByRole('button', { name: 'Aviso de prueba' }).click(); await pgAv.waitForSelector('text=Te llega en unos segundos');
+  comprobar('y pedir un aviso de prueba', pedidasAv.length === 3 && pedidasAv[2].accion === 'prueba' && pedidasAv[2].endpoint === 'https://fcm.googleapis.com/fcm/send/qa');
+  comprobar('queda apuntado en el móvil', /"nivel":"gordos"/.test(await pgAv.evaluate(() => localStorage.getItem('tc_avisos') || '')));
+  await tarjetaAv.getByRole('button', { name: 'Desactivar' }).click(); await pgAv.waitForSelector('text=Activar avisos');
+  comprobar('al desactivar, se borra del servidor y del móvil', pedidasAv.length === 4 && pedidasAv[3].accion === 'baja' && (await pgAv.evaluate(() => localStorage.getItem('tc_avisos'))) === null);
+  comprobar('avisos sin errores', errAv.length === 0, errAv.join(' | '));
+  // Tocar un aviso abre la app en el Calendario.
+  await pgAv.goto('http://localhost:8080/index.html#calendario', { waitUntil: 'load' });
+  const enCal = await pgAv.waitForSelector('text=/día trabajado|días trabajados/', { timeout: 8000 }).then(() => true).catch(() => false);
+  comprobar('al tocar un aviso, la app se abre en el Calendario', enCal && !/#calendario/.test(pgAv.url()), pgAv.url());
+  await ctxAv.close();
+  // Si el conductor dice que no al permiso, no se apunta a nadie y se le explica.
+  const ctxNo = await b.newContext({ viewport: { width: 390, height: 800 }, locale: 'es-ES', serviceWorkers: 'block' });
+  const pedidasNo = [];
+  await ctxNo.route('**/functions/v1/avisos', (r) => { if (r.request().method() !== 'OPTIONS') pedidasNo.push(1); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type' }, body: '{"ok":true}' }); });
+  await ctxNo.addInitScript(() => {
+    let permiso = 'default';
+    const reg = { pushManager: { getSubscription: async () => null, subscribe: async () => { throw new Error('no debería'); } }, addEventListener() {}, installing: null, waiting: null };
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { ready: Promise.resolve(reg), getRegistration: async () => reg, register: async () => reg, addEventListener() {}, removeEventListener() {}, controller: null } });
+    window.PushManager = function () {};
+    window.Notification = { get permission() { return permiso; }, requestPermission: async () => { permiso = 'denied'; return permiso; } };
+  });
+  const pgNo = await ctxNo.newPage();
+  await pgNo.goto('http://localhost:8080/index.html', { waitUntil: 'load' });
+  await pgNo.waitForSelector('text=INGRESOS DEL DÍA');
+  await pgNo.getByLabel('Ajustes').click(); await pgNo.waitForSelector('[aria-label="Avisos de días fuertes"]');
+  await pgNo.getByLabel('Avisos de días fuertes').getByRole('button', { name: 'Activar avisos' }).click(); await pgNo.waitForTimeout(400);
+  comprobar('si dice que no al permiso, no se apunta y se le explica', pedidasNo.length === 0 && /bloqueados los avisos/.test(await pgNo.getByLabel('Avisos de días fuertes').innerText()));
+  await ctxNo.close();
+  const swTxt = require('fs').readFileSync(require('path').join(__dirname, '..', 'sw.js'), 'utf8');
+  comprobar('el service worker sabe enseñar el aviso y abrir la app al tocarlo', /addEventListener\("push"/.test(swTxt) && /showNotification/.test(swTxt) && /addEventListener\("notificationclick"/.test(swTxt));
 
   console.log('\n— MODO OSCURO —');
   const fondo = (pg) => pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
