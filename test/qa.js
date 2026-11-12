@@ -13,7 +13,11 @@ const { chromium } = require('playwright');
   // Quien abre la app por primera vez elige entre conductor y empresa. Casi todas
   // las pruebas son del conductor, así que entran ya como tal; las de la entrada
   // y la empresa usan contextoNuevo, sin nada puesto.
-  const contextoNuevo = b.newContext.bind(b);
+  // Ninguna prueba sale a internet a por los vuelos: por defecto el servidor
+  // «contesta» que no hay datos, y las pruebas del aeropuerto ponen los suyos.
+  const VUELOS = '**/functions/v1/llegadas';
+  const crudoNuevo = b.newContext.bind(b);
+  const contextoNuevo = async (o) => { const c = await crudoNuevo(o); await c.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado":"","vuelos":[]}' })); return c; };
   b.newContext = async (o) => { const c = await contextoNuevo(o); await c.addInitScript(() => { try { if (!localStorage.getItem('tc_rol')) localStorage.setItem('tc_rol', JSON.stringify('conductor')); } catch {} }); return c; };
   const ctx = await b.newContext({ viewport: { width: 360, height: 700 }, deviceScaleFactor: 2, locale: 'es-ES', timezoneId: 'Europe/Madrid', acceptDownloads: true });
   const p = await ctx.newPage();
@@ -1072,8 +1076,7 @@ const { chromium } = require('playwright');
   await cg2.close();
 
   console.log('\n— LLEGADAS AL AEROPUERTO —');
-  // Mientras llegadas.json esté vacío (no hay quien lo rellene todavía), la
-  // pantalla ni se ofrece. Con datos, se prueban con vuelos alrededor de ahora.
+  // Mientras el servidor no dé vuelos, la pantalla ni se ofrece. Con datos, se prueban con vuelos alrededor de ahora.
   const enMin = (m) => new Date(Date.now() + m * 60000).toISOString();
   const vuelo = (m, terminal, origen, extra) => ({ hora: enMin(m), prevista: enMin(m), terminal, origen, num: 'XX' + Math.abs(m), cia: 'Prueba Air', estado: '', ...(extra || {}) });
   const llegadasDe = (minActualizado) => ({ actualizado: enMin(minActualizado), vuelos: [
@@ -1089,15 +1092,13 @@ const { chromium } = require('playwright');
   const irACalendario = async () => { await pgAero.getByRole('button', { name: 'Diario', exact: true }).click(); await pgAero.waitForTimeout(150); await pgAero.getByRole('button', { name: 'Calendario', exact: true }).click(); await pgAero.waitForTimeout(500); };
   await irACalendario();
   comprobar('sin datos de vuelos, el Calendario no ofrece el aeropuerto', (await pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ }).count()) === 0);
-  await ctxAero.route('**/llegadas.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(llegadasDe(-240)) }));
+  await ctxAero.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(llegadasDe(-240)) }));
   await irACalendario();
   comprobar('con datos de hace cuatro horas, tampoco', (await pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ }).count()) === 0);
-  await ctxAero.unroute('**/llegadas.json');
-  await ctxAero.route('**/llegadas.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"actualizado": "ayer", "vuelos": "muchos"' }));
+  await ctxAero.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"actualizado": "ayer", "vuelos": "muchos"' }));
   await irACalendario();
   comprobar('un archivo roto no ofrece nada ni rompe la app', (await pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ }).count()) === 0 && /día trabajado|días trabajados/.test(await pgAero.locator('body').innerText()));
-  await ctxAero.unroute('**/llegadas.json');
-  await ctxAero.route('**/llegadas.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(llegadasDe(-5)) }));
+  await ctxAero.route(VUELOS, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(llegadasDe(-5)) }));
   await irACalendario();
   const tarjetaAero = pgAero.getByRole('button', { name: /Llegadas al aeropuerto/ });
   comprobar('con datos frescos, el Calendario dice cuántos vuelos llegan', (await tarjetaAero.count()) === 1 && /4 vuelos en la próxima hora/.test(await tarjetaAero.innerText()), (await tarjetaAero.count()) ? (await tarjetaAero.innerText()).replace(/\n/g, ' ') : 'no está');

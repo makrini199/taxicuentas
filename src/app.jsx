@@ -988,17 +988,20 @@ function Gasolineras({ alVolver }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // LLEGADAS AL AEROPUERTO
 // Los horarios de vuelos no son un dato abierto: hay que pedirlos con una clave
-// de pago, y esa clave no puede ir dentro de la app. Por eso la app solo lee un
-// archivo ya preparado, llegadas.json, que va junto a ella igual que
-// eventos.json. Mientras ese archivo no exista, esta pantalla ni se ofrece.
+// de pago (AeroDataBox), y esa clave no puede ir dentro de la app. La guarda el
+// servidor (Supabase, función «llegadas»), que pregunta como mucho cada media
+// hora y le sirve a la app la lista ya preparada:
 //
-//   { "actualizado": "2026-11-11T21:00:00+01:00",
-//     "vuelos": [{ "hora": "2026-11-11T21:35:00+01:00", "prevista": "…", "terminal": "T4",
+//   { "actualizado": "2026-11-11T21:00:00Z",
+//     "vuelos": [{ "hora": "2026-11-11T20:35:00Z", "prevista": "…", "terminal": "T4",
 //                  "origen": "Londres", "num": "IB3167", "cia": "Iberia", "estado": "" }] }
 //
 // "hora" es la programada y "prevista" la que da el aeropuerto si hay retraso.
 // Para el taxi, T4S cuenta como T4 (se sale por la T4) y T3 como T2.
+// Si el servidor no contesta o devuelve la lista vacía (se puede apagar desde
+// allí), la pantalla ni se ofrece.
 // ═══════════════════════════════════════════════════════════════════════════
+const LLEGADAS_URL = "https://vkeslzurpaxiwgktlquf.supabase.co/functions/v1/llegadas";
 const TERMINALES = ["T1", "T2", "T4"];
 const LLEGADAS_VIEJAS = 3 * 3600 * 1000;   // pasado este tiempo, ya no se ofrecen
 const limpiarLlegadas = (crudo) => {
@@ -1770,13 +1773,13 @@ function TXpro({ alCambiarRol, vinculo, alSalirDeFlota }) {
     return () => { vivo = false; };
   }, []);
   const eventosPorDia = useMemo(() => indexarEventos(eventos.eventos), [eventos]);
-  // Las llegadas al aeropuerto cambian a cada rato: se piden al abrir la app y
-  // cada vez que se entra en Calendario o en su pantalla. No se guardan.
+  // Las llegadas al aeropuerto cambian a cada rato: se piden cada vez que se
+  // entra en Calendario o en su pantalla. No se guardan.
   const [llegadas, setLlegadas] = useState(null);
   useEffect(() => {
-    if (view !== "diario" && view !== "calendario" && view !== "aeropuerto") return undefined;
+    if (view !== "calendario" && view !== "aeropuerto") return undefined;
     let vivo = true;
-    fetch("./llegadas.json", { cache: "no-cache" })
+    fetch(LLEGADAS_URL)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((crudo) => { if (vivo) setLlegadas(limpiarLlegadas(crudo)); })
       .catch(() => {});

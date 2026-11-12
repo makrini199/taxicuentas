@@ -62,7 +62,7 @@ self.addEventListener("fetch", (event) => {
   // El calendario de días fuertes cambia sin que cambie la versión de la app,
   // así que aquí la caché va detrás: primero la red, y lo guardado solo como
   // red de seguridad para el que esté sin cobertura.
-  if (/\/(eventos|llegadas)\.json$/.test(new URL(request.url).pathname)) {
+  if (new URL(request.url).pathname.endsWith("/eventos.json")) {
     event.respondWith(
       fetch(request)
         .then((res) => {
