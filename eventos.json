@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-10-29",
+  "actualizado": "2026-11-15",
   "aviso": "Días fuertes en Madrid. Cada evento va en la NOCHE en que pasa: una salida de las 00:00 del viernes se apunta el jueves. Comprobar con: npm run eventos",
   "lugares": {
     "Bernabéu": [40.4531, -3.6883],
@@ -109,11 +109,11 @@
     {"fecha": "2026-11-25", "hasta": "2026-11-26", "titulo": "Cazzu", "lugar": "Las Ventas", "tipo": "concierto", "hora": "21:00", "nota": "En la carpa de Live Las Ventas."},
     {"fecha": "2026-11-26", "hasta": "2026-11-29", "titulo": "Madrid Horse Week", "lugar": "IFEMA", "tipo": "deporte", "nota": "El gran concurso de hípica del año."},
     {"fecha": "2026-11-27", "titulo": "Black Friday", "lugar": "Madrid", "tipo": "ocio", "nota": "Viernes. Centro y centros comerciales cargados todo el día."},
+    {"fecha": "2026-11-27", "titulo": "Leganés · Sabadell", "lugar": "Butarque · Leganés", "tipo": "futbol", "hora": "20:30"},
     {"fecha": "2026-11-28", "titulo": "Luck Ra", "lugar": "Palacio Vistalegre", "tipo": "concierto"},
     {"fecha": "2026-11-28", "titulo": "Makineros XXL", "lugar": "Fabrik · Humanes", "tipo": "ocio", "salida": "06:00", "nota": "De 18:00 a 6:00. La vuelta a Madrid es carrera larga."},
     {"fecha": "2026-11-28", "titulo": "Accept", "lugar": "La Cubierta · Leganés", "tipo": "concierto", "hora": "21:00"},
-    {"fecha": "2026-11-29", "titulo": "Leganés · Sabadell", "lugar": "Butarque · Leganés", "tipo": "futbol", "nota": "Día y hora por confirmar: LaLiga los fija unas semanas antes."},
-    {"fecha": "2026-11-29", "titulo": "Real Madrid · Alavés", "lugar": "Bernabéu", "tipo": "futbol", "nota": "Día y hora por confirmar: LaLiga los fija unas semanas antes."},
+    {"fecha": "2026-11-28", "titulo": "Real Madrid · Alavés", "lugar": "Bernabéu", "tipo": "futbol", "hora": "21:00"},
     {"fecha": "2026-11-29", "titulo": "Víctor Manuel", "lugar": "Movistar Arena", "tipo": "concierto", "hora": "19:00"},
     {"fecha": "2026-11-29", "titulo": "Los Fabulosos Cadillacs", "lugar": "Las Ventas", "tipo": "concierto", "hora": "20:30", "nota": "En la carpa de Live Las Ventas."},
 
@@ -144,6 +144,11 @@
 
     {"fecha": "2027-01-01", "titulo": "Año Nuevo", "lugar": "Madrid", "tipo": "fiesta", "nota": "Viernes. La madrugada es la buena; el día, muerto."},
     {"fecha": "2027-01-05", "titulo": "Cabalgata de Reyes", "lugar": "Centro de Madrid", "tipo": "fiesta", "nota": "Martes. Cortes de calles en el centro desde la tarde."},
-    {"fecha": "2027-01-06", "titulo": "Reyes", "lugar": "Madrid", "tipo": "fiesta", "nota": "Miércoles. Comidas familiares al mediodía."}
+    {"fecha": "2027-01-06", "titulo": "Reyes", "lugar": "Madrid", "tipo": "fiesta", "nota": "Miércoles. Comidas familiares al mediodía."},
+    {"fecha": "2027-01-08", "titulo": "Carolina Durante", "lugar": "Movistar Arena", "tipo": "concierto"},
+    {"fecha": "2027-01-19", "titulo": "Real Madrid · LASK (Champions)", "lugar": "Bernabéu", "tipo": "futbol", "hora": "21:00"},
+    {"fecha": "2027-01-19", "hasta": "2027-01-20", "titulo": "Muse", "lugar": "Movistar Arena", "tipo": "concierto", "hora": "20:30", "nota": "Uno cada noche."},
+    {"fecha": "2027-01-26", "hasta": "2027-01-28", "titulo": "Tini", "lugar": "Movistar Arena", "tipo": "concierto", "hora": "20:00", "nota": "Uno cada noche."},
+    {"fecha": "2027-01-27", "titulo": "Atlético · Fenerbahçe (Champions)", "lugar": "Metropolitano", "tipo": "futbol", "hora": "21:00"}
   ]
 }
